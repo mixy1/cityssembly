@@ -1540,8 +1540,8 @@ FUNC tut_arrow
     call tut_w2ui
     mov r12d, eax
     mov r13d, edx
-    mov eax, [tut_anim]
-    shr eax, 2
+    mov eax, [anim_tick]
+    shr eax, 3
     and eax, 7
     cmp eax, 4
     jl .b
@@ -1574,6 +1574,18 @@ FUNC tut_arrow
     mov r8d, UI_GOLD
     call fill_rect
     RETURN
+
+; the highlight's slow pulse: ZF set on the gold half (0.6 s each, on
+; the game's 60 Hz clock, so it's the same on any display)
+tut_pulse:
+    push rdx
+    mov eax, [anim_tick]
+    xor edx, edx
+    mov ecx, 36
+    div ecx
+    test eax, 1
+    pop rdx
+    ret
 
 ; darken the world in a rect (edi x, esi y, edx w, ecx h), leaving the
 ; interface on top of it as it is
@@ -1824,8 +1836,7 @@ FUNC draw_tutorial, 64
     mov eax, [r15+40]
     mov [tut_wt], eax
     mov r8d, UI_GOLD
-    mov eax, [tut_anim]
-    and eax, 16
+    call tut_pulse
     jz .wc
     mov r8d, UI_TEXT
 .wc:
@@ -1901,8 +1912,7 @@ FUNC draw_tutorial, 64
     mov r8d, UI_SHADOW
     call tut_fill
     mov r8d, UI_GOLD
-    mov eax, [tut_anim]
-    and eax, 16
+    call tut_pulse
     jz .pc
     mov r8d, UI_TEXT
 .pc:

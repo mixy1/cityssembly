@@ -5,49 +5,243 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CITYSSEMBLY</title>
 <meta name="description" content="A city builder written entirely in x86-64 assembly, running in your browser.">
+<meta name="theme-color" content="#0c0e18">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%230c0e18'/%3E%3Cpath fill='%23b2701e' d='M5 3h7v2H7v6h5v2H5z' transform='translate(1 1)'/%3E%3Cpath fill='%23ffd654' d='M5 3h7v2H7v6h5v2H5z'/%3E%3Cpath fill='%23fff096' d='M5 3h7v1H5z'/%3E%3C/svg%3E">
 <style>
-  :root { --bg: #0d1017; --fg: #e8e2d0; --dim: #8a8573; --gold: #f2c14e; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
-               font: 15px/1.5 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; }
+  /* the game's palette: navy panels, steel edges, gold, cream */
+  :root { --bg: #0c0e18; --panel: #141824; --edge: #606c8c; --edge-lo: #06080e;
+          --gold: #ffd654; --cream: #faf2e0; --dim: #8c94aa; --accent: #60c4ff; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--cream); overflow: hidden; }
   canvas#canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
                   image-rendering: pixelated; outline: none; cursor: none; }
-  #boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg);
-          transition: opacity .4s; z-index: 2; }
+  #boot { position: fixed; inset: 0; background: var(--bg); transition: opacity .5s; z-index: 2; }
   #boot.gone { opacity: 0; pointer-events: none; }
-  .card { text-align: center; max-width: 560px; padding: 24px; }
-  h1 { font-size: 34px; letter-spacing: 6px; color: var(--gold); margin: 0 0 6px; }
-  .sub { color: var(--dim); margin: 0 0 22px; }
-  .bar { height: 6px; width: 320px; max-width: 80vw; margin: 0 auto; background: #242938; border-radius: 3px; overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .2s; }
-  #status { margin-top: 14px; color: var(--dim); min-height: 1.5em; }
-  a { color: var(--gold); }
-  .links { margin-top: 22px; font-size: 13px; color: var(--dim); }
+  #scene { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  .card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+          display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .px { display: block; image-rendering: pixelated; }
+  #logo { margin-bottom: 18px; }
+  #sub { margin-bottom: 28px; }
+  /* a game panel: translucent navy, a steel top edge, a dark rim */
+  .meter { position: relative; width: min(420px, 80vw); height: 22px; background: var(--panel);
+           box-shadow: inset 0 2px 0 var(--edge), inset 0 -2px 0 var(--edge-lo), 0 0 0 2px var(--edge-lo); }
+  .meter i { position: absolute; left: 4px; top: 5px; bottom: 5px; width: 0; transition: width .25s steps(8);
+             background: repeating-linear-gradient(90deg, var(--gold) 0 10px, #e0a22c 10px 12px);
+             box-shadow: inset 0 2px 0 #fff096; }
+  #status { margin-top: 14px; min-height: 16px; }
+  #tip { margin-top: 30px; min-height: 16px; opacity: .9; }
+  .links { margin-top: 26px; display: flex; gap: 22px; align-items: center; }
+  .links a { display: block; opacity: .85; }
+  .links a:hover { opacity: 1; }
   #crash { display: none; }
   #log { position: fixed; left: 8px; bottom: 8px; max-height: 45vh; overflow: hidden; z-index: 3;
-         font-size: 12px; color: #9fe; background: #000a; padding: 6px; white-space: pre-wrap; display: none; }
+         font: 12px ui-monospace, monospace; color: #9fe; background: #000a; padding: 6px;
+         white-space: pre-wrap; display: none; }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
 <pre id="log"></pre>
-<div id="boot"><div class="card">
-  <h1>CITYSSEMBLY</h1>
-  <p class="sub">a city builder written in x86-64 assembly</p>
-  <div class="bar"><i id="progress"></i></div>
-  <div id="status">loading…</div>
-  <div id="crash"></div>
-  <div class="links">
-    <a href="https://github.com/mixy1/cityssembly">source</a> ·
-    <a href="https://github.com/mixy1/cityssembly/releases">windows / linux builds</a>
+<div id="boot">
+  <canvas id="scene"></canvas>
+  <div class="card">
+    <canvas id="logo" class="px" aria-label="CITYSSEMBLY"></canvas>
+    <canvas id="sub" class="px" aria-label="a city builder written in x86-64 assembly"></canvas>
+    <div class="meter"><i id="progress"></i></div>
+    <canvas id="status" class="px"></canvas>
+    <canvas id="tip" class="px"></canvas>
+    <div id="crash"></div>
+    <div class="links">
+      <a href="https://github.com/mixy1/cityssembly" aria-label="source"><canvas class="px" data-t="SOURCE"></canvas></a>
+      <a href="https://github.com/mixy1/cityssembly/releases" aria-label="windows / linux builds"><canvas class="px" data-t="WINDOWS / LINUX BUILDS"></canvas></a>
+    </div>
   </div>
-</div></div>
+</div>
 <script>
+  // ---- the game's pixel font (src/font.asm, filled in by web/build.sh) ----
+  var FONT = /*FONT*/{};
+  var GOLD = [255, 214, 84], CREAM = [250, 242, 224], DIM = [140, 148, 170], ACCENT = [96, 196, 255];
+  var DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
+
+  function glyphCols(text) {
+    var cols = [];
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (ch === ' ') { cols.push(0, 0, 0); continue; }
+      var g = FONT[ch];
+      if (!g) continue;
+      var used = [];
+      for (var c = 0; c < 5; c++) for (var r = 0; r < 8; r++) if (g[r][c] === '#') { used.push(c); break; }
+      if (!used.length || /\d/.test(ch)) used = [0, 1, 2, 3, 4];
+      for (var c2 = used[0]; c2 <= used[used.length - 1]; c2++) {
+        var bits = 0;
+        for (var r2 = 0; r2 < 8; r2++) if (g[r2][c2] === '#') bits |= 1 << r2;
+        cols.push(bits);
+      }
+      cols.push(0);
+    }
+    cols.pop();
+    return cols;
+  }
+  function rgb(c, k) { k = k || 1; return 'rgb(' + (c[0] * k | 0) + ',' + (c[1] * k | 0) + ',' + (c[2] * k | 0) + ')'; }
+
+  // flat pixel text into a canvas, with the game's drop shadow
+  function pixelText(cv, text, scale, col) {
+    var cols = glyphCols(text || ' ');
+    var s = scale * DPR;
+    cv.width = Math.max(1, (cols.length + 1) * s);
+    cv.height = 9 * s;
+    cv.style.width = cv.width / DPR + 'px';
+    cv.style.height = cv.height / DPR + 'px';
+    var x = cv.getContext('2d');
+    x.clearRect(0, 0, cv.width, cv.height);
+    for (var pass = 0; pass < 2; pass++) {
+      x.fillStyle = pass ? rgb(col) : 'rgba(0,0,0,.75)';
+      var o = pass ? 0 : s;
+      for (var i = 0; i < cols.length; i++)
+        for (var r = 0; r < 8; r++) if (cols[i] >> r & 1) x.fillRect(i * s + o, r * s + o, s, s);
+    }
+  }
+
+  // ---- the logo: voxel cubes of the game's font, dropping into place ----
+  var logo = document.getElementById('logo');
+  var logoCols = glyphCols('CITYSSEMBLY');
+  // ?still=SECONDS draws the animation frozen at that moment (screenshots)
+  var still = location.search.match(/[?&]still=([\d.]+)/);
+  var t0 = performance.now() - (still ? parseFloat(still[1]) * 1000 : 0);
+  function easeOutBack(u) { u = Math.min(1, Math.max(0, u)) - 1; return u * u * (2.3 * u + 1.3) + 1; }
+  function drawLogo(now) {
+    var cube = Math.max(3, Math.min(22, Math.floor(window.innerWidth * 0.84 / (logoCols.length + 2)),
+                                    Math.floor(window.innerHeight / 24))) * DPR;
+    var dep = Math.round(cube * 0.45);
+    var w = logoCols.length * cube + dep + cube, h = 8 * cube + dep + cube * 3;
+    if (logo.width !== w) { logo.width = w; logo.height = h; logo.style.width = w / DPR + 'px'; logo.style.height = h / DPR + 'px'; }
+    var x = logo.getContext('2d');
+    x.clearRect(0, 0, w, h);
+    var t = (now - t0) / 1000, cubes = [];
+    for (var ci = 0; ci < logoCols.length; ci++)
+      for (var r = 0; r < 8; r++) if (logoCols[ci] >> r & 1) {
+        var p = (t - 0.15 - ci / logoCols.length * 0.7 - (7 - r) * 0.025) / 0.45;
+        if (p <= 0) continue;
+        cubes.push([ci, r, (1 - easeOutBack(p)) * -cube * 6, Math.min(1, p * 2)]);
+      }
+    cubes.sort(function (a, b) { return a[1] - b[1] || a[0] - b[0]; });
+    var top = cube * 2;
+    for (var k = 0; k < cubes.length; k++) {
+      var c = cubes[k], X = c[0] * cube, Y = top + c[1] * cube + c[2], face = [
+        255 + (236 - 255) * c[1] / 7, 238 + (146 - 238) * c[1] / 7, 150 + (40 - 150) * c[1] / 7];
+      x.globalAlpha = c[3];
+      // extrusion toward the bottom right, like the game's buildings
+      x.fillStyle = rgb(face, 0.58);
+      x.beginPath(); x.moveTo(X + cube, Y); x.lineTo(X + cube + dep, Y + dep / 2);
+      x.lineTo(X + cube + dep, Y + cube + dep / 2); x.lineTo(X + cube, Y + cube); x.fill();
+      x.fillStyle = rgb(face, 0.42);
+      x.beginPath(); x.moveTo(X, Y + cube); x.lineTo(X + cube, Y + cube);
+      x.lineTo(X + cube + dep, Y + cube + dep / 2); x.lineTo(X + dep, Y + cube + dep / 2); x.fill();
+      x.fillStyle = rgb(face); x.fillRect(X, Y, cube, cube);
+      x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(X, Y, cube, Math.max(1, cube / 6 | 0));
+    }
+    x.globalAlpha = 1;
+  }
+
+  // ---- behind it: an isometric grid, and a little skyline assembling ----
+  var scene = document.getElementById('scene');
+  var towers = [];
+  (function () {
+    var seed = 7;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    var mats = [[164, 72, 52], [64, 114, 146], [214, 194, 164], [122, 126, 134], [236, 170, 52], [58, 92, 176]];
+    // a band across the screen: gx - gy runs left to right, gx + gy is depth
+    for (var gy = -20; gy <= 20; gy++) for (var gx = -20; gx <= 20; gx++) {
+      if (Math.abs(gx + gy) > 3 || Math.abs(gx - gy) > 40) continue;
+      var d = Math.abs(gx - gy) / 2;
+      if (rnd() < 0.3) continue;
+      towers.push({ gx: gx, gy: gy, h: 1 + Math.floor(rnd() * Math.max(1, 6 - d * 0.4)), m: mats[Math.floor(rnd() * mats.length)],
+                    at: 0.3 + d * 0.12 + rnd() * 0.6, win: rnd() < 0.7 });
+    }
+    towers.sort(function (a, b) { return (a.gx + a.gy) - (b.gx + b.gy); });
+  })();
+  function drawScene(now) {
+    var W = window.innerWidth, H = window.innerHeight;
+    var s = Math.max(1, Math.round(Math.min(W, H) / 330)) * DPR;
+    var cw = Math.ceil(W * DPR / s), ch = Math.ceil(H * DPR / s);
+    if (scene.width !== cw || scene.height !== ch) { scene.width = cw; scene.height = ch; }
+    var x = scene.getContext('2d');
+    x.fillStyle = '#0c0e18'; x.fillRect(0, 0, cw, ch);
+    var t = (now - t0) / 1000;
+    // the grid, drifting slowly
+    var ox = (t * 4) % 32, oy = (t * 2) % 16;
+    x.strokeStyle = 'rgba(96,108,140,.10)'; x.lineWidth = 1;
+    x.beginPath();
+    for (var k = -ch; k < cw + ch; k += 32) {
+      x.moveTo(k + ox, oy - 16); x.lineTo(k + ox + ch * 2 + 32, oy + ch + 16 - 16);
+      x.moveTo(k + ox, oy + ch + 16); x.lineTo(k + ox + ch * 2 + 32, oy - 16 - ch + 16);
+    }
+    x.stroke();
+    // the skyline at the bottom, rising one storey at a time
+    var bx = cw / 2 | 0, by = ch - 4;
+    x.globalAlpha = 0.6;
+    for (var i = 0; i < towers.length; i++) {
+      var tw = towers[i], grow = Math.max(0, Math.min(tw.h, Math.floor((t - tw.at) * 5)));
+      if (grow <= 0) continue;
+      var px = bx + (tw.gx - tw.gy) * 8, py = by + (tw.gx + tw.gy) * 4, hh = grow * 5;
+      var m = tw.m;
+      x.fillStyle = rgb(m, 0.55);                                   // left face
+      x.beginPath(); x.moveTo(px - 8, py - hh); x.lineTo(px, py + 4 - hh); x.lineTo(px, py + 4); x.lineTo(px - 8, py); x.fill();
+      x.fillStyle = rgb(m, 0.8);                                    // right face
+      x.beginPath(); x.moveTo(px + 8, py - hh); x.lineTo(px, py + 4 - hh); x.lineTo(px, py + 4); x.lineTo(px + 8, py); x.fill();
+      x.fillStyle = rgb(m, 1.12);                                   // roof
+      x.beginPath(); x.moveTo(px, py - 4 - hh); x.lineTo(px + 8, py - hh); x.lineTo(px, py + 4 - hh); x.lineTo(px - 8, py - hh); x.fill();
+      if (tw.win) {                                                 // lit windows
+        x.fillStyle = 'rgba(255,222,124,.85)';
+        for (var f = 1; f < grow; f++) {
+          x.fillRect(px + 2, py - f * 5 + 1, 1, 2); x.fillRect(px + 5, py - f * 5 - 1, 1, 2);
+          x.fillRect(px - 3, py - f * 5 + 1, 1, 2); x.fillRect(px - 6, py - f * 5 - 1, 1, 2);
+        }
+      }
+    }
+    x.globalAlpha = 1;
+    // fade the bottom into the page
+    var g = x.createLinearGradient(0, ch - 40, 0, ch);
+    g.addColorStop(0, 'rgba(12,14,24,0)'); g.addColorStop(1, 'rgba(12,14,24,.9)');
+    x.fillStyle = g; x.fillRect(0, ch - 40, cw, 40);
+    scene.style.width = W + 'px'; scene.style.height = H + 'px';
+  }
+
   var boot = document.getElementById('boot');
-  var statusEl = document.getElementById('status');
+  var statusCv = document.getElementById('status');
   var bar = document.getElementById('progress');
+  var animating = true;
+  function frame(now) {
+    if (!animating || still) return;
+    drawScene(now);
+    drawLogo(now);
+    requestAnimationFrame(frame);
+  }
+  function txtScale() { return window.innerWidth < 560 ? 1 : 2; }
+  function setStatus(text, col) { pixelText(statusCv, text.toUpperCase(), txtScale(), col || DIM); }
+  function drawTexts() {
+    pixelText(document.getElementById('sub'), 'A CITY BUILDER WRITTEN IN X86-64 ASSEMBLY', txtScale(), CREAM);
+    pixelText(document.getElementById('tip'), tip, txtScale(), ACCENT);
+    document.querySelectorAll('.links canvas').forEach(function (c) { pixelText(c, c.dataset.t, txtScale(), GOLD); });
+  }
+  var TIPS = ['TIP: RIGHT-DRAG OR WASD MOVES THE VIEW', 'TIP: CLICK A PROBLEM ICON TO SEE WHAT IS WRONG',
+              'TIP: POWER LINES CARRY POWER ACROSS ROADS', 'TIP: PIPES SERVE BUILDINGS 3 TILES AWAY',
+              'TIP: CTRL+Z UNDOES AND REFUNDS', 'TIP: V SHOWS THE INFO VIEW FOR YOUR TOOL',
+              'TIP: THE BARS UP TOP SHOW WHAT THE CITY WANTS'];
+  var tip = TIPS[Math.floor(Math.random() * TIPS.length)];
+  drawTexts();
+  setStatus('loading...');
+  // the first picture right away, then the animation
+  drawScene(performance.now());
+  drawLogo(performance.now());
+  if (!still) requestAnimationFrame(frame);
+  window.addEventListener('resize', function () { drawTexts(); drawScene(performance.now()); drawLogo(performance.now()); });
+
   window.cityCrash = function (why) {
     boot.classList.remove('gone');
-    statusEl.textContent = 'The city crashed (' + why + '). Reload the page to try again.';
+    animating = true; requestAnimationFrame(frame);
+    setStatus('the city crashed (' + why + '). reload to try again.', [244, 84, 72]);
   };
   var logEl = document.getElementById('log');
   var debug = /[?&]debug/.test(location.search);
@@ -55,7 +249,8 @@
   function logLine(t) { if (debug) logEl.textContent = (logEl.textContent + t + '\n').slice(-4000); }
   window.cityQuit = function () {
     boot.classList.remove('gone');
-    statusEl.innerHTML = 'The mayor has left the building. <a href="">Play again</a>';
+    animating = true; requestAnimationFrame(frame);
+    setStatus('the mayor has left the building. reload to play again.', GOLD);
   };
   window.cityPerf = function (f, ms) {
     logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame');
@@ -76,13 +271,18 @@
     printErr: function (t) { console.warn(t); logLine('! ' + t); },
     setStatus: function (t) {
       var m = t && t.match(/\((\d+(\.\d+)?)\/(\d+)\)/);
-      if (m) bar.style.width = (100 * m[1] / m[3]) + '%';
-      if (t) statusEl.textContent = t.replace(/\(.*\)/, '').trim() || 'loading…';
+      if (m) bar.style.width = 'calc(' + (100 * m[1] / m[3]) + '% - 8px)';
+      if (t) setStatus(t.replace(/\(.*\)/, '').trim() || 'loading...');
     },
     onGameStart: function () {
-      bar.style.width = '100%';
-      boot.classList.add('gone');
-      Module.canvas.focus();
+      bar.style.width = 'calc(100% - 8px)';
+      setStatus('building the city...', GOLD);
+      // let the last of the skyline land, then hand over
+      setTimeout(function () {
+        boot.classList.add('gone');
+        setTimeout(function () { animating = false; }, 600);
+        Module.canvas.focus();
+      }, 250);
     },
     onAbort: function (w) { window.cityCrash(w || 'abort'); }
   };
