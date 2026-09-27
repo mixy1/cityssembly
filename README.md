@@ -90,10 +90,14 @@ Then chase the advisor goals shown in the top-left.
 ### Quality of life
 
 - **Settings** (Esc → Settings) cover music and sound volume sliders,
-  see-through buildings, edge scrolling, autosave (every 3 months), disasters,
+  see-through buildings, lighting, edge scrolling, autosave (every 3 months), disasters,
   day/night and fullscreen. They're remembered in `cityssembly.cfg`.
 - **Continue** your city from the welcome screen. Saves also remember where
-  you were looking.
+  you were looking. Saves carry over to new versions of the game: the file
+  is a list of chunks, and state added later starts at its default.
+- **Re-zoning:** paint a zone over built-up land to replace what's there, for
+  example low-density homes with apartments. The old buildings come down and
+  the new zone grows in. De-zoning clears buildings too.
 - **Undo** with Ctrl+Z: it takes back what the action changed and refunds the
   money.
 - **Upgrade roads** tool: pick street / avenue / highway, then click a road to
@@ -141,7 +145,7 @@ Then chase the advisor goals shown in the top-left.
 | Mouse wheel, `-` `=` | zoom |
 | `Q` `B` `R` `T` `P` `L` | inspect, bulldoze, road, trees, water pipes, power lines |
 | `1` - `6` | zones: residential, commercial, industry, office, dense residential, dense commercial |
-| `X` | de-zone empty lots |
+| `X` | de-zone (clears buildings) |
 | `Space`, `[` `]` | pause, game speed |
 | `K` | buy land |
 | `O` | cycle info views |
@@ -296,6 +300,19 @@ replace the built-in instruments:
 `marimba` (C5), `horn` (C4), `pad` (C4), `bell` (C6), and one-shots `kick`,
 `snare`, `brush`, `ride`, `hat`, `shaker`, `rim`, `rumble`, `boom`.
 
+### Lighting
+
+Every sprite pixel stores the height of the voxel it shows, so the renderer
+knows where each screen pixel is in the world. Each frame the heights of all
+buildings, trees and pylons near the view go into a height map, and one sweep
+toward the sun turns it into a shadow map. Buildings shade the ground, the
+streets and each other's walls. Shadows are short and cool at noon and
+stretch out at dawn and dusk, when sunlit walls turn warm. On top of that
+there's contact shading where buildings meet the ground, drifting cloud
+shadows, and sun glints on the water. At night, lit windows, street lamps and
+neon glow and spill light onto the streets. Settings → Lighting turns it all
+off for slow machines.
+
 ## Source layout
 
 | File | Contents |
@@ -306,6 +323,7 @@ replace the built-in instruments:
 | `src/palette.asm` | shading ramps, seasons, day/night, glow and water cycling |
 | `src/draw.asm`, `src/font.asm` | 2D primitives, proportional pixel font (ASCII art) |
 | `src/voxel.asm` | voxel primitives, material shaders, isometric ray-caster, z-buffered blitter |
+| `src/light.asm` | sun and cloud shadows, contact shading, water glints, night bloom |
 | `src/sprites.asm`, `src/sprites2.asm` | every model: terrain, 3 road types, trees, ~40 zone building designs x 4 variants, 2x2 buildings, farms / forestry / mines, 22 services, 6 vehicle types |
 | `src/world.asm` | map, noise, terrain generation, road/power masks |
 | `src/sim.asm` | growth, utilities (power / pipes / sewage), services, workforce, budget |
@@ -332,4 +350,5 @@ cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, 
                                         #       T scripted new-player playtest (prints a report)
 cityssembly --demo 1 out.bmp L          # load city.sav, print a water/sewage report
 cityssembly --wav SECONDS out.wav [STYLE [INST]]  # render the soundtrack (STYLE 0-4, INST solo)
+cityssembly --trailer out.raw plan.bin W H         # film a scripted plan (trailer_work/plan.py)
 ```

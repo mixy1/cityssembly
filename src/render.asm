@@ -353,6 +353,10 @@ FUNC render_world, 32
     imul ecx, [fb_h]
     xor eax, eax
     rep stosb
+    lea rdi, [hbuf]
+    mov ecx, [fb_w]
+    imul ecx, [fb_h]
+    rep stosb
     mov dword [blit_tint], 0
     mov edi, RAMP(R_DEEPWATER, 1)
     call clear_target

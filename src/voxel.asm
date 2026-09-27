@@ -822,7 +822,7 @@ sprite_new:
     mov r8d, [arena_used]
     mov [spr_table+rcx+8], r8d
     imul edi, esi
-    lea edx, [rdi*2+15]
+    lea edx, [rdi+rdi*2+15]         ; colour, depth and height planes
     and edx, ~15
     add [arena_used], edx
     lea rdx, [arena+r8]
@@ -846,6 +846,10 @@ FUNC vox_render, 64
     imul eax, [rbp-52]
     add rax, rdx
     mov [rbp-72], rax               ; depth plane
+    mov eax, [rbp-48]
+    imul eax, [rbp-52]
+    add rax, [rbp-72]
+    mov [rbp-96], rax               ; height plane
     mov eax, [vox_gx]
     mov [rbp-76], eax               ; OX
     ; row stride for the grid
@@ -999,6 +1003,15 @@ FUNC vox_render, 64
     mov rcx, [rbp-72]
     mov eax, [rbp-88]
     mov [rcx+rdx], al
+    ; height of the surface point (lighting)
+    mov eax, ebx
+    cmp dword [rbp-84], FACE_TOP
+    jne .hs
+    inc eax
+.hs:
+    CLAMP eax, 0, 255
+    mov rcx, [rbp-96]
+    mov [rcx+rdx], al
     jmp .pxn
 .miss:
     mov edx, r12d
@@ -1007,6 +1020,8 @@ FUNC vox_render, 64
     mov rcx, [rbp-64]
     mov byte [rcx+rdx], 0
     mov rcx, [rbp-72]
+    mov byte [rcx+rdx], 0
+    mov rcx, [rbp-96]
     mov byte [rcx+rdx], 0
 .pxn:
     inc r13d
@@ -1025,8 +1040,78 @@ FUNC vox_render, 64
     mov edi, [rbp-56]
     call sprite_trim
     call sprite_outline
+    mov edi, [rbp-56]
+    call sprite_heightmap
     mov eax, [rbp-56]
     RETURN
+
+; ---------------------------------------------------------------------
+;  sprite_heightmap(edi id): the model's column heights, for casting
+;  sun shadows.  [gx, gy, gx*gy heights (top voxel + 1, 0 = empty)]
+;  at arena offset spr_table+12.
+; ---------------------------------------------------------------------
+sprite_heightmap:
+    push rbx
+    push r12
+    push r13
+    push r14
+    mov eax, edi
+    shl eax, 4
+    lea rbx, [spr_table+rax]
+    mov r8d, [arena_used]
+    mov [rbx+12], r8d
+    mov eax, [vox_gx]
+    imul eax, [vox_gy]
+    lea eax, [rax+2+15]
+    and eax, ~15
+    add [arena_used], eax
+    lea r8, [arena+r8]
+    mov eax, [vox_gx]
+    mov [r8], al
+    mov eax, [vox_gy]
+    mov [r8+1], al
+    add r8, 2
+    mov r12d, [vox_gx]
+    imul r12d, [vox_gy]             ; layer size
+    xor r9d, r9d                    ; iy
+.y:
+    cmp r9d, [vox_gy]
+    jge .d
+    xor r10d, r10d                  ; ix
+.x:
+    cmp r10d, [vox_gx]
+    jge .yn
+    ; scan down from the top of the grid
+    mov r11d, [vox_gz]
+    mov eax, r9d
+    imul eax, [vox_gx]
+    add eax, r10d                   ; column offset
+.z:
+    dec r11d
+    js .empty
+    mov r13d, r11d
+    imul r13d, r12d
+    add r13d, eax
+    cmp byte [vox+r13], 0
+    je .z
+    lea r14d, [r11+1]
+    CLAMP r14d, 0, 255
+    jmp .st
+.empty:
+    xor r14d, r14d
+.st:
+    mov [r8+rax], r14b
+    inc r10d
+    jmp .x
+.yn:
+    inc r9d
+    jmp .y
+.d:
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
 
 ; ---------------------------------------------------------------------
 ;  sprite_trim(edi id): drop fully transparent rows from the top
@@ -1085,6 +1170,18 @@ sprite_trim:
     imul eax, ecx
     add rsi, rax
     lea rdi, [r8+r11]
+    push rcx
+    mov ecx, r11d
+    rep movsb
+    pop rcx
+    ; height: old plane starts at r8 + 2*w*h
+    mov eax, ecx
+    imul eax, edx
+    lea rsi, [r8+rax*2]
+    mov eax, r9d
+    imul eax, ecx
+    add rsi, rax
+    lea rdi, [r8+r11*2]
     push rcx
     mov ecx, r11d
     rep movsb
@@ -1178,7 +1275,7 @@ sprite_outline:
 ;  blit_sprite(edi id, esi sx, edx sy, ecx depth base, r8 remap|0)
 ;  sx,sy = screen position of the sprite anchor. z-buffered.
 ; ---------------------------------------------------------------------
-FUNC blit_sprite, 32
+FUNC blit_sprite, 48
     mov eax, edi
     shl eax, 4
     lea rbx, [spr_table+rax]
@@ -1234,12 +1331,19 @@ FUNC blit_sprite, 32
     mov [rbp-56], esi
     mov [rbp-60], edx
     mov [rbp-64], ecx
+    mov [rbp-76], r9d               ; first col
+    ; height plane = colour plane + 2*w*h (full untrimmed h)
+    movzx eax, word [rbx+2]
+    imul eax, r12d
+    add eax, eax
+    mov [rbp-80], eax
     mov r11, [rbp-48]
 .row:
     mov ecx, [rbp-64]
     cmp ecx, r13d
     jge .out
     ; src index
+    mov r9d, [rbp-76]
     mov eax, ecx
     imul eax, r12d
     add eax, r9d
@@ -1261,6 +1365,7 @@ FUNC blit_sprite, 32
     lea rdx, [zbuf+rax*2]
     mov r8d, r10d
     sub r8d, r9d
+    mov r9d, [rbp-80]               ; height plane offset
     mov r10d, [rbp-52]
     cmp dword [blit_dither], 0
     jne .colD
@@ -1277,6 +1382,8 @@ FUNC blit_sprite, 32
     mov [rbx], al
     mov cl, [blit_tint]
     mov [rbx+(tintbuf-fb)], cl
+    mov cl, [rsi+r9]
+    mov [rbx+(hbuf-fb)], cl
 .cn:
     inc rsi
     inc rdi
@@ -1309,6 +1416,8 @@ FUNC blit_sprite, 32
     mov [rbx], al
     mov cl, [blit_tint]
     mov [rbx+(tintbuf-fb)], cl
+    mov cl, [rsi+r9]
+    mov [rbx+(hbuf-fb)], cl
 .cnD:
     inc rsi
     inc rdi

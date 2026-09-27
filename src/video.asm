@@ -263,6 +263,25 @@ expand8:
     pop rbx
     ret
 
+; copy_lit: litbuf rows -> [tex_pixels] (esi = w, edx = h)
+copy_lit:
+    push rbx
+    mov r8, [tex_pixels]
+    movsxd r9, dword [tex_pitch]
+    lea r10, [litbuf]
+    mov ebx, edx
+.r:
+    mov rdi, r8
+    mov rsi, r10
+    mov ecx, [fb_w]
+    rep movsd
+    mov r10, rsi
+    add r8, r9
+    dec ebx
+    jnz .r
+    pop rbx
+    ret
+
 ; ---------------------------------------------------------------------
 ;  tint_px(ebx argb, ecx tint) -> ebx: info-view colouring that keeps
 ;  the picture underneath readable (shading survives the blend)
@@ -361,8 +380,10 @@ expand8_tint:
     mov r11, r8
     xor r10d, r10d
 .px:
-    movzx eax, byte [rdi]
-    mov ebx, [r14+rax*4]
+    lea rax, [fb]
+    mov rbx, rdi
+    sub rbx, rax
+    mov ebx, [litbuf+rbx*4]
     movzx ecx, byte [rdi+(tintbuf-fb)]
     call tint_px
     mov [r11], ebx
@@ -383,6 +404,7 @@ expand8_tint:
 
 ; ---------------------------------------------------------------------
 FUNC video_present
+    call light_compose
     ; world layer
     mov rdi, [tex_world]
     xor esi, esi
@@ -400,7 +422,7 @@ FUNC video_present
     call expand8_tint
     jmp .expd
 .plain:
-    call expand8
+    call copy_lit
 .expd:
     mov rdi, [tex_world]
     CALLC SDL_UnlockTexture
@@ -462,6 +484,7 @@ FUNC video_screenshot
 
 ; compose both layers at window resolution into shotbuf
 FUNC compose_frame
+    call light_compose
     lea rdi, [shotbuf]
     xor r12d, r12d                 ; y
 .y:
@@ -486,8 +509,11 @@ FUNC compose_frame
     xor edx, edx
     div dword [zoom]
     movzx ecx, byte [r13+rax+(tintbuf-fb)]
-    movzx eax, byte [r13+rax]
-    mov ebx, [lut_world+rax*4]
+    lea rdx, [fb]
+    mov rbx, r13
+    sub rbx, rdx
+    add rbx, rax
+    mov ebx, [litbuf+rbx*4]
     cmp dword [eff_overlay], 0
     je .nt
     call tint_px

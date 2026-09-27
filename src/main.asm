@@ -96,6 +96,7 @@ FUNC main
     mov r13, rsi                    ; argv
     cmp r12d, 3
     jl .noargs
+%ifndef WEB
     mov rdi, [r13+8]
     lea rsi, [str_trailer_flag]
     CALLC strcmp
@@ -107,8 +108,22 @@ FUNC main
     mov dword [shot_frames], 1          ; fixed seed
     mov dword [init_w], 960
     mov dword [init_h], 540
+    ; --trailer out.raw plan.bin [W H]
+    cmp r12d, 4
+    jl .noargs
+    mov rax, [r13+24]
+    mov [tr_plan_file], rax
+    cmp r12d, 6
+    jl .noargs
+    mov rdi, [r13+32]
+    CALLC atoi
+    mov [init_w], eax
+    mov rdi, [r13+40]
+    CALLC atoi
+    mov [init_h], eax
     jmp .noargs
 .nottrailer:
+%endif
     mov rdi, [r13+8]
     lea rsi, [str_wav_flag]
     CALLC strcmp
@@ -182,6 +197,7 @@ FUNC main
     mov [world_seed], eax
 .fixed:
     call sprites_init
+    call light_init
     call audio_init
     call ui_init
     call settings_load
@@ -225,11 +241,13 @@ FUNC main
 .cam:
     mov esi, [hwy_row]
     call camera_center_tile
+%ifndef WEB
     cmp dword [trailer_mode], 0
     je .notr
     call trailer_run
     jmp .quit
 .notr:
+%endif
     cmp dword [wav_seconds], 0
     je .nowav
     call wav_dump
@@ -1120,6 +1138,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "sprites2.asm"
 %include "sprites3.asm"
 %include "render.asm"
+%include "light.asm"
 %include "sim.asm"
 %include "traffic.asm"
 %include "agents.asm"
@@ -1127,6 +1146,8 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "music.asm"
 %include "tunes.asm"
 %include "ui.asm"
+%ifndef WEB
 %include "trailer.asm"
+%endif
 %include "undo.asm"
 %include "playtest.asm"

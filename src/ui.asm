@@ -349,6 +349,7 @@ s_xr0       db "off", 0
 s_xr1       db "near cursor", 0
 s_xr2       db "all", 0
 s_st_edge   db "Edge scrolling: ", 0
+s_st_light  db "Lighting: ", 0
 s_st_auto   db "Autosave: ", 0
 s_st_auto1  db "every 3 months", 0
 s_st_back   db "Back", 0
@@ -1650,17 +1651,17 @@ FUNC draw_settings, 16
     sub r12d, 260
     shr r12d, 1
     mov r13d, [ui_h]
-    sub r13d, 214
+    sub r13d, 232
     shr r13d, 1
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 208
+    mov ecx, 226
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 208
+    mov ecx, 226
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+130]
@@ -1724,6 +1725,24 @@ FUNC draw_settings, 16
     mov [set_xray], eax
     mov dword [settings_dirty], 1
 .b1:
+    call tb_reset
+    lea rdi, [s_st_light]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_light], 0
+    jne .l1
+    lea rdi, [s_off]
+.l1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .bl
+    xor dword [set_light], 1
+    mov eax, [set_light]
+    xor eax, 1
+    mov [light_off], eax
+    mov dword [settings_dirty], 1
+.bl:
     call tb_reset
     lea rdi, [s_st_edge]
     call tb_str
@@ -1868,6 +1887,7 @@ set_sfx       dd 5
 set_xray      dd 1          ; 0 off, 1 near the cursor, 2 all
 set_edge      dd 0
 set_autosave  dd 1
+set_light     dd 1          ; sun shadows, clouds and night glow
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
@@ -2193,6 +2213,28 @@ FUNC draw_minimap, 16
 ;  render_ui: everything on the ui layer, in order
 ; =====================================================================
 
+; re-zoning a built lot (r12 tile, r13d x, r14d y): the old building
+; comes down (its whole footprint) and the lot is cleared for the new zone
+rezone_clear:
+    cmp byte [r12+T_OBJ], OBJ_ZONEBLD
+    jne .o
+    sub rsp, 8                      ; keep the stack 16-byte aligned
+    mov edi, r13d
+    mov esi, r14d
+    call destroy_to_rubble
+    add rsp, 8
+.o:
+    ret
+
+; ---------------------------------------------------------------------
+;  Saves are a list of chunks: tag (4 bytes), length (u32), data.
+;    TILE  the map          SIMS  the saved sim state block
+;    SEED  world seed       CAMR  camera (x, y, zoom)
+;  Loading copies what a chunk has and leaves the rest at defaults, so
+;  saves keep working when later versions add state (append new saved
+;  fields at the end of the block in sim.asm).  Unknown chunks are
+;  skipped.  Older "CSAVv004" saves (one fixed block) still load.
+; ---------------------------------------------------------------------
 save_city:
     lea rdi, [s_savefile]
 FUNC save_city_to, 16
@@ -2206,33 +2248,36 @@ FUNC save_city_to, 16
     mov edx, 8
     mov ecx, 1
     CALLC SDL_RWwrite
-    mov rdi, r12
-    lea rsi, [tiles]
-    mov edx, MAP_TILES*TILE_BYTES
-    mov ecx, 1
-    CALLC SDL_RWwrite
-    mov rdi, r12
-    lea rsi, [money]
-    mov edx, sim_state_end - money
-    mov ecx, 1
-    CALLC SDL_RWwrite
-    mov rdi, r12
-    lea rsi, [world_seed]
-    mov edx, 12
-    mov ecx, 1
-    CALLC SDL_RWwrite
-    ; where you were looking (optional trailer, older saves lack it)
     mov eax, [cam_x]
     mov [cam_save], eax
     mov eax, [cam_y]
     mov [cam_save+4], eax
     mov eax, [zoom]
     mov [cam_save+8], eax
+    xor ebx, ebx
+.ch:
+    cmp ebx, SAVE_CHUNKS
+    jge .close
+    imul eax, ebx, 16
+    lea r13, [save_chunks+rax]
+    ; header: tag, length
+    mov eax, [r13]
+    mov [numbuf], eax
+    mov eax, [r13+12]
+    mov [numbuf+4], eax
     mov rdi, r12
-    lea rsi, [cam_save]
-    mov edx, 12
+    lea rsi, [numbuf]
+    mov edx, 8
     mov ecx, 1
     CALLC SDL_RWwrite
+    mov rdi, r12
+    mov rsi, [r13+4]
+    mov edx, [r13+12]
+    mov ecx, 1
+    CALLC SDL_RWwrite
+    inc ebx
+    jmp .ch
+.close:
     mov rdi, r12
     CALLC SDL_RWclose
     cmp dword [save_quiet], 0
@@ -2248,54 +2293,131 @@ FUNC save_city_to, 16
     mov dword [save_quiet], 0
     RETURN
 
+; copy up to the chunk's capacity (rdi chunk entry, rsi src, edx len)
+save_take:
+    push rbx
+    mov rbx, rdi
+    mov ecx, [rbx+12]
+    cmp edx, ecx
+    jbe .n
+    mov edx, ecx
+.n:
+    mov rdi, [rbx+4]
+    mov ecx, edx
+    rep movsb
+    pop rbx
+    ret
 
 load_city:
     lea rdi, [s_savefile]
-FUNC load_city_from, 16
+FUNC load_city_from, 32
     lea rsi, [str_rb]
     CALLC SDL_RWFromFile
     test rax, rax
     jz .fail
     mov r12, rax
-    ; a save of the wrong size would load as garbage: refuse it
     mov rdi, r12
-    CALLC SDL_RWsize
-    cmp rax, SAVE_BYTES
-    je .sizeok
-    cmp rax, SAVE_BYTES+12
-    jne .close
-.sizeok:
-    mov rdi, r12
-    lea rsi, [numbuf]
-    mov edx, 8
-    mov ecx, 1
+    lea rsi, [load_buf]
+    mov edx, 1
+    mov ecx, LOAD_MAX
     CALLC SDL_RWread
-    mov rax, [numbuf]
-    cmp rax, [save_magic]
-    jne .close
-    mov rdi, r12
-    lea rsi, [tiles]
-    mov edx, MAP_TILES*TILE_BYTES
-    mov ecx, 1
-    CALLC SDL_RWread
-    mov rdi, r12
-    lea rsi, [money]
-    mov edx, sim_state_end - money
-    mov ecx, 1
-    CALLC SDL_RWread
-    mov rdi, r12
-    lea rsi, [world_seed]
-    mov edx, 12
-    mov ecx, 1
-    CALLC SDL_RWread
-    mov dword [cam_save+8], 0
-    mov rdi, r12
-    lea rsi, [cam_save]
-    mov edx, 12
-    mov ecx, 1
-    CALLC SDL_RWread
+    mov r14, rax                    ; bytes in the file
     mov rdi, r12
     CALLC SDL_RWclose
+    cmp r14, 8 + MAP_TILES*TILE_BYTES
+    jb .fail
+    ; defaults for anything the save doesn't have
+    lea rdi, [money]
+    mov ecx, sim_state_end - money
+    xor eax, eax
+    rep stosb
+    lea rdi, [plot_owned]           ; saves from before land plots
+    mov eax, 0x01010101
+    mov ecx, (PLOTS*PLOTS+7)/4
+    rep stosd
+    mov dword [flow_pct], 100
+    mov dword [staff_basic], 256
+    mov dword [cam_save+8], 0
+    mov rax, [load_buf]
+    cmp rax, [save_magic]
+    je .chunks
+    cmp rax, [save_magic4]
+    jne .fail
+    ; ---- CSAVv004: magic, tiles, state, seed (12) [, camera (12)] ----
+    lea rsi, [load_buf+8]
+    lea rdi, [save_chunks+0*16]
+    mov edx, MAP_TILES*TILE_BYTES
+    call save_take
+    mov r15, r14
+    sub r15, 8 + MAP_TILES*TILE_BYTES + 12
+    ; a camera trailer ends with the zoom (1..4); the seed block ends
+    ; with the second highway's column
+    mov eax, [load_buf+r14-4]
+    dec eax
+    cmp eax, 4
+    jae .nocam4
+    sub r15, 12
+    lea rsi, [load_buf+r14-12]
+    lea rdi, [save_chunks+3*16]
+    mov edx, 12
+    call save_take
+.nocam4:
+    cmp r15, 0
+    jle .fail
+    lea rsi, [load_buf+8+MAP_TILES*TILE_BYTES]
+    lea rdi, [save_chunks+1*16]
+    mov edx, r15d
+    push rsi
+    push rsi
+    call save_take
+    pop rsi
+    pop rsi
+    add rsi, r15
+    lea rdi, [save_chunks+2*16]
+    mov edx, 12
+    call save_take
+    jmp .loaded
+.chunks:
+    mov r13d, 8                     ; read position
+    xor r15d, r15d                  ; saw the map
+.next:
+    lea eax, [r13+8]
+    cmp rax, r14
+    ja .done
+    mov ecx, [load_buf+r13+4]       ; length
+    mov ebx, [load_buf+r13]         ; tag
+    add r13d, 8
+    mov eax, r13d
+    add rax, rcx
+    cmp rax, r14
+    ja .done                        ; truncated
+    mov [rbp-48], ecx
+    ; known chunk?
+    xor edx, edx
+.find:
+    cmp edx, SAVE_CHUNKS
+    jge .skip
+    imul eax, edx, 16
+    cmp ebx, [save_chunks+rax]
+    je .take
+    inc edx
+    jmp .find
+.take:
+    cmp edx, 0
+    jne .t
+    mov r15d, 1
+.t:
+    lea rdi, [save_chunks+rax]
+    lea rsi, [load_buf+r13]
+    mov edx, [rbp-48]
+    call save_take
+.skip:
+    add r13d, [rbp-48]
+    jmp .next
+.done:
+    test r15d, r15d
+    jz .fail
+.loaded:
     mov edi, [cam_save+8]
     test edi, edi
     jz .nocam
@@ -2310,6 +2432,8 @@ FUNC load_city_from, 16
     call agents_init
     call scenic_init
     call style_existing
+    mov dword [net_dirty], 1
+    mov dword [cov_dirty], 1
     call networks_update
     call coverage_update
     call stats_update
@@ -2323,9 +2447,6 @@ FUNC load_city_from, 16
     mov ecx, -1
     call notify
     jmp .out
-.close:
-    mov rdi, r12
-    CALLC SDL_RWclose
 .fail:
     lea rdi, [s_loadfail]
     mov esi, UI_WARN
@@ -2334,9 +2455,29 @@ FUNC load_city_from, 16
     call notify
 .out:
     RETURN
-SAVE_BYTES equ 8 + MAP_TILES*TILE_BYTES + (sim_state_end - money) + 12
+
+LOAD_MAX equ 4*1024*1024
+section .bss
+load_buf    resb LOAD_MAX
 section .data
-save_magic db "CSAVv004"
+save_magic  db "CSAVv005"
+save_magic4 db "CSAVv004"
+align 8
+; tag, address, length
+save_chunks:
+    db "TILE"
+    dq tiles
+    dd MAP_TILES*TILE_BYTES
+    db "SIMS"
+    dq money
+    dd sim_state_end - money
+    db "SEED"
+    dq world_seed
+    dd 12
+    db "CAMR"
+    dq cam_save
+    dd 12
+SAVE_CHUNKS equ ($-save_chunks)/16
 section .text
 
 
@@ -2460,7 +2601,7 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
-SET_N     equ 5
+SET_N     equ 6                 ; append new settings at the end
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
@@ -2505,14 +2646,14 @@ FUNC settings_load
     mov r12, rax
     mov rdi, r12
     lea rsi, [settings_buf]
-    mov edx, CFG_SIZE
-    mov ecx, 1
+    mov edx, 1
+    mov ecx, CFG_SIZE
     CALLC SDL_RWread
-    mov r13, rax
+    mov r13, rax                    ; bytes read (older files are shorter)
     mov rdi, r12
     CALLC SDL_RWclose
-    cmp r13, 1
-    jne .o
+    cmp r13, 4+AUTO_ON_N
+    jb .o
     mov eax, [settings_buf]
     cmp eax, [settings_magic]
     jne .o
@@ -2520,11 +2661,20 @@ FUNC settings_load
     lea rdi, [auto_on]
     mov ecx, AUTO_ON_N
     rep movsb
+    ; the settings the file has; newer ones keep their defaults
     lea rdi, [set_music]
+    lea rcx, [r13-4-AUTO_ON_N]
+    and ecx, ~3
+    cmp ecx, SET_N*4
+    jbe .n
     mov ecx, SET_N*4
+.n:
     rep movsb
 .o:
     call apply_volumes
+    mov eax, [set_light]
+    xor eax, 1
+    mov [light_off], eax
     RETURN
 
 ; =====================================================================
@@ -3194,6 +3344,11 @@ FUNC tool_evaluate, 32
     cmp ecx, OBJ_NONE
     je .zok
     cmp ecx, OBJ_TREE
+    je .zok
+    ; re-zoning: grown buildings of another zone are replaced
+    cmp ecx, OBJ_RUBBLE
+    je .zok
+    cmp ecx, OBJ_ZONEBLD
     jne .n
 .zok:
     mov eax, [zone_type]
@@ -3207,7 +3362,12 @@ FUNC tool_evaluate, 32
     cmp byte [r12+T_ZONE], 0
     je .n
     cmp ecx, OBJ_NONE
+    je .dz
+    cmp ecx, OBJ_RUBBLE
+    je .dz
+    cmp ecx, OBJ_ZONEBLD
     jne .n
+.dz:
     mov r13d, 0
     jmp .set
 .t4:
@@ -3461,6 +3621,7 @@ FUNC tool_apply
 .a2:
     cmp eax, T_ZONETOOL
     jne .a3
+    call rezone_clear
     mov eax, [zone_type]
     mov [r12+T_ZONE], al
     mov byte [r12+T_OBJ], OBJ_NONE
@@ -3471,7 +3632,11 @@ FUNC tool_apply
 .a3:
     cmp eax, T_DEZONE
     jne .a4
+    call rezone_clear
     mov byte [r12+T_ZONE], 0
+    mov byte [r12+T_OBJ], OBJ_NONE
+    mov byte [r12+T_LEVEL], 0
+    and byte [r12+T_FLAGS], ~F_ANCHOR
     jmp .upd
 .a4:
     cmp eax, T_BULLDOZE
