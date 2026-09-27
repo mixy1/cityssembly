@@ -201,6 +201,11 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    cmp dword [demo_view], 'D'
+    jne .ld2
+    call pt_dock_test
+    jmp .nodemo
+.ld2:
     cmp dword [demo_view], 'L'
     jne .realdemo
     call load_city

@@ -556,3 +556,45 @@ FUNC pt_diag_view
     mov dword [mouse_x], 360
     mov dword [mouse_y], 12
     RETURN
+
+; --demo 1 out.bmp D : click every dock button, print what opens
+section .data
+dk_fmt db "DOCK button %d -> tool=%d submenu=%d panel=%d", 10, 0
+section .text
+FUNC pt_dock_test, 16
+    mov dword [welcome], 0
+    xor ebx, ebx
+.l:
+    cmp ebx, DOCK_COUNT
+    jge .out
+    mov dword [panel], PANEL_NONE
+    mov dword [submenu], -1
+    mov dword [tool], T_INSPECT
+    mov eax, DOCK_COUNT
+    imul eax, DOCK_BTN+2
+    add eax, 8
+    mov ecx, [ui_w]
+    sub ecx, eax
+    shr ecx, 1
+    imul eax, ebx, DOCK_BTN+2
+    lea eax, [rcx+rax+4+10]
+    imul eax, [ui_scale]
+    mov [mouse_x], eax
+    mov eax, [ui_h]
+    sub eax, DOCK_BTN+8-3-10
+    imul eax, [ui_scale]
+    mov [mouse_y], eax
+    mov dword [click_pending], 1
+    call render_ui
+    lea rdi, [dk_fmt]
+    mov esi, ebx
+    mov edx, [tool]
+    mov ecx, [submenu]
+    mov r8d, [panel]
+    xor eax, eax
+    CALLC printf
+    inc ebx
+    jmp .l
+.out:
+    mov dword [panel], PANEL_NONE
+    RETURN
