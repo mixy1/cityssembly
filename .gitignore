@@ -17,3 +17,4 @@ trailer_work/dump.gdb
 trailer_work/__pycache__/
 *.mp4
 site/
+.wrangler/
