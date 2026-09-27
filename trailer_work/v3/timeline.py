@@ -23,13 +23,13 @@ def frame(b):
 
 # sections (story bars)
 DAWN = 1.0          # valley, the road draws itself, first houses, first car
-LIFE = 5.0          # eight neighbourhoods, half a bar each
-GROW = 9.0          # time-lapse, info views, the wall
-TRIAL = 13.0        # night, fire, the meteor
-IMPACT_BAR = 16.0   # the meteor lands on this downbeat
-FINAL = 16.5        # golden hour, the pull-out, the logo
-LOGO_BAR = 20.0
-END = 23.0
+LIFE = 5.0          # (the neighbourhood tour was cut: dawn runs into growth)
+GROW = 5.0          # time-lapse, info views, the wall
+TRIAL = 9.0         # night, fire, the meteor
+IMPACT_BAR = 12.0   # the meteor lands on this downbeat
+FINAL = 12.5        # golden hour, the pull-out, the logo
+LOGO_BAR = 16.0
+END = 19.0
 
 PRE = 1                     # cold open before the story (bars)
 STORY_BARS = END - 1
@@ -50,7 +50,6 @@ EDIT = [
     (DAWN + 3, DAWN + 3.5, "houses", None),
     (DAWN + 3.5, LIFE, "car", None),
 ]
-EDIT += [(LIFE + i * 0.5, LIFE + (i + 1) * 0.5, t, c) for i, (t, c) in enumerate(_places)]
 EDIT += [(GROW, GROW + 2.5, "timelapse", None)]
 EDIT += [(GROW + 2.5 + i * 0.25, GROW + 2.75 + i * 0.25, t, c) for i, (t, c) in enumerate(_views)]
 EDIT += [

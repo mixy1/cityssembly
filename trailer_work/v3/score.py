@@ -493,7 +493,6 @@ def convolve(x, ir):
 def main():
     cold_open()
     act1()
-    act2()
     act3()
     act4()
     act5()
