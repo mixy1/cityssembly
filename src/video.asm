@@ -22,6 +22,13 @@ str_rb          db "rb", 0
 str_sdlfail     db "SDL error: %s", 10, 0
 
 section .data
+; tint colours (r,g,b,0) indexed by TINT_*
+tint_rgb:
+    dd 0
+    dd 0x1E328C, 0x1E50AA, 0x1E78BE, 0x1EA0B4, 0x28B48C, 0x3CBE5A, 0x64C83C, 0x96D232
+    dd 0xC8D232, 0xE6BE28, 0xF0A028, 0xF0781E, 0xE6501E, 0xD2321E, 0xB41E1E, 0x8C141E
+    dd 0xFFD23C, 0x3C96FF, 0xF03228, 0x50E6FF, 0x969696, 0x96642A, 0x50DC5A
+    dd 0, 0, 0, 0, 0, 0, 0, 0
 init_w          dd 1280
 init_h          dd 720
 
@@ -34,6 +41,9 @@ alignb 16
 zbuf            resw MAX_FB_W*MAX_FB_H
 alignb 16
 shotbuf         resd MAX_FB_W*MAX_FB_H
+alignb 16
+tintbuf         resb MAX_FB_W*MAX_FB_H
+blit_tint       resd 1
 
 window          resq 1
 renderer        resq 1
@@ -254,6 +264,124 @@ expand8:
     ret
 
 ; ---------------------------------------------------------------------
+;  tint_px(ebx argb, ecx tint) -> ebx: info-view colouring that keeps
+;  the picture underneath readable (shading survives the blend)
+; ---------------------------------------------------------------------
+tint_px:
+    cmp ecx, TINT_KEEP
+    je .o
+    push rdx
+    push rsi
+    push r8
+    ; luminance
+    mov eax, ebx
+    shr eax, 16
+    and eax, 255
+    imul eax, 77
+    mov edx, ebx
+    shr edx, 8
+    and edx, 255
+    imul edx, 150
+    add eax, edx
+    mov edx, ebx
+    and edx, 255
+    imul edx, 29
+    add eax, edx
+    shr eax, 8                      ; lum 0..255
+    mov esi, eax
+    test ecx, ecx
+    jnz .tint
+    ; untinted: desaturate and darken a little
+    xor r8d, r8d
+%macro DIMCH 1
+    mov eax, ebx
+    shr eax, %1
+    and eax, 255
+    imul eax, 150
+    lea edx, [rsi+rsi*2]
+    shl edx, 5                      ; lum*96
+    add eax, edx
+    shr eax, 8
+    imul eax, 190
+    shr eax, 8
+    shl eax, %1
+    or r8d, eax
+%endmacro
+    DIMCH 0
+    DIMCH 8
+    DIMCH 16
+    mov ebx, r8d
+    jmp .d
+.tint:
+    mov r9d, [tint_rgb+rcx*4]
+    lea esi, [rsi+256]
+    shr esi, 1                      ; 128..255 light factor
+    xor r8d, r8d
+%macro TINTCH 1
+    mov eax, r9d
+    shr eax, %1
+    and eax, 255
+    imul eax, esi
+    shr eax, 8                      ; lit tint
+    imul eax, 128
+    mov edx, ebx
+    shr edx, %1
+    and edx, 255
+    imul edx, 128
+    add eax, edx
+    shr eax, 8
+    shl eax, %1
+    or r8d, eax
+%endmacro
+    TINTCH 0
+    TINTCH 8
+    TINTCH 16
+    mov ebx, r8d
+.d:
+    or ebx, 0xFF000000
+    pop r8
+    pop rsi
+    pop rdx
+.o: ret
+
+; expand the world layer through the tint buffer (info view on)
+; rdi = src 8bpp, esi = w, edx = h, rcx = lut
+expand8_tint:
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+    mov r8, [tex_pixels]
+    movsxd r15, dword [tex_pitch]
+    mov r14, rcx
+    mov r13d, esi
+    mov r12d, edx
+.row:
+    mov r11, r8
+    xor r10d, r10d
+.px:
+    movzx eax, byte [rdi]
+    mov ebx, [r14+rax*4]
+    movzx ecx, byte [rdi+(tintbuf-fb)]
+    call tint_px
+    mov [r11], ebx
+    inc rdi
+    add r11, 4
+    inc r10d
+    cmp r10d, r13d
+    jl .px
+    add r8, r15
+    dec r12d
+    jnz .row
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+; ---------------------------------------------------------------------
 FUNC video_present
     ; world layer
     mov rdi, [tex_world]
@@ -267,7 +395,13 @@ FUNC video_present
     mov esi, [fb_w]
     mov edx, [fb_h]
     lea rcx, [lut_world]
+    cmp dword [eff_overlay], 0
+    je .plain
+    call expand8_tint
+    jmp .expd
+.plain:
     call expand8
+.expd:
     mov rdi, [tex_world]
     CALLC SDL_UnlockTexture
 .skip_w:
@@ -351,8 +485,13 @@ FUNC compose_frame
     mov eax, r15d
     xor edx, edx
     div dword [zoom]
+    movzx ecx, byte [r13+rax+(tintbuf-fb)]
     movzx eax, byte [r13+rax]
     mov ebx, [lut_world+rax*4]
+    cmp dword [eff_overlay], 0
+    je .nt
+    call tint_px
+.nt:
     mov eax, r15d
     xor edx, edx
     div dword [ui_scale]

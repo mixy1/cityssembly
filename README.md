@@ -36,27 +36,36 @@ Run `dist/cityssembly.exe` from Windows, or straight from WSL with
 
 Start by extending one of the two **regional highways** (west and north) with
 a road, zone some homes and industry next to it, and add a power plant.
-Utility and service tools show their **info view** while you use them:
+Every tool shows a short hint panel on the left explaining what it does.
+Power and water tools open their **info view** automatically:
 
-- power tools show the grid
-- water tools show the underground **pipe network** and who is served
-- services show their coverage
+- power tools show where power reaches (yellow), buildings without power (red)
+  and the glowing wires
+- water tools show the underground **pipe network** (grey = not connected to a
+  pump), the area it serves (blue) and dry buildings (red)
 
-All other views (traffic, land value, pollution, desirability...) are one
-press of `O` or a pick from the info views menu away.
+Info views are tinted over the city, so you can still see every building
+underneath. For any tool that has a view (services too), a chip at the top
+switches it on or off (`V`). Your choice is remembered in `cityssembly.cfg`.
+Placing a service shows its reach and dim rings around the ones you already
+have. All other views (traffic, land value, pollution, desirability...) are
+one press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
 
 | Input | Action |
 |---|---|
-| Left drag | build with the current tool (roads/pipes/lines draw L-shapes, zones draw rectangles) |
-| Right drag / WASD / arrows | pan (Shift = faster); right click cancels |
+| Left drag | build with the current tool (roads/pipes draw L-shapes, power lines run straight, zones draw rectangles) |
+| Left click | inspect a building, or a problem icon; click empty land to close |
+| Right drag / WASD / arrows | pan (Shift = faster) |
+| Right click | step back: cancel the drag, close the inspector, panel or menu, then drop the tool |
 | Mouse wheel, `-` `=` | zoom |
 | `Q` `B` `R` `T` `P` `L` | inspect, bulldoze, road, trees, water pipes, power lines |
 | `1` - `6` | zones: residential, commercial, industry, office, dense residential, dense commercial |
 | `X` | de-zone empty lots |
 | `Space`, `[` `]` | pause, game speed |
 | `O` | cycle info views |
+| `V` | show/hide the current tool's info view (remembered) |
 | `F2` `F3` `F4` | budget & taxes, policies, city statistics |
 | `Tab` | minimap (click it to jump) |
 | `N` / `M` | lock daylight / music on-off |
@@ -65,7 +74,8 @@ Then chase the advisor goals shown in the top-left.
 
 Icons above buildings show their most urgent problem (no power, no water,
 sewage, garbage, missing goods, missing workers, fire, no road, no route).
-Inspect a building for the full picture and what it needs to grow.
+Hover an icon to name the problem, click it to open the building. The
+inspector explains what's wrong and how to fix it.
 
 ### How the city works
 
@@ -87,12 +97,18 @@ Each level has requirements:
 - level 5: higher education and parks (a university for jobs)
 
 **Electricity** spreads between buildings within 2 tiles. Roads don't carry
-it, so use power lines to reach across gaps. Overloaded grids brown out.
+it, so drag **power lines** across gaps. Like Cities: Skylines, a line is a
+straight run of steel pylons, placed automatically every few tiles, with
+wires strung between them. A pylon powers anything within 2 tiles, and wires
+can end on a plant or any building. Overloaded grids brown out.
 
 **Water** flows through pipes from pumps (which must touch water) and water
-towers, and serves buildings within 3 tiles of a pipe. Sewage goes back
-through the same pipes to **sewage outlets**, and outlets **pollute the river
-downstream**. A pump drawing polluted water supplies dirty water, which makes
+towers, and serves buildings within 3 tiles of a pipe. One pipe network
+carries both ways. Fresh water comes in from a pump or tower touching the
+pipes. Every building it serves sends its **sewage back** through the same
+pipes to a **sewage outlet** touching the network, and the outlet dumps it
+into the river, **polluting it downstream**. So put outlets on the shore, far
+from your pumps. A pump drawing polluted water supplies dirty water, which makes
 people sick.
 
 **Traffic** is agent-based. Every vehicle has a real origin, destination and
@@ -181,6 +197,8 @@ replace the built-in instruments:
 cityssembly --shot N out.bmp            # render N frames, save a screenshot
 cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, screenshot
                                         # view: b budget, m stats, y policies, i inspect,
-                                        #       s water menu, w/p/z/t/o info views, n night
+                                        #       s water menu, w/p/z/t/o info views, n night,
+                                        #       q/Q pylons, F placing a service, I problem inspector,
+                                        #       T scripted new-player playtest (prints a report)
 cityssembly --wav SECONDS out.wav       # render the soundtrack offline
 ```

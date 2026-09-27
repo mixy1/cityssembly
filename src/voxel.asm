@@ -1236,6 +1236,8 @@ FUNC blit_sprite, 32
     mov [rdx], cx
     mov al, [r11+rax]
     mov [rbx], al
+    mov cl, [blit_tint]
+    mov [rbx+(tintbuf-fb)], cl
 .cn:
     inc rsi
     inc rdi

@@ -14,6 +14,7 @@ prob_n          resd 1
 prob_x          resd 256
 prob_y          resd 256
 prob_t          resb 256
+prob_tile       resd 256
 mouse_x         resd 1          ; window pixels
 mouse_y         resd 1
 mouse_wx        resd 1          ; world pixels
@@ -28,6 +29,10 @@ shake           resd 1
 overlay_mode    resd 1          ; 0 none, else OV_*
 draw_sx         resd 1
 draw_sy         resd 1
+wire_col        resd 1
+wire_front      resd 1
+pipe_col        resd 1
+pipe_col2       resd 1
 
 section .text
 
@@ -298,6 +303,12 @@ FUNC render_world, 32
     call compute_eff_overlay
     mov dword [prob_n], 0
     call set_target_world
+    lea rdi, [tintbuf]
+    mov ecx, [fb_w]
+    imul ecx, [fb_h]
+    xor eax, eax
+    rep stosb
+    mov dword [blit_tint], 0
     mov edi, RAMP(R_DEEPWATER, 1)
     call clear_target
     ; clear z-buffer
@@ -336,6 +347,13 @@ FUNC render_world, 32
     mov esi, r13d
     call tile_at
     mov rbx, rax
+    mov dword [blit_tint], 0
+    cmp dword [eff_overlay], 0
+    je .notint
+    mov rdi, rbx
+    call overlay_tint
+    mov [blit_tint], eax
+.notint:
     lea r14d, [r12+r13]
     shl r14d, 4                     ; depth base
     ; ground (only if the tile's own diamond is on screen)
@@ -351,20 +369,6 @@ FUNC render_world, 32
     mov edx, [draw_sy]
     mov ecx, r14d
     xor r8d, r8d
-    cmp dword [eff_overlay], 0
-    je .gblit
-    push rax
-    push rax
-    mov rdi, rbx
-    call overlay_remap
-    mov r8, rax
-    pop rax
-    pop rax
-    mov edi, eax
-    mov esi, [draw_sx]
-    mov edx, [draw_sy]
-    mov ecx, r14d
-.gblit:
     call blit_sprite
 .objs:
     cmp dword [emit_now], 0
@@ -401,8 +405,7 @@ FUNC render_world, 32
     mov edi, [spr_tree+rax*4]
     jmp .blitobj
 .power:
-    movzx eax, byte [rbx+T_SUB]
-    mov edi, [spr_power+rax*4]
+    mov edi, [spr_pylon]
     jmp .blitobj
 .zbld:
     test byte [rbx+T_FLAGS], F_ANCHOR
@@ -502,10 +505,182 @@ FUNC render_world, 32
     inc r13d
     cmp r13d, MAP_W
     jl .ty
+    mov dword [blit_tint], TINT_KEEP
+    call draw_wires
     cmp dword [eff_overlay], OV_WATER
     jne .np
     call draw_pipes
 .np:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  draw_wires: sagging cables between pylons (and into buildings)
+; ---------------------------------------------------------------------
+; wire_anchor(edi tile index, esi side -1/+1) -> eax sx, edx sy, ecx depth
+wire_anchor:
+    push rbx
+    mov ebx, esi
+    mov eax, edi
+    shl eax, TILE_SHIFT
+    movzx r8d, byte [tiles+rax+T_OBJ]
+    mov esi, edi
+    shr esi, MAP_SHIFT
+    and edi, MAP_W-1
+    lea ecx, [rdi+rsi]
+    shl ecx, 4
+    add ecx, 20                     ; in front of the tile's middle
+    push rcx
+    call tile_screen
+    pop rcx
+    add edx, 8                      ; tile centre
+    cmp r8d, OBJ_ZONEBLD
+    je .bld
+    cmp r8d, OBJ_SERVICE
+    je .bld
+    imul ebx, 9
+    add eax, ebx
+    sub edx, 25
+    pop rbx
+    ret
+.bld:
+    imul ebx, 2
+    add eax, ebx
+    sub edx, 12
+    pop rbx
+    ret
+
+FUNC draw_wires
+    mov dword [wire_front], 0
+    mov dword [wire_col], RAMP(R_ASPHALT, 0)
+    cmp dword [eff_overlay], OV_POWER
+    jne .c
+    mov dword [wire_col], RAMP(R_YELLOW, 7)
+.c:
+    xor ebx, ebx
+.w:
+    cmp ebx, [n_wires]
+    jge .out
+    movzx edi, word [wire_a+rbx*2]
+    movzx esi, word [wire_b+rbx*2]
+    call draw_wire
+    inc ebx
+    jmp .w
+.out:
+    RETURN
+
+; draw_wire(edi tile a, esi tile b) in [wire_col]; [wire_front] = on top
+FUNC draw_wire, 64
+    mov [rbp-96], edi
+    mov [rbp-100], esi
+    mov dword [rbp-92], -1          ; side
+.side:
+    mov edi, [rbp-96]
+    mov esi, [rbp-92]
+    call wire_anchor
+    mov [rbp-48], eax
+    mov [rbp-52], edx
+    mov [rbp-56], ecx
+    mov edi, [rbp-100]
+    mov esi, [rbp-92]
+    call wire_anchor
+    mov [rbp-60], eax
+    mov [rbp-64], edx
+    mov [rbp-68], ecx
+    ; cull: both ends far off screen
+    mov eax, [rbp-48]
+    cmp eax, [rbp-60]
+    jle .c1
+    xchg eax, [rbp-60]
+    mov [rbp-48], eax
+    mov eax, [rbp-52]
+    xchg eax, [rbp-64]
+    mov [rbp-52], eax
+    mov eax, [rbp-56]
+    xchg eax, [rbp-68]
+    mov [rbp-56], eax
+.c1:
+    mov eax, [rbp-60]
+    cmp eax, -8
+    jl .sn
+    mov eax, [rbp-48]
+    mov ecx, [fb_w]
+    add ecx, 8
+    cmp eax, ecx
+    jg .sn
+    ; steps = max(|dx|, |dy|)
+    mov eax, [rbp-60]
+    sub eax, [rbp-48]
+    mov ecx, [rbp-64]
+    sub ecx, [rbp-52]
+    mov edx, ecx
+    sar edx, 31
+    xor ecx, edx
+    sub ecx, edx
+    cmp eax, ecx
+    cmovl eax, ecx
+    inc eax
+    mov [rbp-72], eax               ; n
+    ; sag depth in pixels ~ n / 10 + 2
+    xor edx, edx
+    mov ecx, 10
+    div ecx
+    add eax, 2
+    mov [rbp-76], eax
+    xor ebx, ebx
+.px:
+    cmp ebx, [rbp-72]
+    jg .sn
+    ; t = ebx / n
+    mov eax, [rbp-60]
+    sub eax, [rbp-48]
+    imul eax, ebx
+    cdq
+    idiv dword [rbp-72]
+    add eax, [rbp-48]
+    mov r12d, eax                   ; x
+    mov eax, [rbp-64]
+    sub eax, [rbp-52]
+    imul eax, ebx
+    cdq
+    idiv dword [rbp-72]
+    add eax, [rbp-52]
+    mov r13d, eax                   ; y
+    ; sag = 4 s t (1-t)
+    mov eax, [rbp-72]
+    sub eax, ebx
+    imul eax, ebx
+    imul eax, [rbp-76]
+    shl eax, 2
+    mov ecx, [rbp-72]
+    imul ecx, ecx
+    inc ecx
+    cdq
+    idiv ecx
+    add r13d, eax
+    mov eax, [rbp-68]
+    sub eax, [rbp-56]
+    imul eax, ebx
+    cdq
+    idiv dword [rbp-72]
+    add eax, [rbp-56]
+    mov r14d, eax                   ; depth
+    cmp dword [wire_front], 0
+    je .col
+    mov r14d, 65000
+.col:
+    mov edx, [wire_col]
+    mov edi, r12d
+    mov esi, r13d
+    mov ecx, r14d
+    call zpixel
+    inc ebx
+    jmp .px
+.sn:
+    cmp dword [rbp-92], 1
+    je .out
+    mov dword [rbp-92], 1
+    jmp .side
+.out:
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -521,21 +696,7 @@ building_remap:
     jz .b
     lea rax, [remap_dark]
     ret
-.b: mov ecx, [eff_overlay]
-    cmp ecx, OV_POWER
-    jne .c
-    test byte [rsi+T_FLAGS], F_POWER
-    jnz .ok
-    lea rax, [remap_red]
-    ret
-.c: cmp ecx, OV_WATER
-    jne .ok
-    cmp byte [rsi+T_OBJ], OBJ_ZONEBLD
-    jne .ok
-    test byte [rsi+T_FLAGS], F_WATER
-    jnz .ok
-    lea rax, [remap_red]
-    ret
+.b:
 .ok:
     ret
 
@@ -550,6 +711,10 @@ note_problem:
     cmp ecx, 256
     jge .o
     mov [prob_t+rcx], al
+    mov rax, rbx
+    sub rax, tiles
+    shr rax, TILE_SHIFT
+    mov [prob_tile+rcx*4], eax
     mov eax, [draw_sx]
     mov [prob_x+rcx*4], eax
     shl edi, 4
@@ -595,6 +760,17 @@ FUNC draw_pipes, 32
     mov [rbp-48], eax               ; top x
     add edx, 8
     mov [rbp-52], edx               ; centre y
+    ; live pipes glow, pipes with no pump behind them stay grey
+    mov eax, r13d
+    shl eax, MAP_SHIFT
+    add eax, r12d
+    mov dword [pipe_col], RAMP(R_GLASS, 7)
+    mov dword [pipe_col2], RAMP(R_DEEPWATER, 1)
+    test byte [map_waterarea+rax], 2
+    jnz .live
+    mov dword [pipe_col], RAMP(R_GREY, 5)
+    mov dword [pipe_col2], RAMP(R_GREY, 1)
+.live:
     xor r14d, r14d
 .d:
     mov edi, r12d
@@ -627,7 +803,7 @@ FUNC draw_pipes, 32
     dec esi
     mov edx, 3
     mov ecx, 2
-    mov r8d, RAMP(R_GLASS, 7)
+    mov r8d, [pipe_col]
     call fill_rect
 .next:
     inc r12d
@@ -669,13 +845,13 @@ FUNC pipe_line
     dec edi
     mov edx, 3
     mov ecx, 2
-    mov r8d, RAMP(R_DEEPWATER, 1)
+    mov r8d, [pipe_col2]
     call fill_rect
     pop rsi
     pop rdi
     mov edx, 2
     mov ecx, 1
-    mov r8d, RAMP(R_GLASS, 7)
+    mov r8d, [pipe_col]
     call fill_rect
     inc ebx
     jmp .l
@@ -738,8 +914,8 @@ FUNC draw_diamond, 16
 .d:
     RETURN
 
-; overlay_remap(rdi tile) -> rax remap table for the ground
-FUNC overlay_remap
+; overlay_tint(rdi tile) -> eax TINT_* value for everything on the tile
+FUNC overlay_tint
     mov rbx, rdi
     mov r12, rdi
     sub r12, tiles
@@ -747,41 +923,55 @@ FUNC overlay_remap
     mov eax, [eff_overlay]
     cmp eax, OV_POWER
     jne .w
-    test byte [rbx+T_FLAGS], F_POWER
-    jnz .g6
+    ; buildings: powered or not.  ground: where power reaches
     mov rdi, rbx
     call power_conductive
     test eax, eax
-    jz .ident
-    mov eax, 14
-    jmp .tab
-.g6:
-    mov eax, 6
-    jmp .tab
+    jz .parea
+    cmp byte [rbx+T_OBJ], OBJ_POWER
+    je .parea
+    mov eax, TINT_YELLOW
+    test byte [rbx+T_FLAGS], F_POWER
+    jnz .ret
+    mov eax, TINT_RED
+    RETURN
+.parea:
+    xor eax, eax
+    cmp byte [map_powerarea+r12], 0
+    je .ret
+    mov eax, TINT_YELLOW
+    RETURN
 .w:
     cmp eax, OV_WATER
     jne .tr
     cmp byte [rbx+T_TERRAIN], TER_WATER
     jne .wl
-    ; water pollution on rivers and lakes
-    movzx eax, byte [map_wpol+r12]
-    test eax, eax
-    jz .wc
-    shr eax, 4
-    add eax, 8
-    CLAMP eax, 8, 15
-    jmp .tab
-.wc:
-    mov eax, 2
-    jmp .tab
+    ; rivers and lakes: clean blue, sewage brown
+    mov eax, TINT_BLUE
+    cmp byte [map_wpol+r12], 24
+    jb .ret
+    mov eax, TINT_BROWN
+    RETURN
 .wl:
+    cmp byte [rbx+T_ZONE], 0
+    jne .wz
+    cmp byte [rbx+T_OBJ], OBJ_SERVICE
+    je .wz
+    xor eax, eax
+    test byte [map_waterarea+r12], 1
+    jz .ret
+    mov eax, TINT_BLUE
+    RETURN
+.wz:
+    mov eax, TINT_RED
     test byte [rbx+T_FLAGS], F_WATER
-    jz .ident
-    mov eax, 3
+    jz .ret
+    mov eax, TINT_BLUE
     test byte [rbx+T_FLAGS2], F2_DIRTY
-    jz .tab
-    mov eax, 11
-    jmp .tab
+    jz .ret
+    mov eax, TINT_BROWN
+.ret:
+    RETURN
 .tr:
     cmp eax, OV_TRAFFIC
     jne .m2
@@ -880,11 +1070,10 @@ FUNC overlay_remap
     CLAMP ecx, 1, 15
     mov eax, ecx
 .tab:
-    shl eax, 8
-    lea rax, [remap_heat+rax]
+    inc eax
     RETURN
 .ident:
-    lea rax, [remap_dark]
+    xor eax, eax
     RETURN
 
 ; quick desirability for a zone class (edi class, esi map index) -> eax

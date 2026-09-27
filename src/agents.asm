@@ -600,6 +600,8 @@ zpixel:
     jb .o
     mov [fb+rax], dl
     mov [zbuf+rax*2], cx
+    mov cl, [blit_tint]
+    mov [tintbuf+rax], cl
 .o: ret
 
 FUNC draw_agents, 16

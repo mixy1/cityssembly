@@ -159,6 +159,7 @@ FUNC main
     call sprites_init
     call audio_init
     call ui_init
+    call settings_load
     call world_generate
     call sim_init
     call agents_init
@@ -179,6 +180,11 @@ FUNC main
 .nowav:
     cmp dword [demo_mode], 0
     je .nodemo
+    cmp dword [demo_view], 'T'
+    jne .realdemo
+    call playtest_build
+    jmp .nodemo
+.realdemo:
     call demo_build
 .nodemo:
     CALLC SDL_GetTicks
@@ -367,8 +373,23 @@ FUNC poll_events
     mov dword [drag_active], 0
     jmp .next
 .rc2:
-    mov dword [tool], T_INSPECT
+    ; then closes things one at a time: inspector, panel, menu, tool
+    cmp dword [sel_x], 0
+    jl .rc3
+    mov dword [sel_x], -1
+    jmp .next
+.rc3:
+    cmp dword [panel], PANEL_NONE
+    je .rc4
+    mov dword [panel], PANEL_NONE
+    jmp .next
+.rc4:
+    cmp dword [submenu], -1
+    je .rc5
     mov dword [submenu], -1
+    jmp .next
+.rc5:
+    mov dword [tool], T_INSPECT
     jmp .next
 .nbu:
     cmp eax, SDL_MOUSEWHEEL
@@ -560,21 +581,11 @@ FUNC demo_build, 16
     DPLACE BK_WTOWER, 56, -5
     DPLACE BK_WTOWER, 56, -6
     ; power line down the east edge links the plants to the city
-    mov r13d, -8
-.pl:
-    mov edi, 55
-    lea esi, [r12+r13]
-    call tile_at
-    test rax, rax
-    jz .pln
-    cmp byte [rax+T_OBJ], OBJ_NONE
-    jne .pln
-    mov byte [rax+T_OBJ], OBJ_POWER
-    mov byte [rax+T_ZONE], 0
-.pln:
-    inc r13d
-    cmp r13d, 14
-    jl .pl
+    mov edi, 57
+    lea esi, [r12-13]
+    mov edx, 57
+    lea ecx, [r12+13]
+    call demo_pline
     call roads_update_all
     ; bus stops
     mov edi, 30
@@ -660,6 +671,58 @@ FUNC demo_build, 16
     mov dword [tool], T_ZONETOOL
     mov dword [zone_type], ZONE_RH
 .v11:
+    cmp eax, 'q'
+    jne .v12
+    mov edi, 3
+    call video_set_zoom
+    mov edi, 57
+    mov esi, r12d
+    call camera_center_tile
+.v12:
+    cmp eax, 'Q'
+    jne .v13
+    mov edi, 3
+    call video_set_zoom
+    mov edi, 57
+    mov esi, r12d
+    call camera_center_tile
+    mov dword [tool], T_POWERLN
+.v13:
+    cmp eax, 'F'
+    jne .v14
+    mov dword [tool], T_BUILD
+    mov dword [build_kind], BK_POLICE
+    mov dword [hover_valid], 1
+    mov dword [hover_tx], 40
+    lea ecx, [r12+4]
+    mov [hover_ty], ecx
+.v14:
+    cmp eax, 'I'
+    jne .v15
+    ; inspect the first building with a problem
+    xor ecx, ecx
+.fi:
+    cmp ecx, MAP_TILES
+    jge .v15
+    mov edx, ecx
+    shl edx, TILE_SHIFT
+    cmp byte [tiles+rdx+T_PROBLEM], 0
+    je .fin
+    test byte [tiles+rdx+T_FLAGS], F_ANCHOR
+    jz .fin
+    mov edx, ecx
+    and edx, MAP_W-1
+    mov [sel_x], edx
+    shr ecx, MAP_SHIFT
+    mov [sel_y], ecx
+    mov edi, edx
+    mov esi, ecx
+    call camera_center_tile
+    jmp .v15
+.fin:
+    inc ecx
+    jmp .fi
+.v15:
 .noff:
     RETURN
 
@@ -734,6 +797,21 @@ FUNC demo_road
 .o:
     RETURN
 
+; demo_pline(edi x0, esi y0, edx x1, ecx y1): drag the power line tool
+FUNC demo_pline
+    mov dword [tool], T_POWERLN
+    mov [drag_sx], edi
+    mov [drag_sy], esi
+    mov [hover_tx], edx
+    mov [hover_ty], ecx
+    mov dword [hover_valid], 1
+    mov dword [drag_active], 1
+    call tool_collect
+    call tool_apply
+    mov dword [drag_active], 0
+    mov dword [tool], T_INSPECT
+    RETURN
+
 ; demo_stop(edi x, esi y)
 FUNC demo_stop
     call tile_at
@@ -806,3 +884,4 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "audio.asm"
 %include "ui.asm"
 %include "trailer.asm"
+%include "playtest.asm"

@@ -135,6 +135,14 @@ fill_rect:
     mov rdi, r11
     mov ecx, r10d
     rep stosb
+    cmp dword [tgt_is_world], 0
+    je .nt
+    lea rdi, [r11+(tintbuf-fb)]
+    mov ecx, r10d
+    mov al, [blit_tint]
+    rep stosb
+    mov eax, r8d
+.nt:
     movsxd rdx, dword [tgt_w]
     add r11, rdx
     dec r9d
@@ -157,6 +165,10 @@ put_pixel:
     add eax, edi
     add rax, [tgt_buf]
     mov [rax], dl
+    cmp dword [tgt_is_world], 0
+    je .o
+    mov dl, [blit_tint]
+    mov [rax+(tintbuf-fb)], dl
 .o: ret
 
 ; hline(edi x, esi y, edx w, ecx colour)

@@ -67,6 +67,12 @@ map_noise       resb MAP_TILES
 map_traffic     resb MAP_TILES      ; scratch
 map_wpol        resb MAP_TILES
 map_scenic      resb MAP_TILES
+map_powerarea   resb MAP_TILES      ; 1 = a building here would get power
+map_waterarea   resb MAP_TILES      ; bit0 served by pipes, bit1 live pipe
+alignb 16
+wire_head       resd MAP_TILES
+wire_next       resd MAX_WIRES*2
+wire_to         resd MAX_WIRES*2
 alignb 16
 comp_map        resw MAP_TILES
 cons_comp       resw MAP_TILES
@@ -172,6 +178,9 @@ avg_commute     resd 1
 flow_pct        resd 1
 bus_riders      resd 1
 riders_month    resd 1
+n_wires         resd 1
+wire_a          resw MAX_WIRES
+wire_b          resw MAX_WIRES
 sim_state_end:
 
 demand_r equ demand
@@ -1368,6 +1377,8 @@ tile_power_use:
 ;  (power lines reach 1)
 ; ---------------------------------------------------------------------
 FUNC power_flood, 64
+    call wires_cleanup
+    call wires_build_adjacency
     lea rdi, [comp_map]
     xor eax, eax
     mov ecx, MAP_TILES/2
@@ -1421,10 +1432,37 @@ FUNC power_flood, 64
     mov ecx, [rbp-68]
     add [comp_demand+rcx*4], eax
     add [rbp-64], eax
-    mov eax, 2
+    ; follow the wires strung from this tile
+    mov eax, [wire_head+r14*4]
+.wire:
+    cmp eax, -1
+    je .wd
+    mov [rbp-92], eax
+    mov esi, [wire_to+rax*4]
+    cmp word [comp_map+rsi*2], 0
+    jne .wn
+    mov [rbp-84], esi
+    shl esi, TILE_SHIFT
+    lea rdi, [tiles+rsi]
+    call power_conductive
+    test eax, eax
+    jz .wn
+    mov eax, [rbp-84]
+    mov ecx, [rbp-68]
+    mov [comp_map+rax*2], cx
+    mov [bfs_queue+r13*2], ax
+    inc r13d
+.wn:
+    mov eax, [rbp-92]
+    mov eax, [wire_next+rax*4]
+    jmp .wire
+.wd:
+    ; power spreads between buildings within 2 tiles
+    xor eax, eax
     cmp byte [rbx+T_OBJ], OBJ_POWER
-    jne .rad
-    mov eax, 1
+    sete al
+    mov [rbp-88], eax               ; current tile is a pylon
+    mov eax, 2
 .rad:
     mov [rbp-72], eax
     neg eax
@@ -1460,9 +1498,11 @@ FUNC power_flood, 64
     call power_conductive
     test eax, eax
     jz .nxn
-    ; power lines only link to things they touch
+    ; two pylons only link through wires (or by touching)
     cmp byte [rdi+T_OBJ], OBJ_POWER
     jne .link
+    cmp dword [rbp-88], 0
+    je .link
     mov eax, [rbp-80]
     cdq
     xor eax, edx
@@ -1530,6 +1570,7 @@ FUNC power_flood, 64
     mov [power_supply], eax
     mov eax, [rbp-64]
     mov [power_demand], eax
+    call power_area_update
     ; a plant whose network has nothing to power?
     xor eax, eax
     mov ecx, 1
@@ -1816,6 +1857,7 @@ FUNC water_flood, 64
     jmp .as
 .done:
     call spread_footprint_utilities
+    call water_area_update
     RETURN
 
 ; copy utility flags from anchors to the rest of their footprint
@@ -2007,6 +2049,190 @@ FUNC water_pollution_update, 16
     xor eax, eax
     mov ecx, MAP_TILES/2
     rep stosd
+.n:
+    inc r15d
+    jmp .l
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  wires between pylons (and the buildings they end at)
+; ---------------------------------------------------------------------
+; tile can hold a wire end? (edi tile index) -> eax
+wire_end_ok:
+    mov eax, edi
+    shl eax, TILE_SHIFT
+    lea rdi, [tiles+rax]
+    jmp power_conductive
+
+; drop wires whose ends no longer exist
+FUNC wires_cleanup
+    xor ebx, ebx                    ; read
+    xor r12d, r12d                  ; write
+.l:
+    cmp ebx, [n_wires]
+    jge .d
+    movzx edi, word [wire_a+rbx*2]
+    call wire_end_ok
+    test eax, eax
+    jz .n
+    movzx edi, word [wire_b+rbx*2]
+    call wire_end_ok
+    test eax, eax
+    jz .n
+    mov ax, [wire_a+rbx*2]
+    mov [wire_a+r12*2], ax
+    mov ax, [wire_b+rbx*2]
+    mov [wire_b+r12*2], ax
+    inc r12d
+.n:
+    inc ebx
+    jmp .l
+.d:
+    mov [n_wires], r12d
+    RETURN
+
+FUNC wires_build_adjacency
+    lea rdi, [wire_head]
+    mov eax, -1
+    mov ecx, MAP_TILES
+    rep stosd
+    xor ebx, ebx
+.l:
+    cmp ebx, [n_wires]
+    jge .d
+    movzx ecx, word [wire_a+rbx*2]
+    movzx edx, word [wire_b+rbx*2]
+    lea eax, [rbx*2]
+    mov r8d, [wire_head+rcx*4]
+    mov [wire_next+rax*4], r8d
+    mov [wire_head+rcx*4], eax
+    mov [wire_to+rax*4], edx
+    inc eax
+    mov r8d, [wire_head+rdx*4]
+    mov [wire_next+rax*4], r8d
+    mov [wire_head+rdx*4], eax
+    mov [wire_to+rax*4], ecx
+    inc ebx
+    jmp .l
+.d:
+    RETURN
+
+; add_wire(edi tile a, esi tile b) - ignores duplicates
+FUNC add_wire
+    cmp edi, esi
+    je .out
+    xor ebx, ebx
+.l:
+    cmp ebx, [n_wires]
+    jge .add
+    movzx eax, word [wire_a+rbx*2]
+    movzx ecx, word [wire_b+rbx*2]
+    cmp eax, edi
+    jne .x
+    cmp ecx, esi
+    je .out
+.x:
+    cmp eax, esi
+    jne .n
+    cmp ecx, edi
+    je .out
+.n:
+    inc ebx
+    jmp .l
+.add:
+    cmp ebx, MAX_WIRES
+    jge .out
+    mov [wire_a+rbx*2], di
+    mov [wire_b+rbx*2], si
+    inc dword [n_wires]
+.out:
+    RETURN
+
+; where a new building would be powered: 2 tiles around live tiles
+FUNC power_area_update
+    lea rdi, [map_powerarea]
+    xor eax, eax
+    mov ecx, MAP_TILES/4
+    rep stosd
+    xor r15d, r15d
+.l:
+    cmp r15d, MAP_TILES
+    jge .out
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    test byte [tiles+rax+T_FLAGS], F_POWER
+    jz .n
+    mov r12d, r15d
+    and r12d, MAP_W-1
+    mov r13d, r15d
+    shr r13d, MAP_SHIFT
+    mov r14d, -2
+.dy:
+    mov ebx, -2
+.dx:
+    lea eax, [r12+rbx]
+    cmp eax, MAP_W
+    jae .dn
+    lea ecx, [r13+r14]
+    cmp ecx, MAP_W
+    jae .dn
+    shl ecx, MAP_SHIFT
+    add ecx, eax
+    mov byte [map_powerarea+rcx], 1
+.dn:
+    inc ebx
+    cmp ebx, 2
+    jle .dx
+    inc r14d
+    cmp r14d, 2
+    jle .dy
+.n:
+    inc r15d
+    jmp .l
+.out:
+    RETURN
+
+; where pipes deliver water: 3 tiles around pipes that have a pump
+FUNC water_area_update
+    lea rdi, [map_waterarea]
+    xor eax, eax
+    mov ecx, MAP_TILES/4
+    rep stosd
+    xor r15d, r15d
+.l:
+    cmp r15d, MAP_TILES
+    jge .out
+    movzx eax, word [comp_map+r15*2]
+    test eax, eax
+    jz .n
+    cmp dword [comp_supply+rax*4], 0
+    je .n
+    or byte [map_waterarea+r15], 2
+    mov r12d, r15d
+    and r12d, MAP_W-1
+    mov r13d, r15d
+    shr r13d, MAP_SHIFT
+    mov r14d, -3
+.dy:
+    mov ebx, -3
+.dx:
+    lea eax, [r12+rbx]
+    cmp eax, MAP_W
+    jae .dn
+    lea ecx, [r13+r14]
+    cmp ecx, MAP_W
+    jae .dn
+    shl ecx, MAP_SHIFT
+    add ecx, eax
+    or byte [map_waterarea+rcx], 1
+.dn:
+    inc ebx
+    cmp ebx, 3
+    jle .dx
+    inc r14d
+    cmp r14d, 3
+    jle .dy
 .n:
     inc r15d
     jmp .l

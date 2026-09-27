@@ -164,6 +164,21 @@ RES_FOREST   equ 2
 RES_ORE      equ 3
 
 ; problem icons
+MAX_WIRES    equ 2048
+PYLON_COST   equ 20
+WIRE_COST    equ 2
+
+; info-view tint layer values (0 = none: dimmed while a view is on)
+TINT_HEAT    equ 1      ; 1..16 heat scale
+TINT_YELLOW  equ 17
+TINT_BLUE    equ 18
+TINT_RED     equ 19
+TINT_CYAN    equ 20
+TINT_GREY    equ 21
+TINT_BROWN   equ 22
+TINT_GREEN   equ 23
+TINT_KEEP    equ 31     ; drawn untouched (vehicles, wires, ui helpers)
+
 PR_NONE      equ 0
 PR_POWER     equ 1
 PR_WATER     equ 2

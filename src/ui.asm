@@ -66,6 +66,9 @@ tl_valid        resd 1
 tl_x            resd MAX_TL
 tl_y            resd MAX_TL
 tl_ok           resb MAX_TL
+pl_n            resd 1
+pl_x            resd 256
+pl_y            resd 256
 notif_text      resb NOTIFS*96
 notif_col       resd NOTIFS
 notif_tx        resd NOTIFS
@@ -156,8 +159,8 @@ ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
     dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0
-oh1  db 2, "powered  ", 3, "no power", 0
-oh2  db 7, "pipes  ", 2, "served  ", 3, "dry  ", 4, "polluted", 0
+oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
+oh2  db 7, "served area  ", 3, "no water  ", 6, "dead pipe  ", 4, "polluted", 0
 oh7  db 2, "flowing  ", 4, "busy  ", 3, "jammed", 0
 oh15 db 2, "fertile  ", 7, "forest  ", 4, "ore", 0
 
@@ -203,7 +206,9 @@ s_welcome2  db "This valley needs a city. Extend the highway with a road,", 10
             db 5, "Click anywhere to begin.", 0
 s_help      db "CONTROLS", 10, 10
             db 7, "Left drag", 1, "    build with the current tool", 10
-            db 7, "Right drag", 1, "   pan (also WASD / arrows), right click cancels", 10
+            db 7, "Right drag", 1, "   pan (also WASD / arrows)", 10
+            db 7, "Right click", 1, "  close / cancel, one step at a time", 10
+            db 7, "V", 1, "            show or hide the tool's info view", 10
             db 7, "Wheel", 1, "        zoom (also - and =)", 10
             db 7, "Q B R T P L", 1, "  inspect, bulldoze, road, trees, pipes, power line", 10
             db 7, "1 2 3 4 5 6", 1, "  zones: res, shop, industry, office, dense res/shop", 10
@@ -420,6 +425,107 @@ g17 db "Build the Asm Tower", 0
 g18 db "Megalopolis: reach 15,000 residents", 0
 g19 db "All goals done - keep building!", 0
 GOAL_COUNT equ 19
+
+s_showview db "Show ", 0
+s_vkey     db " view (V)", 0
+s_hide     db "hide", 0
+s_hidetip  db "Keep this view closed for this tool (V)", 0
+
+; tool hints, by tool
+hint_title dq 0, ht_bull, ht_road, ti_line, ht_zone, ti_pipe, ti_stop, ti_dezone, 0, ht_tree
+hint_text  dq 0, hx_bull, hx_road, hx_line, hx_zone, hx_pipe, hx_stop, hx_dezone, 0, hx_tree
+ht_bull db "Bulldozer", 0
+ht_road db "Roads", 0
+ht_zone db "Zoning", 0
+ht_tree db "Trees", 0
+hx_bull db "Drag over anything to clear it.", 10
+        db "Empty ground: digs up pipes.", 0
+hx_road db "Drag to build. Link new roads", 10
+        db "to a highway at the map edge -", 10
+        db "that's where people arrive.", 0
+hx_line db "Drag a line: pylons go up every", 10
+        db "few tiles and wires hop between.", 10
+        db 5, "Power spreads from building to", 10
+        db 5, "building within 2 tiles", 1, ", so one", 10
+        db "line to a neighbourhood's edge", 10
+        db "lights up the whole block.", 10
+        db 6, "$20 a pylon, $2 a tile.", 0
+hx_zone db "Drag along roads. Buildings", 10
+        db "grow on their own.", 0
+hz_zone db "They need a road, power and", 10
+        db "water to grow past level 1.", 0
+hx_pipe db "Pipes run underground (roads", 10
+        db "can go on top). Every building", 10
+        db 7, "within 3 tiles of a pipe", 1, " is served.", 10
+        db "One pipe network does both:", 10
+        db 7, " fresh water in", 1, " from a Pump or", 10
+        db "   Water Tower touching it,", 10
+        db 4, " sewage out", 1, " to a Sewage Outlet", 10
+        db "   touching it.", 0
+hx_stop db "Click a road. A Bus Depot sends", 10
+        db "buses around all your stops.", 0
+hx_dezone db "Drag to remove zoning.", 0
+hx_tree db "Trees raise land value and", 10
+        db "soak up pollution and noise.", 0
+
+; extra hints by building kind
+hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
+        dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+hb_plant   db "No road needed. Put it away from", 10
+           db "homes, then drag a power line", 10
+           db "to your city.", 0
+hb_pump    db "Place it on the shore, then run", 10
+           db "a pipe from it into town.", 10
+           db "Needs power. Keep it ", 3, "upstream", 1, 10
+           db "of sewage outlets.", 0
+hb_tower   db "Place it on a pipe anywhere.", 10
+           db "Needs power.", 0
+hb_sewage  db "Every building on a pipe sends", 10
+           db "its waste down the pipes to", 10
+           db "here, and it spills into the", 10
+           db "river. Put it on the shore", 10
+           db 3, "downstream, far from pumps", 1, ".", 0
+hb_service db "The ring shows its reach.", 10
+           db "Dim rings: ones you already have.", 0
+
+; problem names and what to do about them, per PR_*
+prob_titles dq 0, pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10
+prob_fixes  dq 0, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9, pf10
+pt1  db "No electricity", 0
+pt2  db "No running water", 0
+pt3  db "Sewage is backing up", 0
+pt4  db "Garbage is piling up", 0
+pt5  db "Shelves are empty", 0
+pt6  db "Not enough workers", 0
+pt7  db "On fire!", 0
+pt8  db "No road access", 0
+pt9  db "Tap water is polluted", 0
+pt10 db "Trips can't get through", 0
+pf1  db "Build a power plant, then drag", 10
+     db "a power line to within 2 tiles.", 10
+     db "Powered buildings pass it on.", 0
+pf2  db "Lay water pipes within 3 tiles", 10
+     db "(under roads is fine), joined", 10
+     db "to a Water Pump or Tower.", 0
+pf3  db "Waste goes back through the", 10
+     db "same pipes. Join them to a", 10
+     db "Sewage Outlet on the shore.", 0
+pf4  db "Build a Landfill or Incinerator", 10
+     db "that its trucks can reach.", 0
+pf5  db "Shops need deliveries. Zone", 10
+     db "industry and link it by road.", 0
+pf6  db "Zone more homes nearby. Offices", 10
+     db "also need schooled workers.", 0
+pf7  db "A Fire Station in range sends", 10
+     db "a truck - or pay to fight it.", 0
+pf8  db "Buildings must touch a road", 10
+     db "that leads to the highway.", 0
+pf9  db "Its pump drinks polluted water.", 10
+     db "Move pumps upstream, away", 10
+     db "from sewage outlets.", 0
+pf10 db "Cars from here can't find a way.", 10
+     db "Link roads to the highway and", 10
+     db "ease the traffic jams.", 0
 
 ; problem icons: glyph and colour per PR_*
 prob_glyph  db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?'
@@ -762,7 +868,7 @@ FUNC tool_collect, 16
     cmp eax, T_ROAD
     je .line
     cmp eax, T_POWERLN
-    je .line
+    je .pline
     cmp eax, T_PIPE
     je .line
     cmp eax, T_INSPECT
@@ -878,6 +984,13 @@ FUNC tool_collect, 16
     mov esi, r13d
     call tl_push
     jmp .lx1
+.pline:
+    mov edi, r14d
+    mov esi, r15d
+    mov edx, r12d
+    mov ecx, r13d
+    call pline_collect
+    jmp .out
 .single:
     cmp dword [hover_valid], 0
     je .out
@@ -962,6 +1075,44 @@ FUNC preview_road_mask
     cmp r14d, 4
     jl .d
     mov eax, ebx
+    RETURN
+
+; dim reach rings around the buildings of the kind being placed
+FUNC existing_rings
+    mov edi, [build_kind]
+    call bld_rec
+    movzx r14d, byte [rax+BI_RADIUS]
+    test r14d, r14d
+    jz .out
+    cmp r14d, 30
+    jg .out                         ; city-wide: rings mean nothing
+    movzx r15d, byte [rax+BI_SIZE]
+    shr r15d, 1
+    xor ebx, ebx
+.l:
+    cmp ebx, [n_svc]
+    jge .out
+    movzx r12d, word [list_svc+rbx*2]
+    mov eax, r12d
+    shl eax, TILE_SHIFT
+    movzx ecx, byte [tiles+rax+T_SUB]
+    cmp ecx, [build_kind]
+    jne .n
+    mov edi, r12d
+    and edi, MAP_W-1
+    add edi, r15d
+    sub edi, r14d
+    mov esi, r12d
+    shr esi, MAP_SHIFT
+    add esi, r15d
+    sub esi, r14d
+    lea edx, [r14*2+1]
+    mov ecx, RAMP(R_GLASS, 4)
+    call draw_diamond
+.n:
+    inc ebx
+    jmp .l
+.out:
     RETURN
 
 ; =====================================================================
@@ -1572,7 +1723,7 @@ FUNC load_city, 16
 .out:
     RETURN
 section .data
-save_magic db "CSAVv002"
+save_magic db "CSAVv003"
 section .text
 
 
@@ -1600,58 +1751,274 @@ FUNC new_city
 ;  info view chosen by the current tool (Cities: Skylines style)
 ; =====================================================================
 FUNC compute_eff_overlay
-    mov eax, [overlay_mode]
-    test eax, eax
-    jnz .set
-    ; an open build menu previews its view
+    ; which view goes with what is selected right now
+    xor eax, eax
+    cmp dword [welcome], 0
+    jne .have
     mov ecx, [submenu]
     cmp ecx, -1
     je .tool
     mov eax, [submenu_view+rcx*4]
     test eax, eax
-    jnz .set
+    jnz .have
 .tool:
-    xor eax, eax
-    cmp dword [welcome], 0
-    jne .set
     mov ecx, [tool]
     cmp ecx, T_POWERLN
     jne .t1
     mov eax, OV_POWER
-    jmp .set
+    jmp .have
 .t1:
     cmp ecx, T_PIPE
     jne .t3
     mov eax, OV_WATER
-    jmp .set
+    jmp .have
 .t3:
     cmp ecx, T_BUSSTOP
     jne .t6
     mov eax, OV_TRANSIT
-    jmp .set
+    jmp .have
 .t6:
     cmp ecx, T_BUILD
-    jne .set
+    jne .have
     mov edi, [build_kind]
     call bld_rec
     movzx ecx, byte [rax+BI_CATEGORY]
     movzx eax, byte [cat_view+rcx]
     cmp ecx, CAT_SAFETY
-    jne .set
+    jne .have
     mov eax, OV_POLICE
     cmp dword [build_kind], BK_FIRE
-    jne .set
+    jne .have
     mov eax, OV_FIRE
+.have:
+    mov [auto_view], eax
+    ; an info view picked by hand always wins
+    mov ecx, [overlay_mode]
+    test ecx, ecx
+    jnz .man
+    ; otherwise only if the player left it switched on for this tool
+    test eax, eax
+    jz .set
+    cmp byte [auto_on+rax], 0
+    jne .set
+    xor eax, eax
+    jmp .set
+.man:
+    mov eax, ecx
 .set:
     mov [eff_overlay], eax
     RETURN
+
+; V / the chip in the tool hint: flip the remembered auto view
+toggle_auto_view:
+    mov eax, [auto_view]
+    test eax, eax
+    jz .o
+    xor byte [auto_on+rax], 1
+    mov dword [overlay_mode], 0
+    call settings_save
+    mov edi, SFX_CLICK
+    call sfx_play
+.o: ret
+
 section .data
 cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRANSIT, 0
+; which info views open by themselves (the player can flip each; saved)
+auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+AUTO_ON_N equ 20
+settings_file db "cityssembly.cfg", 0
+settings_magic db "CSCF"
+section .bss
+auto_view resd 1
+settings_buf resb 32
 section .text
+
+; settings: the remembered info-view switches
+FUNC settings_save
+    lea rdi, [settings_file]
+    lea rsi, [str_wb]
+    CALLC SDL_RWFromFile
+    test rax, rax
+    jz .o
+    mov r12, rax
+    mov eax, [settings_magic]
+    mov [settings_buf], eax
+    lea rdi, [settings_buf+4]
+    lea rsi, [auto_on]
+    mov ecx, AUTO_ON_N
+    rep movsb
+    mov rdi, r12
+    lea rsi, [settings_buf]
+    mov edx, AUTO_ON_N+4
+    mov ecx, 1
+    CALLC SDL_RWwrite
+    mov rdi, r12
+    CALLC SDL_RWclose
+.o:
+    RETURN
+
+FUNC settings_load
+    lea rdi, [settings_file]
+    lea rsi, [str_rb]
+    CALLC SDL_RWFromFile
+    test rax, rax
+    jz .o
+    mov r12, rax
+    mov rdi, r12
+    lea rsi, [settings_buf]
+    mov edx, AUTO_ON_N+4
+    mov ecx, 1
+    CALLC SDL_RWread
+    mov r13, rax
+    mov rdi, r12
+    CALLC SDL_RWclose
+    cmp r13, 1
+    jne .o
+    mov eax, [settings_buf]
+    cmp eax, [settings_magic]
+    jne .o
+    lea rsi, [settings_buf+4]
+    lea rdi, [auto_on]
+    mov ecx, AUTO_ON_N
+    rep movsb
+.o:
+    RETURN
 
 ; =====================================================================
 ;  tools
 ; =====================================================================
+; ---------------------------------------------------------------------
+;  power lines: a straight run with pylons every few tiles
+; ---------------------------------------------------------------------
+PYLON_SPAN equ 6
+MAX_PL     equ 256
+
+; pline_collect(edi sx, esi sy, edx ex, ecx ey): pylon spots -> tl list
+FUNC pline_collect, 32
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    sub edx, edi
+    sub ecx, esi
+    mov [rbp-56], edx               ; dx
+    mov [rbp-60], ecx               ; dy
+    mov eax, edx
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov r8d, eax
+    mov eax, ecx
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp eax, r8d
+    cmovl eax, r8d
+    CLAMP eax, 0, MAX_PL-1
+    mov [rbp-64], eax               ; n
+    mov [pl_n], eax
+    ; points along the line
+    xor ebx, ebx
+.pt:
+    cmp ebx, [rbp-64]
+    jg .pick
+    mov eax, [rbp-56]
+    call .lerp
+    add eax, [rbp-48]
+    mov [pl_x+rbx*4], eax
+    mov eax, [rbp-60]
+    call .lerp
+    add eax, [rbp-52]
+    mov [pl_y+rbx*4], eax
+    inc ebx
+    jmp .pt
+.lerp:                              ; round(eax * ebx / n)
+    cmp dword [rbp-64], 0
+    je .lz
+    imul eax, ebx
+    add eax, eax
+    mov ecx, [rbp-64]
+    test eax, eax
+    js .lneg
+    add eax, ecx
+    cdq
+    idiv ecx
+    sar eax, 1
+    ret
+.lneg:
+    sub eax, ecx
+    cdq
+    idiv ecx
+    neg eax
+    sar eax, 1
+    neg eax
+    ret
+.lz:
+    xor eax, eax
+    ret
+.pick:
+    mov edi, [pl_x]
+    mov esi, [pl_y]
+    call tl_push
+    xor r12d, r12d                  ; last pylon
+.next:
+    cmp r12d, [rbp-64]
+    jge .out
+    lea r13d, [r12+PYLON_SPAN]
+    cmp r13d, [rbp-64]
+    jl .srch
+    mov r13d, [rbp-64]
+    jmp .take
+.srch:
+    ; farthest good spot within reach
+    mov r14d, r13d
+.s:
+    cmp r14d, r12d
+    jle .take                       ; nothing: take the far point anyway
+    mov edi, [pl_x+r14*4]
+    mov esi, [pl_y+r14*4]
+    call pylon_spot_ok
+    test eax, eax
+    jnz .found
+    dec r14d
+    jmp .s
+.found:
+    mov r13d, r14d
+.take:
+    mov edi, [pl_x+r13*4]
+    mov esi, [pl_y+r13*4]
+    call tl_push
+    mov r12d, r13d
+    jmp .next
+.out:
+    RETURN
+
+; can a pylon stand here (or is one already here)? (edi x, esi y)
+pylon_spot_ok:
+    call tile_at
+    test rax, rax
+    jz .n
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    je .n
+    movzx ecx, byte [rax+T_OBJ]
+    cmp ecx, OBJ_POWER
+    je .y
+    cmp ecx, OBJ_TREE
+    je .y
+    cmp ecx, OBJ_NONE
+    jne .n
+    cmp byte [rax+T_ZONE], 0
+    jne .n                          ; keep zoned lots free
+.y: mov eax, 1
+    ret
+.n: xor eax, eax
+    ret
+
+; tile index of tl entry ebx -> eax
+tl_index:
+    mov eax, [tl_y+rbx*4]
+    shl eax, MAP_SHIFT
+    add eax, [tl_x+rbx*4]
+    ret
+
 ; is the current tool a line tool / single click tool?
 tool_is_line:
     mov eax, [tool]
@@ -1685,10 +2052,30 @@ FUNC tool_evaluate, 32
     mov dword [last_tool_err], 0
     cmp dword [tool], T_BUILD
     je .build
+    mov dword [pl_n], 0
+    cmp dword [drag_active], 0
+    je .l0
+    cmp dword [tool], T_POWERLN
+    jne .l0
+    mov eax, [drag_sx]
+    sub eax, [hover_tx]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ecx, eax
+    mov eax, [drag_sy]
+    sub eax, [hover_ty]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp eax, ecx
+    cmovl eax, ecx
+    mov [pl_n], eax
+.l0:
     xor ebx, ebx
 .l:
     cmp ebx, [tl_n]
-    jge .out
+    jge .lend
     mov edi, [tl_x+rbx*4]
     mov esi, [tl_y+rbx*4]
     call tile_at
@@ -1726,15 +2113,21 @@ FUNC tool_evaluate, 32
 .t1:
     cmp eax, T_POWERLN
     jne .t2
-    cmp ecx, OBJ_NONE
-    je .pok
-    cmp ecx, OBJ_TREE
-    jne .n
-.pok:
-    mov r13d, 5
+    ; existing pylons and buildings take the wire for free
+    xor r13d, r13d
+    cmp ecx, OBJ_POWER
+    je .set
+    cmp ecx, OBJ_ZONEBLD
+    je .set
+    cmp ecx, OBJ_SERVICE
+    je .set
     cmp edx, TER_WATER
-    jne .set
-    mov r13d, 15
+    je .n
+    mov r13d, PYLON_COST
+    cmp ecx, OBJ_TREE
+    je .set
+    cmp ecx, OBJ_NONE
+    jne .n
     jmp .set
 .t2:
     cmp eax, T_ZONETOOL
@@ -1818,6 +2211,11 @@ FUNC tool_evaluate, 32
     test byte [r12+T_FLAGS2], F2_BUSSTOP
     jnz .n
     mov r13d, 60
+    jmp .set
+.lend:
+    cmp dword [tool], T_POWERLN
+    je .plcost
+    jmp .out
 .set:
     mov byte [tl_ok+rbx], 1
     inc dword [tl_valid]
@@ -1825,6 +2223,12 @@ FUNC tool_evaluate, 32
 .n:
     inc ebx
     jmp .l
+.plcost:
+    ; cable: a little per tile spanned
+    mov eax, [pl_n]
+    imul eax, WIRE_COST
+    add [tl_cost], eax
+    jmp .out
 
 .build:
     cmp dword [tl_n], 0
@@ -1930,9 +2334,28 @@ FUNC tool_apply
 .a1:
     cmp eax, T_POWERLN
     jne .a2
+    movzx eax, byte [r12+T_OBJ]
+    cmp eax, OBJ_NONE
+    je .pnew
+    cmp eax, OBJ_TREE
+    jne .pwire
+.pnew:
     mov byte [r12+T_OBJ], OBJ_POWER
     mov byte [r12+T_ZONE], 0
     mov byte [r12+T_FLAGS], 0
+.pwire:
+    ; string a wire back to the previous pylon of this run
+    test ebx, ebx
+    jz .upd
+    cmp byte [tl_ok+rbx-1], 0
+    je .upd
+    call tl_index
+    mov esi, eax
+    dec ebx
+    call tl_index
+    inc ebx
+    mov edi, eax
+    call add_wire
     jmp .upd
 .a2:
     cmp eax, T_ZONETOOL
@@ -2010,6 +2433,7 @@ FUNC tool_apply
 .done:
     cmp dword [tool], T_BULLDOZE
     jne .snd
+    call wires_cleanup
     xor ebx, ebx
 .cl:
     cmp ebx, [tl_n]
@@ -2168,6 +2592,8 @@ FUNC draw_tool_preview, 16
     call tool_evaluate
     cmp dword [tool], T_BUILD
     je .bprev
+    cmp dword [tool], T_POWERLN
+    je .plprev
     xor ebx, ebx
 .l:
     cmp ebx, [tl_n]
@@ -2224,6 +2650,65 @@ FUNC draw_tool_preview, 16
 .n:
     inc ebx
     jmp .l
+.plprev:
+    mov dword [blit_tint], TINT_KEEP
+    xor ebx, ebx
+.pp:
+    cmp ebx, [tl_n]
+    jge .sel
+    mov r12d, [tl_x+rbx*4]
+    mov r13d, [tl_y+rbx*4]
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    test rax, rax
+    jz .ppn
+    cmp byte [tl_ok+rbx], 0
+    je .ppbad
+    ; wire back to the previous spot
+    test ebx, ebx
+    jz .ppg
+    cmp byte [tl_ok+rbx-1], 0
+    je .ppg
+    mov dword [wire_front], 1
+    mov dword [wire_col], RAMP(R_YELLOW, 7)
+    call tl_index
+    mov esi, eax
+    dec ebx
+    call tl_index
+    inc ebx
+    mov edi, eax
+    call draw_wire
+    mov dword [wire_front], 0
+.ppg:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    cmp byte [rax+T_OBJ], OBJ_POWER
+    je .ppn
+    cmp byte [rax+T_OBJ], OBJ_NONE
+    je .ppghost
+    cmp byte [rax+T_OBJ], OBJ_TREE
+    jne .ppn
+.ppghost:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_screen
+    mov esi, eax
+    mov edi, [spr_pylon]
+    mov ecx, 60000
+    lea r8, [remap_bright]
+    call blit_sprite
+    jmp .ppn
+.ppbad:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 1
+    mov ecx, RAMP(R_RED, 6)
+    call draw_diamond
+.ppn:
+    inc ebx
+    jmp .pp
 .bprev:
     cmp dword [tl_n], 0
     je .sel
@@ -2243,6 +2728,7 @@ FUNC draw_tool_preview, 16
     lea r8, [remap_red]
 .bp:
     call blit_sprite
+    call existing_rings
     mov edi, [build_kind]
     call bld_rec
     movzx r15d, byte [rax+BI_RADIUS]
@@ -2322,6 +2808,19 @@ FUNC world_input
     mov dword [drag_active], 1
     jmp .out
 .inspect:
+    ; clicking bare land closes the inspector
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    call tile_at
+    cmp byte [rax+T_OBJ], OBJ_NONE
+    jne .insel
+    cmp byte [rax+T_ZONE], 0
+    jne .insel
+    test byte [rax+T_FLAGS2], F2_PIPE
+    jnz .insel
+    mov dword [sel_x], -1
+    jmp .out
+.insel:
     mov edi, [hover_tx]
     mov esi, [hover_ty]
     call anchor_of
@@ -3020,7 +3519,8 @@ FUNC draw_inspect, 32
     mov esi, r13d
     sub esi, 4
     mov edx, 184
-    mov ecx, 250
+    mov ecx, [insp_h]
+    CLAMP ecx, 60, 320
     call draw_panel
     lea edi, [r12+170]
     mov esi, r13d
@@ -3101,6 +3601,62 @@ FUNC draw_inspect, 32
     mov ecx, UI_GOLD
     call tb_draw
     add dword [row_y], 13
+    ; what's wrong, and how to fix it
+    movzx eax, byte [rbx+T_PROBLEM]
+    test eax, eax
+    jz .noprob
+    cmp eax, PR_ROUTE
+    ja .noprob
+    mov [rbp-48], eax
+    mov rdx, [prob_fixes+rax*8]
+    xor ecx, ecx
+.cntl:
+    mov al, [rdx]
+    inc rdx
+    test al, al
+    jz .cntd
+    cmp al, 10
+    jne .cntl
+    inc ecx
+    jmp .cntl
+.cntd:
+    imul ecx, 10
+    add ecx, 25
+    lea edi, [r12+3]
+    mov esi, [row_y]
+    sub esi, 2
+    mov edx, 178
+    mov r8d, RAMP(R_RED, 1)
+    push rcx
+    push rcx
+    call draw_box
+    pop rcx
+    pop rcx
+    mov eax, [rbp-48]
+    mov rdx, [prob_titles+rax*8]
+    mov ecx, UI_BAD
+    call row_text
+    mov eax, [rbp-48]
+    mov rdx, [prob_fixes+rax*8]
+    mov edi, [row_x]
+    add edi, 6
+    mov esi, [row_y]
+    mov ecx, UI_TEXT
+    call draw_text
+    mov eax, [rbp-48]
+    mov rdx, [prob_fixes+rax*8]
+.cnt2:
+    mov al, [rdx]
+    inc rdx
+    test al, al
+    jz .cnt3
+    cmp al, 10
+    jne .cnt2
+    add dword [row_y], 10
+    jmp .cnt2
+.cnt3:
+    add dword [row_y], 16
+.noprob:
 
     movzx eax, byte [rbx+T_OBJ]
     cmp eax, OBJ_ZONEBLD
@@ -3399,6 +3955,10 @@ FUNC draw_inspect, 32
     jz .out
     mov dword [fight_request], 1
 .out:
+    ; size next frame's panel to what was drawn
+    mov eax, [row_y]
+    sub eax, 42-8
+    mov [insp_h], eax
     cmp dword [fight_request], 0
     je .o2
     mov dword [fight_request], 0
@@ -3407,6 +3967,7 @@ FUNC draw_inspect, 32
     RETURN
 section .bss
 fight_request resd 1
+insp_h        resd 1
 section .text
 
 ; why a zone tile is not growing -> rax string or 0  (rbx tile, r15d index)
@@ -3834,18 +4395,48 @@ FUNC draw_stats, 16
 ; ---------------------------------------------------------------------
 ;  info view legend
 ; ---------------------------------------------------------------------
-FUNC draw_overlay_legend
+FUNC draw_overlay_legend, 16
     mov eax, [eff_overlay]
     test eax, eax
+    jnz .on
+    ; the tool has a view the player switched off: offer it back
+    mov eax, [auto_view]
+    test eax, eax
     jz .out
+    call tb_reset
+    lea rdi, [s_showview]
+    call tb_str
+    mov eax, [auto_view]
+    mov rdi, [overlay_names+rax*8]
+    call tb_str
+    lea rdi, [s_vkey]
+    call tb_str
+    lea rdi, [textbuf]
+    call text_width
+    lea edx, [rax+12]
+    mov r13d, [ui_w]
+    shr r13d, 1
+    mov edi, edx
+    shr edi, 1
+    neg edi
+    add edi, r13d
+    mov esi, 38
+    lea rcx, [textbuf]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .out
+    call toggle_auto_view
+    jmp .out
+.on:
     mov rdi, [overlay_names+rax*8]
     mov r12, rdi
     mov r14, [ov_hint+rax*8]
     mov r13d, [ui_w]
     shr r13d, 1
-    lea edi, [r13-90]
+    lea edi, [r13-120]
     mov esi, 38
-    mov edx, 180
+    mov edx, 240
     mov ecx, 26
     call draw_panel
     mov edi, r13d
@@ -3853,6 +4444,41 @@ FUNC draw_overlay_legend
     mov rdx, r12
     mov ecx, UI_TEXT
     call draw_text_centered
+    ; opened by the tool? a small switch to keep it closed from now on
+    cmp dword [overlay_mode], 0
+    jne .hint
+    cmp dword [auto_view], 0
+    je .hint
+    lea edi, [r13+86]
+    mov esi, 39
+    mov edx, 32
+    mov ecx, 11
+    call ui_over
+    mov [rbp-48], eax
+    lea edi, [r13+86]
+    mov esi, 39
+    mov edx, 32
+    mov ecx, 11
+    mov r8d, UI_BTN
+    cmp dword [rbp-48], 0
+    je .hb
+    mov r8d, UI_BTN_HI
+    lea rax, [s_hidetip]
+    mov [tooltip], rax
+.hb:
+    call draw_box
+    lea edi, [r13+89]
+    mov esi, 41
+    lea rdx, [s_hide]
+    mov ecx, UI_DIM
+    call draw_text
+    cmp dword [rbp-48], 0
+    je .hint
+    cmp dword [click_pending], 0
+    je .hint
+    mov dword [click_pending], 0
+    call toggle_auto_view
+.hint:
     test r14, r14
     jz .grad
     mov edi, r13d
@@ -3876,6 +4502,91 @@ FUNC draw_overlay_legend
     jl .g
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  tool hint: what the selected tool does, in plain words
+; ---------------------------------------------------------------------
+FUNC draw_tool_hint, 16
+    cmp dword [welcome], 0
+    jne .out
+    mov eax, [tool]
+    cmp eax, T_INSPECT
+    je .out
+    xor r14, r14                    ; extra text
+    cmp eax, T_BUILD
+    je .bld
+    cmp eax, T_ZONETOOL
+    jne .t
+    lea r14, [hz_zone]
+.t:
+    mov r12, [hint_title+rax*8]
+    mov r13, [hint_text+rax*8]
+    test r13, r13
+    jz .out
+    jmp .draw
+.bld:
+    mov edi, [build_kind]
+    call bld_rec
+    mov r12, [rax+BI_NAME]
+    mov r13, [rax+BI_DESC]
+    mov ecx, [build_kind]
+    mov r14, [hint_bk+rcx*8]
+    test r14, r14
+    jnz .draw
+    lea r14, [hb_service]
+.draw:
+    ; count lines
+    mov rdi, r13
+    call count_lines
+    mov ebx, eax
+    test r14, r14
+    jz .h
+    mov rdi, r14
+    call count_lines
+    add ebx, eax
+.h:
+    imul ecx, ebx, 10
+    add ecx, 19
+    mov [rbp-48], ecx
+    mov edi, 4
+    mov esi, 42
+    mov edx, 196
+    call draw_panel
+    mov edi, 10
+    mov esi, 46
+    mov rdx, r12
+    mov ecx, UI_GOLD
+    call draw_text
+    mov edi, 10
+    mov esi, 58
+    mov rdx, r13
+    mov ecx, UI_TEXT
+    call draw_text
+    test r14, r14
+    jz .out
+    mov rdi, r13
+    call count_lines
+    imul esi, eax, 10
+    add esi, 58
+    mov edi, 10
+    mov rdx, r14
+    mov ecx, UI_DIM
+    call draw_text
+.out:
+    RETURN
+
+; count_lines(rdi str) -> eax
+count_lines:
+    mov eax, 1
+.l: mov cl, [rdi]
+    inc rdi
+    test cl, cl
+    jz .o
+    cmp cl, 10
+    jne .l
+    inc eax
+    jmp .l
+.o: ret
 
 ; ---------------------------------------------------------------------
 ;  problem icons above buildings (screen positions from the renderer)
@@ -3903,12 +4614,37 @@ FUNC draw_problem_icons, 16
     sub r13d, eax
     sub r13d, 10
     movzx r14d, byte [prob_t+rbx]
-    ; bubble
+    ; hover: name the problem, click (inspect tool) to open the building
+    mov dword [rbp-52], UI_BG2
     lea edi, [r12-5]
     mov esi, r13d
     mov edx, 11
     mov ecx, 11
-    mov r8d, UI_BG2
+    call ui_over
+    test eax, eax
+    jz .bub
+    mov dword [rbp-52], UI_BTN_HI
+    mov rax, [prob_titles+r14*8]
+    mov [tooltip], rax
+    cmp dword [click_pending], 0
+    je .bub
+    cmp dword [tool], T_INSPECT
+    jne .bub
+    mov dword [click_pending], 0
+    mov eax, [prob_tile+rbx*4]
+    mov ecx, eax
+    and ecx, MAP_W-1
+    shr eax, MAP_SHIFT
+    mov [sel_x], ecx
+    mov [sel_y], eax
+    mov edi, SFX_CLICK
+    call sfx_play
+.bub:
+    lea edi, [r12-5]
+    mov esi, r13d
+    mov edx, 11
+    mov ecx, 11
+    mov r8d, [rbp-52]
     call draw_box
     movzx edx, byte [prob_glyph+r14]
     movzx ecx, byte [prob_col+r14]
@@ -4032,7 +4768,11 @@ FUNC render_ui
     call draw_notifications
     call draw_submenu
     call draw_dock
+    cmp dword [tool], T_INSPECT
+    jne .noinsp
     call draw_inspect
+.noinsp:
+    call draw_tool_hint
     call draw_minimap
     call draw_overlay_legend
     mov rdx, [tooltip]
@@ -4204,6 +4944,11 @@ FUNC ui_key
     dec dword [sim_speed]
     jmp .out
 .k4:
+    cmp eax, SC_V
+    jne .kv
+    call toggle_auto_view
+    jmp .out
+.kv:
     cmp eax, SC_O
     jne .k5
     mov eax, [overlay_mode]

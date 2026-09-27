@@ -103,6 +103,7 @@ spr_zone2       resd ZONE_TYPES*3*2    ; 2x2 buildings, levels 3..5
 spr_spec        resd 4*3*2             ; industry specialisations
 spr_bld         resd BK_COUNT
 spr_power       resd 16
+spr_pylon       resd 1
 spr_car         resd VEH_TYPES*4   ; type*4 + dir
 spr_construct   resd 3
 spr_rotor       resd 4
@@ -542,44 +543,49 @@ cross_boxes:
     dd 0, 4, 1, 0
 section .text
 
-; power line pole, edi = mask
-FUNC gen_power
-    mov r12d, edi
-    lea eax, [r12+500]
-    BEGIN 16, 26, eax
-    MAT M_WOOD
-    BOX 7,7,0,9,9,22
-    BOX 4,7,19,12,8,20
+; steel lattice pylon (one model; wires are drawn live between pylons)
+FUNC gen_pylon
+    BEGIN 16, 30, 500
+    MAT M_METAL
+    ; four legs leaning in
+    BOX 4,4,0,6,6,8
+    BOX 10,4,0,12,6,8
+    BOX 4,10,0,6,12,8
+    BOX 10,10,0,12,12,8
+    BOX 5,5,8,7,7,16
+    BOX 9,5,8,11,7,16
+    BOX 5,9,8,7,11,16
+    BOX 9,9,8,11,11,16
+    BOX 6,6,16,10,10,27
     MAT M_DARK
-    BOX 4,7,20,5,8,21
-    BOX 11,7,20,12,8,21
+    ; cross bracing rings
+    BOX 4,4,7,12,5,8
+    BOX 4,11,7,12,12,8
+    BOX 4,4,7,5,12,8
+    BOX 11,4,7,12,12,8
+    BOX 5,5,15,11,6,16
+    BOX 5,10,15,11,11,16
+    BOX 7,7,27,9,9,29
+    ; cross arm, square to the view
     xor ebx, ebx
-.w:
-    bt r12d, ebx
-    jnc .wn
-    mov eax, ebx
-    shl eax, 2
-    lea r13, [wire_boxes+rax*4]
-    mov edi, [r13]
-    mov esi, [r13+4]
-    mov edx, 20
-    mov ecx, [r13+8]
-    mov r8d, [r13+12]
-    mov r9d, 21
+.arm:
+    lea edi, [rbx+3]
+    mov esi, 12
+    sub esi, ebx
+    lea ecx, [rdi+1]
+    lea r8d, [rsi+1]
+    mov edx, 24
+    mov r9d, 26
     call vbox
-.wn:
     inc ebx
-    cmp ebx, 4
-    jl .w
+    cmp ebx, 10
+    jl .arm
+    ; insulators
+    MAT M_WHITE
+    BOX 3,12,22,4,13,24
+    BOX 12,3,22,13,4,24
     call finish_model
     RETURN
-section .data
-wire_boxes:
-    dd 8,0,9,8
-    dd 8,8,16,9
-    dd 8,8,9,16
-    dd 0,8,8,9
-section .text
 
 ; =====================================================================
 ;  trees
@@ -1965,6 +1971,8 @@ FUNC sprites_init
     mov [spr_dirt], eax
     call gen_rubble
     mov [spr_rubble], eax
+    call gen_pylon
+    mov [spr_pylon], eax
     xor ebx, ebx
 .rd:
     mov edi, ebx
@@ -1976,9 +1984,6 @@ FUNC sprites_init
     mov edi, ebx
     call gen_highway
     mov [spr_road+rbx*4+128], eax
-    mov edi, ebx
-    call gen_power
-    mov [spr_power+rbx*4], eax
     inc ebx
     cmp ebx, 16
     jl .rd
