@@ -2309,6 +2309,7 @@ FUNC load_city_from, 16
     mov dword [welcome], 0
     call agents_init
     call scenic_init
+    call style_existing
     call networks_update
     call coverage_update
     call stats_update

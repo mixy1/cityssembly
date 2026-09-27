@@ -507,11 +507,7 @@ FUNC render_world, 32
     CLAMP esi, 1, 5
     movzx edx, byte [rbx+T_VARIANT]
     movzx ecx, byte [rbx+T_SIZE]
-    xor r8d, r8d
-    cmp edi, ZONE_I
-    jne .gz
-    movzx r8d, byte [rbx+T_SUB]
-.gz:
+    movzx r8d, byte [rbx+T_SUB]     ; industry kind / home style
     call zone_sprite
     mov edi, eax
     mov [rbp-48], eax
@@ -850,6 +846,13 @@ building_remap:
     lea rax, [remap_dark]
     ret
 .b:
+    ; buildings eight years and older are weathered
+    cmp byte [rsi+T_OBJ], OBJ_ZONEBLD
+    jne .ok
+    cmp byte [rsi+T_AGE], 96
+    jb .ok
+    lea rax, [remap_aged]
+    ret
 .ok:
     ret
 

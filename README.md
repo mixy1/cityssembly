@@ -234,6 +234,28 @@ recreation.
 **Hazards.** Fires spread and meteors strike big cities (disasters can be
 turned off).
 
+### Neighbourhoods
+
+Homes come in six architectural styles, each with its own low- and
+high-density form, built for every level with four variants (240 models):
+
+| Style | Houses | Apartments |
+|---|---|---|
+| Old Town | brownstone rows with stoops and cornices | brick tenements with fire escapes and rooftop water towers |
+| Garden | gabled houses, picket fences, garages, pools | terraces with balconies, planters and roof gardens |
+| Shore | pastel beach houses on stilts with decks | glass condos ringed with balconies |
+| Worker | rows of clapboard cottages | concrete and brick housing projects |
+| Uptown | painted-lady victorians with turrets and porches | art-deco towers with setbacks, gold crowns and spires |
+| Modern | white-and-timber boxes, solar roofs, pools | glass towers with fins and beacons |
+
+When a home is built it mostly takes after its street, so districts hold
+together, and some pick a related style for texture. Where there's no street
+character yet, the place decides: water → Shore, industry or pollution →
+Worker, high land value → Uptown, parks and trees → Garden. Otherwise the
+city's age decides: the first streets become the Old Town and later growth
+is Modern. Buildings also age month by month, and after eight years they look
+weathered, so the old town looks its age.
+
 ### Music: "Five Boroughs"
 
 The soundtrack is composed live, one bar at a time, on real recorded
@@ -286,6 +308,7 @@ replace the built-in instruments:
 | `src/traffic.asm` | pathfinding, vehicles, trips, buses, service dispatch |
 | `src/agents.asm` | cars, pedestrians, particles, floating text |
 | `src/audio.asm` | instrument synthesis, recorded zones, sampler, reverb, sound effects |
+| `src/sprites3.asm` | neighbourhood architecture: six styles of home, low and high density |
 | `src/music.asm` | the generative "Five Boroughs" score |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
 | `src/buildings.asm` | service building stats |

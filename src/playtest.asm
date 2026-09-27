@@ -1327,3 +1327,69 @@ FUNC pt_minimap_loop_report
     xor eax, eax
     CALLC printf
     RETURN
+
+section .data
+gal_cx dd 33
+gal_cy dd 28
+section .text
+; --demo 2 out.bmp A|H : every home style x level x variant in a grid
+; (A = low density, H = high density)
+FUNC pt_gallery, 16
+    mov [rbp-48], edi               ; zone (ZONE_R or ZONE_RH)
+    ; clear a patch of land
+    mov r13d, 20
+.cy:
+    mov r12d, 20
+.cx:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    mov byte [rax+T_TERRAIN], TER_GRASS
+    mov byte [rax+T_OBJ], OBJ_NONE
+    mov byte [rax+T_ZONE], 0
+    and byte [rax+T_FLAGS2], 0
+    inc r12d
+    cmp r12d, 56
+    jl .cx
+    inc r13d
+    cmp r13d, 52
+    jl .cy
+    ; rows: style 1..6, columns: level 1..5 x variant
+    mov r14d, 1
+.st:
+    mov r15d, 0                     ; column 0..9
+.co:
+    mov eax, r15d
+    shr eax, 1
+    lea ebx, [rax+1]                ; level
+    lea edi, [r15*2+24]             ; x
+    lea esi, [r14*2+r14+20]         ; y
+    call tile_at
+    mov byte [rax+T_OBJ], OBJ_ZONEBLD
+    mov ecx, [rbp-48]
+    mov [rax+T_ZONE], cl
+    mov [rax+T_LEVEL], bl
+    mov [rax+T_SUB], r14b
+    mov ecx, r15d
+    and ecx, 1
+    mov [rax+T_VARIANT], cl
+    mov byte [rax+T_SIZE], 1
+    mov byte [rax+T_ANCHOR], 0
+    mov byte [rax+T_FLAGS], F_ANCHOR | F_POWER | F_WATER | F_ROADOK
+    mov byte [rax+T_AGE], 0
+    mov word [rax+T_POP], 0
+    inc r15d
+    cmp r15d, 10
+    jl .co
+    inc r14d
+    cmp r14d, 7
+    jl .st
+    mov dword [welcome], 0
+    mov dword [sim_speed], 0
+    mov edi, 2
+    call video_set_zoom
+    mov edi, [gal_cx]
+    mov esi, [gal_cy]
+    call camera_center_tile
+    mov dword [mouse_x], 5000
+    RETURN

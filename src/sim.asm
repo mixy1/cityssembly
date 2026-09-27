@@ -1147,6 +1147,16 @@ FUNC zone_update, 48
     call rand
     mov [rbx+T_VARIANT], al
     mov byte [rbx+T_SUB], 0
+    mov byte [rbx+T_AGE], 0
+    ; homes take on the character of their neighbourhood
+    movzx eax, byte [rbx+T_ZONE]
+    cmp byte [zone_class+rax], ZC_RES
+    jne .nsty
+    mov edi, r12d
+    mov esi, r13d
+    call choose_style
+    mov [rbx+T_SUB], al
+.nsty:
     cmp byte [rbx+T_ZONE], ZONE_I
     jne .up
     mov al, [rbx+T_RES]
@@ -1243,6 +1253,179 @@ pick_problem:
 .s:
     mov [rbx+T_PROBLEM], al
     ret
+
+; ---------------------------------------------------------------------
+;  neighbourhood character
+;  choose_style(edi x, esi y) -> eax style 1..6 for a new home:
+;  mostly what the neighbours are (districts hold together), otherwise
+;  what the place suggests: the water, industry, money, parks, and the
+;  city's age (the first streets become the old town)
+; ---------------------------------------------------------------------
+STY_OLDTOWN equ 1
+STY_GARDEN  equ 2
+STY_SHORE   equ 3
+STY_WORKER  equ 4
+STY_UPTOWN  equ 5
+STY_MODERN  equ 6
+section .data
+style_sibling db 0, STY_UPTOWN, STY_MODERN, STY_GARDEN, STY_OLDTOWN, STY_OLDTOWN, STY_GARDEN
+section .text
+
+FUNC choose_style, 64
+    mov r12d, edi
+    mov r13d, esi
+    ; tally the styles of nearby homes, and look around
+    xor eax, eax
+    lea rdi, [rbp-80]
+    mov ecx, 8
+    rep stosd                       ; counts [rbp-80 .. -49]
+    mov dword [rbp-84], 0           ; water seen
+    mov dword [rbp-88], 0           ; industry seen
+    mov dword [rbp-92], 0           ; trees seen
+    mov r14d, -4
+.dy:
+    mov r15d, -4
+.dx:
+    lea edi, [r12+r15]
+    lea esi, [r13+r14]
+    call tile_at
+    test rax, rax
+    jz .n
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    jne .w
+    inc dword [rbp-84]
+.w: cmp byte [rax+T_OBJ], OBJ_TREE
+    jne .t
+    inc dword [rbp-92]
+.t: cmp byte [rax+T_ZONE], ZONE_I
+    jne .i
+    inc dword [rbp-88]
+.i: cmp byte [rax+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    movzx ecx, byte [rax+T_ZONE]
+    cmp byte [zone_class+rcx], ZC_RES
+    jne .n
+    movzx ecx, byte [rax+T_SUB]
+    cmp ecx, 6
+    ja .n
+    test ecx, ecx
+    jz .n
+    ; closer neighbours count double
+    mov edx, r15d
+    imul edx, edx
+    mov r8d, r14d
+    imul r8d, r8d
+    add edx, r8d
+    mov r8d, 1
+    cmp edx, 5
+    jg .c1
+    mov r8d, 2
+.c1:
+    add [rbp-80+rcx*4], r8d
+.n:
+    inc r15d
+    cmp r15d, 4
+    jle .dx
+    inc r14d
+    cmp r14d, 4
+    jle .dy
+    ; the district wins most of the time
+    xor ebx, ebx                    ; best style
+    xor ecx, ecx                    ; best count
+    mov edx, 1
+.b:
+    cmp [rbp-80+rdx*4], ecx
+    jle .bn
+    mov ecx, [rbp-80+rdx*4]
+    mov ebx, edx
+.bn:
+    inc edx
+    cmp edx, 6
+    jle .b
+    cmp ecx, 3
+    jl .ctx
+    call rand
+    and eax, 3
+    jnz .out                        ; 3 in 4 follow the street
+    ; the rest mostly pick a related look (texture, not chaos)
+    call rand
+    and eax, 1
+    jz .ctx
+    movzx ebx, byte [style_sibling+rbx]
+    jmp .out
+.ctx:
+    ; what the place itself suggests
+    mov eax, r13d
+    shl eax, MAP_SHIFT
+    add eax, r12d
+    mov r14d, eax                   ; map index
+    mov ebx, STY_SHORE
+    cmp dword [rbp-84], 3
+    jge .out
+    mov ebx, STY_WORKER
+    cmp dword [rbp-88], 2
+    jge .out
+    cmp byte [map_pol+r14], 90
+    jae .out
+    mov ebx, STY_UPTOWN
+    cmp byte [map_lv+r14], 175
+    jae .out
+    mov ebx, STY_GARDEN
+    cmp dword [rbp-92], 5
+    jge .out
+    cmp byte [map_park+r14], 40
+    jae .out
+    ; the city's age: the first streets are the old town
+    mov eax, [year]
+    sub eax, 2026
+    mov ebx, STY_OLDTOWN
+    cmp eax, 5
+    jl .era
+    mov ebx, STY_MODERN
+.era:
+    ; a little mixing keeps the edges of districts interesting
+    call rand
+    and eax, 7
+    jnz .out
+    call rand
+    and eax, 1
+    mov ebx, STY_GARDEN
+    jz .out
+    mov ebx, STY_OLDTOWN
+.out:
+    mov eax, ebx
+    RETURN
+
+; homes built before styles existed (older saves) pick one now, in scan
+; order so that neighbourhoods still come out coherent
+FUNC style_existing
+    xor r12d, r12d
+.l:
+    mov eax, r12d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .n
+    cmp byte [rbx+T_SIZE], 1
+    jne .n
+    movzx eax, byte [rbx+T_ZONE]
+    cmp byte [zone_class+rax], ZC_RES
+    jne .n
+    cmp byte [rbx+T_SUB], 0
+    jne .n
+    mov edi, r12d
+    and edi, MAP_W-1
+    mov esi, r12d
+    shr esi, MAP_SHIFT
+    call choose_style
+    mov [rbx+T_SUB], al
+.n:
+    inc r12d
+    cmp r12d, MAP_TILES
+    jl .l
+    RETURN
 
 ; try_merge(edi x, esi y): turn a 2x2 block of the same dense zone into
 ; one big building site -> eax 1 on success
@@ -3423,6 +3606,7 @@ FUNC month_end, 32
     jge .ed
     inc dword [ext_demand]
 .ed:
+    call age_buildings
     call check_milestone
     call random_event
     call autosave_tick
@@ -3444,6 +3628,23 @@ FUNC month_end, 32
     mov edi, SFX_CHIME
     call sfx_play
 .out:
+    RETURN
+
+; every building gets a month older (up to ~21 years)
+FUNC age_buildings
+    xor ecx, ecx
+.l:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    cmp byte [tiles+rax+T_AGE], 255
+    je .n
+    inc byte [tiles+rax+T_AGE]
+.n:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .l
     RETURN
 
 FUNC check_milestone

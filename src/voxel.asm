@@ -178,7 +178,38 @@ M_SMOKE equ 58
     MATDEF R_GREY,      6,5,4, P_NOISE,0,0
 M_FIRE equ 59
     MATDEF R_ORANGE,    7,6,5, P_LEAF,0,0
-M_COUNT equ 60
+; neighbourhood styles
+M_BROWNST_WIN equ 60
+    MATDEF R_WOOD,      5,4,3, P_WIN,3,5
+M_YELLOW_WIN equ 61
+    MATDEF R_YELLOW,    6,5,3, P_WIN,4,6
+M_PINK_WIN equ 62
+    MATDEF R_SKIN,      6,5,3, P_WIN,4,6
+M_GREEN_WIN equ 63
+    MATDEF R_ZONER,     6,5,3, P_WIN,4,6
+M_LILAC_WIN equ 64
+    MATDEF R_PURPLE,    6,5,3, P_WIN,4,6
+M_TEALP_WIN equ 65
+    MATDEF R_TEAL,      6,5,3, P_WIN,4,6
+M_CONC_WIN equ 66
+    MATDEF R_GREY,      6,5,3, P_WIN,3,5
+M_SAND_WIN equ 67
+    MATDEF R_SAND,      7,6,4, P_WIN,4,6
+M_DECO equ 68
+    MATDEF R_CREAM,     6,5,3, P_STRIPE,0,0
+M_GLASS_TEAL equ 69
+    MATDEF R_TEAL,      5,4,2, P_GLASS,3,4
+M_CLADDING equ 70
+    MATDEF R_SAND,      5,4,3, P_STRIPE,0,0
+M_ROOF_SLATE equ 71
+    MATDEF R_ASPHALT,   4,3,2, P_ROOF,0,0
+M_DECK equ 72
+    MATDEF R_WOOD,      6,5,3, P_STRIPE,0,0
+M_CORAL_WIN equ 73
+    MATDEF R_ORANGE,    6,5,4, P_WIN,4,6
+M_DECO_WIN equ 74
+    MATDEF R_CREAM,     6,5,4, P_OFFICE,3,5
+M_COUNT equ 75
     times (256-M_COUNT)*8 db 0
 
 section .text
@@ -1359,6 +1390,7 @@ remap_dark      resb 256
 remap_fire      resb 256
 remap_bright    resb 256
 remap_dim       resb 256
+remap_aged      resb 256
 remap_cars      resb 256*8
 remap_heat      resb 256*16
 
@@ -1376,6 +1408,7 @@ FUNC remaps_init
     mov [remap_fire+rcx], cl
     mov [remap_bright+rcx], cl
     mov [remap_dim+rcx], cl
+    mov [remap_aged+rcx], cl
     inc ecx
     cmp ecx, 256
     jl .id
@@ -1425,6 +1458,16 @@ FUNC remaps_init
     and r9d, ~7
     lea r9d, [r9+r8+RAMP_BASE]
     mov [remap_dim+rcx], r9b
+    ; aged (weathered buildings): a shade down, same colour
+    mov r8d, edx
+    dec r8d
+    jns .ag
+    xor r8d, r8d
+.ag:
+    mov r9d, eax
+    and r9d, ~7
+    lea r9d, [r9+r8+RAMP_BASE]
+    mov [remap_aged+rcx], r9b
     inc ecx
     cmp ecx, PAL_WATER
     jl .r

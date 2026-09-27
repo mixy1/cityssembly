@@ -1938,7 +1938,7 @@ FUNC gen_flame
 ;  sprites_init - build everything
 ; =====================================================================
 FUNC sprites_init
-    mov dword [loading_total], 340
+    mov dword [loading_total], 580
     call remaps_init
     ; ground
     xor ebx, ebx
@@ -2062,6 +2062,8 @@ FUNC sprites_init
     inc r12d
     cmp r12d, 9
     jl .sp
+    ; neighbourhood architecture
+    call gen_styles
     ; construction
     xor ebx, ebx
 .co:
@@ -2174,6 +2176,26 @@ zone_sprite:
     mov eax, [spr_zone2+rax*4]
     ret
 .std:
+    ; homes with a neighbourhood style (T_SUB 1..6)
+    cmp r8d, 1
+    jl .std2
+    cmp r8d, 6
+    jg .std2
+    xor eax, eax
+    cmp edi, ZONE_R
+    je .sty
+    mov eax, 6
+    cmp edi, ZONE_RH
+    jne .std2
+.sty:
+    lea eax, [rax+r8-1]             ; generator
+    imul eax, eax, 5
+    lea eax, [rax+rsi-1]
+    and edx, 3
+    lea eax, [rax*4+rdx]
+    mov eax, [spr_style+rax*4]
+    ret
+.std2:
     imul edi, edi, ZONE_LEVELS
     add edi, esi
     dec edi

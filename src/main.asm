@@ -242,6 +242,18 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    cmp dword [demo_view], 'A'
+    jne .lda
+    mov edi, ZONE_R
+    call pt_gallery
+    jmp .nodemo
+.lda:
+    cmp dword [demo_view], 'H'
+    jne .ldh
+    mov edi, ZONE_RH
+    call pt_gallery
+    jmp .nodemo
+.ldh:
     cmp dword [demo_view], 'l'
     je .ldl
     cmp dword [demo_view], 'r'
@@ -1106,6 +1118,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "buildings.asm"
 %include "sprites.asm"
 %include "sprites2.asm"
+%include "sprites3.asm"
 %include "render.asm"
 %include "sim.asm"
 %include "traffic.asm"
