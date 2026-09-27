@@ -1217,7 +1217,13 @@ FUNC blit_sprite, 32
     ; dst index
     mov eax, [rbp-60]
     add eax, ecx
+    mov edx, eax
     imul eax, [fb_w]
+    ; checkerboard phase of this row for see-through drawing:
+    ; (row + col) & 1 == (address ^ row*fb_w ^ row) & 1
+    xor edx, eax
+    and edx, 1
+    mov [rbp-72], edx
     add eax, [rbp-56]
     add eax, r9d
     lea rbx, [fb+rax]
@@ -1225,6 +1231,8 @@ FUNC blit_sprite, 32
     mov r8d, r10d
     sub r8d, r9d
     mov r10d, [rbp-52]
+    cmp dword [blit_dither], 0
+    jne .colD
 .col:
     movzx eax, byte [rsi]
     test eax, eax
@@ -1245,12 +1253,42 @@ FUNC blit_sprite, 32
     add rdx, 2
     dec r8d
     jnz .col
+.rowend:
     ; restore last-col
     mov r10d, [rbp-68]
     inc dword [rbp-64]
     jmp .row
+.colD:                              ; see-through: checkerboard of pixels
+    mov eax, ebx
+    xor eax, [rbp-72]
+    test eax, 1
+    jnz .cnD
+    movzx eax, byte [rsi]
+    test eax, eax
+    jz .cnD
+    movzx ecx, byte [rdi]
+    add ecx, r10d
+    cmp cx, [rdx]
+    jb .cnD
+    mov [rdx], cx
+    mov al, [r11+rax]
+    mov [rbx], al
+    mov cl, [blit_tint]
+    mov [rbx+(tintbuf-fb)], cl
+.cnD:
+    inc rsi
+    inc rdi
+    inc rbx
+    add rdx, 2
+    dec r8d
+    jnz .colD
+    jmp .rowend
 .out:
     RETURN
+
+section .bss
+blit_dither resd 1                  ; 1: draw every other pixel (see-through)
+section .text
 
 ; blit_flat(edi id, esi x, edx y, r8 remap|0) - no depth, onto current target
 ; (used for icons in the ui); x,y = top-left

@@ -130,6 +130,32 @@ FUNC camera_update
     jz .nd
     add r14d, r12d
 .nd:
+    ; edge scrolling (optional)
+    cmp dword [set_edge], 0
+    je .keysdone
+    cmp dword [mouse_inside], 0
+    je .keysdone
+    cmp dword [rmb_down], 0
+    jne .keysdone
+    cmp dword [mouse_x], 6
+    jge .e1
+    sub r13d, r12d
+.e1:
+    mov eax, [win_w]
+    sub eax, 7
+    cmp [mouse_x], eax
+    jle .e2
+    add r13d, r12d
+.e2:
+    cmp dword [mouse_y], 6
+    jge .e3
+    sub r14d, r12d
+.e3:
+    mov eax, [win_h]
+    sub eax, 7
+    cmp [mouse_y], eax
+    jle .keysdone
+    add r14d, r12d
 .keysdone:
     ; ease velocity toward target (1/4 per tick), in 1/16 px
     shl r13d, 4
@@ -142,6 +168,25 @@ FUNC camera_update
     sub eax, [cam_vy]
     sar eax, 2
     add [cam_vy], eax
+    ; sar rounds toward -infinity, so a small leftover velocity never
+    ; decays to zero (the camera crept left / up after letting go):
+    ; snap it to rest once the keys are up and it's nearly stopped
+    test r13d, r13d
+    jnz .vx
+    mov eax, [cam_vx]
+    add eax, 15
+    cmp eax, 30
+    ja .vx
+    mov dword [cam_vx], 0
+.vx:
+    test r14d, r14d
+    jnz .vy
+    mov eax, [cam_vy]
+    add eax, 15
+    cmp eax, 30
+    ja .vy
+    mov dword [cam_vy], 0
+.vy:
     mov eax, [cam_vx]
     sar eax, 4
     add [cam_x], eax
@@ -426,7 +471,20 @@ FUNC render_world, 32
     lea eax, [rax*2+rcx]
     and eax, 7
     mov edi, [spr_tree+rax*4]
-    jmp .blitobj
+    push rdi
+    push rdi
+    mov esi, r12d
+    mov edx, r13d
+    call xray_set
+    pop rdi
+    pop rdi
+    mov r8, [rbp-56]
+    mov esi, [draw_sx]
+    mov edx, [draw_sy]
+    mov ecx, r14d
+    call blit_sprite
+    mov dword [blit_dither], 0
+    jmp .fires
 .power:
     mov edi, [spr_pylon]
     jmp .blitobj
@@ -457,6 +515,9 @@ FUNC render_world, 32
     call zone_sprite
     mov edi, eax
     mov [rbp-48], eax
+    mov esi, r12d
+    mov edx, r13d
+    call xray_set
     mov rsi, rbx
     call building_remap
     mov r8, rax
@@ -465,6 +526,7 @@ FUNC render_world, 32
     mov ecx, r14d
     mov edi, [rbp-48]
     call blit_sprite
+    mov dword [blit_dither], 0
     mov edi, [rbp-48]
     call note_problem
     jmp .fires
@@ -484,10 +546,18 @@ FUNC render_world, 32
     mov edi, [rbp-48]
 .svc2:
     mov r15d, eax
+    push rdi
+    push rdi
+    mov esi, r12d
+    mov edx, r13d
+    call xray_set
+    pop rdi
+    pop rdi
     mov esi, [draw_sx]
     mov edx, [draw_sy]
     mov ecx, r14d
     call blit_sprite
+    mov dword [blit_dither], 0
     cmp r15d, BK_WIND
     jne .fires
     ; spinning rotor (unpowered world still spins: wind!)
@@ -705,6 +775,66 @@ FUNC draw_wire, 64
     jmp .side
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  see-through: should this sprite (edi) at tile (esi, edx) be dithered?
+;  near-cursor mode: only things in front of the pointed-at tile that
+;  cover the cursor.  "all" mode: every building.
+; ---------------------------------------------------------------------
+xray_set:
+    mov dword [blit_dither], 0
+    mov eax, [set_xray]
+    test eax, eax
+    jz .o
+    cmp eax, 2
+    je .y
+    cmp dword [hover_valid], 0
+    je .o
+    cmp dword [ui_captured], 0
+    jne .o
+    cmp dword [welcome], 0
+    jne .o
+    ; in front of the hovered tile?
+    lea eax, [rsi+rdx]
+    mov ecx, [hover_tx]
+    add ecx, [hover_ty]
+    cmp eax, ecx
+    jle .o
+    ; does the sprite cover the cursor (with a small margin)?
+    shl edi, 4
+    movsx eax, word [spr_table+rdi+4]
+    mov ecx, [draw_sx]
+    sub ecx, eax                    ; left
+    movsx eax, word [spr_table+rdi+6]
+    mov edx, [draw_sy]
+    sub edx, eax                    ; top
+    mov eax, [mouse_x]
+    push rdx
+    xor edx, edx
+    div dword [zoom]
+    pop rdx
+    mov esi, eax                    ; cursor x in fb pixels
+    sub esi, ecx
+    add esi, 10
+    js .o
+    movzx eax, word [spr_table+rdi]
+    add eax, 20
+    cmp esi, eax
+    jge .o
+    mov eax, [mouse_y]
+    push rdx
+    xor edx, edx
+    div dword [zoom]
+    pop rdx
+    sub eax, edx
+    add eax, 10
+    js .o
+    movzx ecx, word [spr_table+rdi+2]
+    add ecx, 20
+    cmp eax, ecx
+    jge .o
+.y: mov dword [blit_dither], 1
+.o: ret
 
 ; ---------------------------------------------------------------------
 ;  building_remap(rsi tile) -> rax colour table for info views

@@ -13,6 +13,7 @@ T_DEZONE    equ 7
 T_BUILD     equ 8
 T_TREE      equ 9
 T_LAND      equ 10
+T_UPGRADE   equ 11
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -20,6 +21,7 @@ PANEL_MENU     equ 2
 PANEL_HELP     equ 3
 PANEL_POLICIES equ 4
 PANEL_STATS    equ 5
+PANEL_SETTINGS equ 6
 
 MAX_TL      equ 1100
 NOTIFS      equ 5
@@ -30,6 +32,7 @@ SI_STREET   equ 100
 SI_AVENUE   equ 101
 SI_HIGHWAY  equ 102
 SI_BUSSTOP  equ 103
+SI_UPGRADE  equ 104
 SI_ZONE     equ 110        ; + zone type
 SI_DEZONE   equ 117
 SI_POWERLN  equ 120
@@ -79,7 +82,7 @@ notif_ty        resd NOTIFS
 notif_time      resd NOTIFS
 money_shown     resq 1
 last_tool_err   resd 1
-minimap_buf     resb 128*64
+minimap_buf     resb 160*80
 minimap_age     resd 1
 saved_speed     resd 1
 budget_net      resd 1
@@ -120,7 +123,7 @@ tip17 db "Menu (Esc)", 0
 submenu_lists:
     dq sm_roads, sm_zones, sm_power, sm_water, sm_garbage, sm_safety
     dq sm_health, sm_edu, sm_transit, sm_leisure, sm_overlay
-sm_roads    dd SI_STREET, SI_AVENUE, SI_HIGHWAY, SI_BUSSTOP, -1
+sm_roads    dd SI_STREET, SI_AVENUE, SI_HIGHWAY, SI_UPGRADE, SI_BUSSTOP, -1
 sm_zones    dd SI_ZONE+ZONE_R, SI_ZONE+ZONE_RH, SI_ZONE+ZONE_C, SI_ZONE+ZONE_CH
             dd SI_ZONE+ZONE_I, SI_ZONE+ZONE_O, SI_DEZONE, -1
 sm_power    dd SI_POWERLN, BK_WIND, BK_COAL, BK_SOLAR, BK_NUCLEAR, SI_UNPOWER, -1
@@ -198,6 +201,15 @@ road_costs  dd 10, 25, 40
 tool_item_names:
     dq rn0, rn1, rn2, ti_stop
 ti_stop    db "Bus stop", 0
+ti_upgrade db "Upgrade roads (U)", 0
+ht_upgrade db "Upgrade roads", 0
+hx_upgrade db "Click a road: upgrades its whole", 10
+           db "stretch, junctions too. Or drag", 10
+           db "along roads. Only existing roads", 10
+           db "change; you pay the difference.", 10
+           db 6, "Cars per lane: street 3,", 10
+           db 6, "avenue 6, highway 8.", 0
+up_names   dq rn0, rn1, rn2
 ti_dezone  db "De-zone", 0
 ti_line    db "Power line", 0
 ti_pipe    db "Water pipe", 0
@@ -220,12 +232,14 @@ s_welcome2  db "This valley needs a city. You own one plot of land by the", 10
             db "and lets you buy more land (", 7, "K", 1, "). Watch your budget!", 10, 10
             db 7, "Drag", 1, " to build.  ", 7, "Right-drag", 1, " / WASD to pan.  ", 7, "Wheel", 1, " to zoom.", 10
             db 7, "Space", 1, " pause   ", 7, "O", 1, " info views   ", 7, "F1", 1, " help", 10, 10
-            db 5, "Click anywhere to begin.", 0
+            db 5, "Click anywhere for a new city.", 0
 s_help      db "CONTROLS", 10, 10
             db 7, "Left drag", 1, "    build with the current tool", 10
             db 7, "Right drag", 1, "   pan (also WASD / arrows)", 10
             db 7, "Right click", 1, "  close / cancel, one step at a time", 10
-            db 7, "V", 1, "            show or hide the tool's info view", 10
+            db 7, "V H", 1, "          tool's info view on/off, see-through buildings", 10
+            db 7, "Ctrl+Z", 1, "       undo (up to 24 actions)", 10
+            db 7, "U K", 1, "          upgrade roads, buy land", 10
             db 7, "Wheel", 1, "        zoom (also - and =)", 10
             db 7, "Q B R T P L", 1, "  inspect, bulldoze, road, trees, pipes, power line", 10
             db 7, "1 2 3 4 5 6", 1, "  zones: res, shop, industry, office, dense res/shop", 10
@@ -242,6 +256,8 @@ s_nomoney   db "Not enough money!", 0
 s_locked    db "Unlocks at ", 0
 s_lockpeop  db " people)", 0
 s_people    db " people", 0
+s_tiles     db " tiles", 0
+s_mmtip     db "Click or drag to move the view  (Tab hides)", 0
 s_notowned  db "You don't own this land yet - buy it with the Land tool (K).", 0
 ht_land     db "Buy land", 0
 s_lh1       db "Your city can only grow on land", 10
@@ -300,6 +316,23 @@ s_m_day     db "Day/night: ", 0
 s_m_full    db "Fullscreen (F11)", 0
 s_m_help    db "Help (F1)", 0
 s_m_quit    db "Quit", 0
+s_m_settings db "Settings", 0
+s_m_autold  db "Load autosave", 0
+s_continue  db "Continue my city", 0
+s_autofile  db "autosave.sav", 0
+s_settings  db "SETTINGS", 0
+s_st_music  db "Music", 0
+s_st_sfx    db "Sound effects", 0
+s_st_xray   db "See-through buildings: ", 0
+s_xr_names  dq s_xr0, s_xr1, s_xr2
+s_xr0       db "off", 0
+s_xr1       db "near cursor", 0
+s_xr2       db "all", 0
+s_st_edge   db "Edge scrolling: ", 0
+s_st_auto   db "Autosave: ", 0
+s_st_auto1  db "every 3 months", 0
+s_st_back   db "Back", 0
+s_autosaved db "Autosaved.", 0
 s_on        db "on", 0
 s_off       db "off", 0
 s_cycle     db "cycle", 0
@@ -725,6 +758,7 @@ FUNC draw_notifications
     call ui_hit
     test eax, eax
     jz .t
+    mov dword [notif_time+rbx*4], 1     ; dismiss
     cmp dword [notif_tx+rbx*4], 0
     jl .t
     mov edi, [notif_tx+rbx*4]
@@ -923,6 +957,15 @@ FUNC tool_collect, 16
     mov eax, [tool]
     cmp eax, T_ROAD
     je .line
+    cmp eax, T_UPGRADE
+    jne .nup
+    ; a click (no movement) takes the whole stretch
+    cmp r14d, r12d
+    jne .line
+    cmp r15d, r13d
+    jne .line
+    jmp .seg
+.nup:
     cmp eax, T_POWERLN
     je .pline
     cmp eax, T_PIPE
@@ -1047,9 +1090,18 @@ FUNC tool_collect, 16
     mov ecx, r13d
     call pline_collect
     jmp .out
+.seg:
+    cmp dword [hover_valid], 0
+    je .out
+    mov edi, r12d
+    mov esi, r13d
+    call road_stretch
+    jmp .out
 .single:
     cmp dword [hover_valid], 0
     je .out
+    cmp dword [tool], T_UPGRADE
+    je .seg
     mov edi, r12d
     mov esi, r13d
     cmp dword [tool], T_BUILD
@@ -1377,12 +1429,12 @@ FUNC draw_menu, 16
     mov edi, r12d
     mov esi, r13d
     mov edx, 170
-    mov ecx, 216
+    mov ecx, 180
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 170
-    mov ecx, 216
+    mov ecx, 180
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+85]
@@ -1422,70 +1474,17 @@ FUNC draw_menu, 16
     call new_city
     mov dword [panel], PANEL_NONE
 .m4:
-    call tb_reset
-    lea rdi, [s_m_music]
-    call tb_str
-    lea rdi, [s_on]
-    cmp dword [music_on], 0
-    jne .mu
-    lea rdi, [s_off]
-.mu:
-    call tb_str
-    lea edi, [r12+10]
-    mov esi, r13d
-    mov edx, 150
-    lea rcx, [textbuf]
-    xor r8d, r8d
-    call text_button
-    add r13d, 18
+    MBTN s_m_autold
     test eax, eax
     jz .m5
-    call music_toggle
+    lea rdi, [s_autofile]
+    call load_city_from
+    mov dword [panel], PANEL_NONE
 .m5:
-    call tb_reset
-    lea rdi, [s_m_dis]
-    call tb_str
-    lea rdi, [s_on]
-    cmp dword [disasters_on], 0
-    jne .di
-    lea rdi, [s_off]
-.di:
-    call tb_str
-    lea edi, [r12+10]
-    mov esi, r13d
-    mov edx, 150
-    lea rcx, [textbuf]
-    xor r8d, r8d
-    call text_button
-    add r13d, 18
-    test eax, eax
-    jz .m6
-    xor dword [disasters_on], 1
-.m6:
-    call tb_reset
-    lea rdi, [s_m_day]
-    call tb_str
-    lea rdi, [s_cycle]
-    cmp dword [tod_lock], 0
-    je .dy
-    lea rdi, [s_locked_d]
-.dy:
-    call tb_str
-    lea edi, [r12+10]
-    mov esi, r13d
-    mov edx, 150
-    lea rcx, [textbuf]
-    xor r8d, r8d
-    call text_button
-    add r13d, 18
-    test eax, eax
-    jz .m7
-    xor dword [tod_lock], 1
-.m7:
-    MBTN s_m_full
+    MBTN s_m_settings
     test eax, eax
     jz .m8
-    call video_toggle_fullscreen
+    mov dword [panel], PANEL_SETTINGS
 .m8:
     MBTN s_m_help
     test eax, eax
@@ -1500,22 +1499,298 @@ FUNC draw_menu, 16
     RETURN
 
 
+; ---------------------------------------------------------------------
+;  settings
+; ---------------------------------------------------------------------
+; slider(edi x, esi y, edx w, rcx -> dword 0..100) -> eax 1 if changed
+FUNC ui_slider, 16
+    mov r12d, edi
+    mov r13d, esi
+    mov r14d, edx
+    mov r15, rcx
+    ; drag or click anywhere on the track
+    lea esi, [r13-3]
+    mov ecx, 12
+    call ui_over
+    xor ebx, ebx
+    test eax, eax
+    jz .d
+    mov eax, [lmb_down]
+    or eax, [click_pending]
+    jz .d
+    mov dword [click_pending], 0
+    mov eax, [umx]
+    sub eax, r12d
+    imul eax, 100
+    cdq
+    idiv r14d
+    CLAMP eax, 0, 100
+    cmp eax, [r15]
+    je .d
+    mov [r15], eax
+    mov ebx, 1
+.d:
+    ; track, fill, knob
+    mov edi, r12d
+    lea esi, [r13+2]
+    mov edx, r14d
+    mov ecx, 3
+    mov r8d, UI_BG2
+    call fill_rect
+    mov eax, [r15]
+    imul eax, r14d
+    xor edx, edx
+    mov ecx, 100
+    div ecx
+    mov [rbp-48], eax
+    mov edi, r12d
+    lea esi, [r13+2]
+    mov edx, eax
+    mov ecx, 3
+    mov r8d, UI_GOLD
+    call fill_rect
+    mov edi, [rbp-48]
+    lea edi, [r12+rdi-2]
+    lea esi, [r13-2]
+    mov edx, 5
+    mov ecx, 11
+    mov r8d, UI_TEXT
+    call fill_rect
+    mov eax, ebx
+    RETURN
+
+FUNC draw_settings, 16
+    mov r12d, [ui_w]
+    sub r12d, 260
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, 214
+    shr r13d, 1
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 260
+    mov ecx, 208
+    call draw_panel
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 260
+    mov ecx, 208
+    call ui_over
+    mov dword [font_scale], 2
+    lea edi, [r12+130]
+    lea esi, [r13+6]
+    lea rdx, [s_settings]
+    mov ecx, UI_GOLD
+    call draw_text_centered
+    mov dword [font_scale], 1
+    add r13d, 30
+%macro SLIDEROW 2       ; label, value
+    lea edi, [r12+10]
+    mov esi, r13d
+    lea rdx, [%1]
+    mov ecx, UI_TEXT
+    call draw_text
+    lea edi, [r12+96]
+    mov esi, r13d
+    mov edx, 120
+    lea rcx, [%2]
+    call ui_slider
+    or [settings_dirty], eax
+    call tb_reset
+    movsxd rdi, dword [%2]
+    call tb_pct
+    lea edi, [r12+250]
+    mov esi, r13d
+    lea rdx, [textbuf]
+    mov ecx, UI_GOLD
+    call draw_text_right
+    add r13d, 16
+%endmacro
+    SLIDEROW s_st_music, set_music
+    SLIDEROW s_st_sfx, set_sfx
+    call apply_volumes
+    add r13d, 4
+%macro SETBTN 0         ; textbuf -> button, eax clicked
+    lea edi, [r12+10]
+    mov esi, r13d
+    mov edx, 240
+    lea rcx, [textbuf]
+    xor r8d, r8d
+    call text_button
+    add r13d, 18
+%endmacro
+    ; see-through
+    call tb_reset
+    lea rdi, [s_st_xray]
+    call tb_str
+    mov eax, [set_xray]
+    mov rdi, [s_xr_names+rax*8]
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b1
+    mov eax, [set_xray]
+    inc eax
+    cmp eax, 3
+    jl .x1
+    xor eax, eax
+.x1:
+    mov [set_xray], eax
+    mov dword [settings_dirty], 1
+.b1:
+    call tb_reset
+    lea rdi, [s_st_edge]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_edge], 0
+    jne .e1
+    lea rdi, [s_off]
+.e1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b2
+    xor dword [set_edge], 1
+    mov dword [settings_dirty], 1
+.b2:
+    call tb_reset
+    lea rdi, [s_st_auto]
+    call tb_str
+    lea rdi, [s_st_auto1]
+    cmp dword [set_autosave], 0
+    jne .a1
+    lea rdi, [s_off]
+.a1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b3
+    xor dword [set_autosave], 1
+    mov dword [settings_dirty], 1
+.b3:
+    call tb_reset
+    lea rdi, [s_m_dis]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [disasters_on], 0
+    jne .d1
+    lea rdi, [s_off]
+.d1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b4
+    xor dword [disasters_on], 1
+.b4:
+    call tb_reset
+    lea rdi, [s_m_day]
+    call tb_str
+    lea rdi, [s_cycle]
+    cmp dword [tod_lock], 0
+    je .t1
+    lea rdi, [s_locked_d]
+.t1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b5
+    xor dword [tod_lock], 1
+.b5:
+    call tb_reset
+    lea rdi, [s_m_full]
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b6
+    call video_toggle_fullscreen
+.b6:
+    call tb_reset
+    lea rdi, [s_st_back]
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .out
+    mov dword [panel], PANEL_MENU
+.out:
+    ; write the file once the mouse lets go
+    cmp dword [settings_dirty], 0
+    je .o2
+    cmp dword [lmb_down], 0
+    jne .o2
+    mov dword [settings_dirty], 0
+    call settings_save
+.o2:
+    RETURN
+
+; month end: autosave every third month
+FUNC autosave_tick
+    cmp dword [set_autosave], 0
+    je .out
+    cmp dword [sandbox], 0
+    jne .out
+    cmp dword [welcome], 0
+    jne .out
+    mov eax, [month]
+    xor edx, edx
+    mov ecx, 3
+    div ecx
+    test edx, edx
+    jnz .out
+    mov dword [save_quiet], 1
+    lea rdi, [s_autofile]
+    call save_city_to
+    lea rdi, [s_autosaved]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.out:
+    RETURN
+
+; volume percentages -> the mixer's float gains
+FUNC apply_volumes
+    cvtsi2ss xmm0, dword [set_music]
+    mulss xmm0, [f_music_scale]
+    movss [music_vol], xmm0
+    cvtsi2ss xmm0, dword [set_sfx]
+    mulss xmm0, [f_sfx_scale]
+    movss [sfx_vol], xmm0
+    RETURN
+
+section .data
+align 4
+f_music_scale dd 0.008
+f_sfx_scale   dd 0.01
+set_music     dd 75
+set_sfx       dd 80
+set_xray      dd 1          ; 0 off, 1 near the cursor, 2 all
+set_edge      dd 0
+set_autosave  dd 1
+section .data
+up_type        dd 1                 ; the upgrade tool's target road type
+section .bss
+settings_dirty resd 1
+has_save       resd 1
+save_quiet     resd 1
+cam_save       resd 3
+section .text
+
 FUNC draw_help
     mov r12d, [ui_w]
     sub r12d, 330
     shr r12d, 1
     mov r13d, [ui_h]
-    sub r13d, 190
+    sub r13d, 210
     shr r13d, 1
     mov edi, r12d
     mov esi, r13d
     mov edx, 330
-    mov ecx, 170
+    mov ecx, 196
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 330
-    mov ecx, 170
+    mov ecx, 196
     call ui_hit
     test eax, eax
     jz .d
@@ -1553,128 +1828,257 @@ FUNC draw_welcome
     lea rdx, [s_welcome2]
     mov ecx, UI_TEXT
     call draw_text
+    ; pick up where you left off
+    cmp dword [has_save], 0
+    je .out
+    lea edi, [r12+180]
+    lea esi, [r13+128]
+    mov edx, 140
+    lea rcx, [s_continue]
+    mov r8d, 1
+    call text_button
+    test eax, eax
+    jz .out
+    lea rdi, [s_savefile]
+    cmp dword [has_save], 2
+    jne .ld
+    lea rdi, [s_autofile]
+.ld:
+    call load_city_from
+.out:
+    RETURN
+
+; does a save exist? has_save: 1 city.sav, 2 only autosave.sav
+FUNC check_saves
+    mov dword [has_save], 0
+    cmp dword [sandbox], 0
+    jne .out
+    lea rdi, [s_savefile]
+    lea rsi, [str_rb]
+    CALLC SDL_RWFromFile
+    test rax, rax
+    jz .a
+    mov rdi, rax
+    CALLC SDL_RWclose
+    mov dword [has_save], 1
+    jmp .out
+.a:
+    lea rdi, [s_autofile]
+    lea rsi, [str_rb]
+    CALLC SDL_RWFromFile
+    test rax, rax
+    jz .out
+    mov rdi, rax
+    CALLC SDL_RWclose
+    mov dword [has_save], 2
+.out:
     RETURN
 
 ; ---------------------------------------------------------------------
 ;  overlay legend + minimap
 ; ---------------------------------------------------------------------
 
-FUNC draw_minimap
+MM_W equ 160
+MM_H equ 80
+
+; minimap position -> r12d x, r13d y (panel top-left)
+minimap_pos:
+    mov r12d, [ui_w]
+    sub r12d, MM_W+10
+    mov r13d, [ui_h]
+    sub r13d, DOCK_BTN+18+MM_H
+    ret
+
+; minimap pixel (edi px, esi py) -> eax x, edx y (tile, may be off-map)
+;   x - y = (px - W/2) * 8/5      x + y = py * 16/5
+minimap_to_tile:
+    lea eax, [rdi-MM_W/2]
+    shl eax, 3
+    cdq
+    mov ecx, 5
+    idiv ecx
+    mov r8d, eax                    ; x - y
+    mov eax, esi
+    shl eax, 4
+    cdq
+    idiv ecx                        ; x + y
+    lea ecx, [rax+r8]
+    sar ecx, 1
+    sub eax, r8d
+    sar eax, 1
+    mov edx, eax
+    mov eax, ecx
+    ret
+
+; tile (edi x, esi y) -> eax px, edx py on the minimap
+tile_to_minimap:
+    mov eax, edi
+    sub eax, esi
+    imul eax, 5
+    sar eax, 3
+    add eax, MM_W/2
+    lea edx, [rdi+rsi]
+    imul edx, 5
+    sar edx, 4
+    ret
+
+FUNC draw_minimap, 16
     cmp dword [minimap_on], 0
     je .out
     ; rebuild the cached image twice a second
     dec dword [minimap_age]
     jns .draw
     mov dword [minimap_age], 30
-    lea rdi, [minimap_buf]
-    xor eax, eax
-    mov ecx, 128*64
-    rep stosb
-    xor r13d, r13d
+    xor r13d, r13d                  ; py
 .y:
-    xor r12d, r12d
+    xor r12d, r12d                  ; px
 .x:
+    ; sample the 2x2 tiles under the pixel, keep the most important
     mov edi, r12d
     mov esi, r13d
+    call minimap_to_tile
+    mov r14d, eax
+    mov r15d, edx
+    xor ebx, ebx                    ; best colour
+    mov dword [rbp-48], -1          ; best priority
+    xor ecx, ecx
+.s:
+    mov [rbp-52], ecx
+    mov edi, ecx
+    and edi, 1
+    add edi, r14d
+    mov esi, ecx
+    shr esi, 1
+    add esi, r15d
+    cmp edi, MAP_W
+    jae .sn
+    cmp esi, MAP_W
+    jae .sn
+    push rdi
+    push rsi
     call tile_at
     mov rdi, rax
-    call minimap_colour
-    ; iso: px = (x - y)/2 + 64, py = (x + y)/4
-    mov ecx, r12d
-    sub ecx, r13d
-    sar ecx, 1
-    add ecx, 64
-    mov edx, r12d
-    add edx, r13d
-    shr edx, 2
-    cmp ecx, 128
-    jae .n
-    shl edx, 7
-    add edx, ecx
-    mov [minimap_buf+rdx], al
-.n:
+    call minimap_colour             ; eax colour, edx priority
+    pop rsi
+    pop rdi
+    cmp edx, [rbp-48]
+    jle .sn
+    mov [rbp-48], edx
+    mov ebx, eax
+    ; your land bright, the rest dimmer
+    cmp dword [sandbox], 0
+    jne .sn
+    push rbx
+    push rbx
+    call tile_owned
+    pop rbx
+    pop rbx
+    test eax, eax
+    jnz .sn
+    movzx ebx, byte [remap_dim+rbx]
+.sn:
+    mov ecx, [rbp-52]
+    inc ecx
+    cmp ecx, 4
+    jl .s
+    mov eax, r13d
+    imul eax, MM_W
+    add eax, r12d
+    mov [minimap_buf+rax], bl
     inc r12d
-    cmp r12d, MAP_W
+    cmp r12d, MM_W
     jl .x
     inc r13d
-    cmp r13d, MAP_W
+    cmp r13d, MM_H
     jl .y
 .draw:
-    mov r12d, [ui_w]
-    sub r12d, 136
-    mov r13d, [ui_h]
-    sub r13d, DOCK_BTN+86
+    call minimap_pos
     mov edi, r12d
     mov esi, r13d
-    mov edx, 134
-    mov ecx, 70
+    mov edx, MM_W+6
+    mov ecx, MM_H+6
     call draw_panel
-    ; click to move camera
+    ; click or drag to move the camera
     mov edi, r12d
     mov esi, r13d
-    mov edx, 134
-    mov ecx, 70
+    mov edx, MM_W+6
+    mov ecx, MM_H+6
     call ui_over
     test eax, eax
     jz .blit
-    ; a quick click (pressed and released within one frame) or a held drag
+    lea rax, [s_mmtip]
+    mov [tooltip], rax
     mov eax, [lmb_down]
     or eax, [click_pending]
     jz .blit
     mov dword [click_pending], 0
-    ; inverse iso
-    mov eax, [umx]
-    sub eax, r12d
-    sub eax, 3
-    sub eax, 64                     ; (x-y)/2
-    shl eax, 1
-    mov ecx, [umy]
-    sub ecx, r13d
-    sub ecx, 3
-    shl ecx, 2                      ; x+y
-    lea edi, [rcx+rax]
-    sar edi, 1
-    mov esi, ecx
-    sub esi, eax
-    sar esi, 1
+    mov edi, [umx]
+    sub edi, r12d
+    sub edi, 3
+    mov esi, [umy]
+    sub esi, r13d
+    sub esi, 3
+    call minimap_to_tile
+    mov edi, eax
+    mov esi, edx
+    CLAMP edi, 0, MAP_W-1
+    CLAMP esi, 0, MAP_W-1
     call camera_center_tile
+    call camera_clamp
 .blit:
     xor ebx, ebx
 .p:
     movzx edx, byte [minimap_buf+rbx]
     test edx, edx
     jz .pn
-    mov edi, ebx
-    and edi, 127
-    lea edi, [rdi+r12+3]
-    mov esi, ebx
-    shr esi, 7
-    lea esi, [rsi+r13+3]
+    mov eax, ebx
+    xor edx, edx
+    mov ecx, MM_W
+    div ecx
+    lea esi, [rax+r13+3]
+    lea edi, [rdx+r12+3]
+    movzx edx, byte [minimap_buf+rbx]
     call put_pixel
 .pn:
     inc ebx
-    cmp ebx, 128*64
+    cmp ebx, MM_W*MM_H
     jl .p
-    ; view marker (centre of the camera)
-    mov edi, [fb_w]
-    shr edi, 1
-    add edi, [cam_x]
-    mov esi, [fb_h]
-    shr esi, 1
-    add esi, [cam_y]
+    ; the part of the world on screen, as a rectangle
+    mov edi, [cam_x]
+    mov esi, [cam_y]
     call world_to_tile
-    mov ecx, eax
-    sub ecx, edx
-    sar ecx, 1
-    add ecx, 64
-    add eax, edx
-    shr eax, 2
-    lea edi, [r12+rcx+1]
-    lea esi, [r13+rax+1]
-    mov edx, 5
-    mov ecx, 5
+    mov edi, eax
+    mov esi, edx
+    call tile_to_minimap
+    mov r14d, eax
+    mov r15d, edx
+    mov edi, [cam_x]
+    add edi, [fb_w]
+    mov esi, [cam_y]
+    add esi, [fb_h]
+    call world_to_tile
+    mov edi, eax
+    mov esi, edx
+    call tile_to_minimap
+    sub eax, r14d
+    sub edx, r15d
+    CLAMP eax, 3, MM_W
+    CLAMP edx, 3, MM_H
+    mov [rbp-48], eax
+    mov [rbp-52], edx
+    ; clip to the minimap box
+    lea edi, [r12+3]
+    lea esi, [r13+3]
+    mov edx, MM_W
+    mov ecx, MM_H
+    call set_clip
+    lea edi, [r12+r14+3]
+    lea esi, [r13+r15+3]
+    mov edx, [rbp-48]
+    mov ecx, [rbp-52]
     mov r8d, UI_TEXT
     call rect_outline
+    call reset_clip
 .out:
     RETURN
 
@@ -1682,8 +2086,9 @@ FUNC draw_minimap
 ;  render_ui: everything on the ui layer, in order
 ; =====================================================================
 
-FUNC save_city, 16
+save_city:
     lea rdi, [s_savefile]
+FUNC save_city_to, 16
     lea rsi, [str_wb]
     CALLC SDL_RWFromFile
     test rax, rax
@@ -1709,8 +2114,22 @@ FUNC save_city, 16
     mov edx, 12
     mov ecx, 1
     CALLC SDL_RWwrite
+    ; where you were looking (optional trailer, older saves lack it)
+    mov eax, [cam_x]
+    mov [cam_save], eax
+    mov eax, [cam_y]
+    mov [cam_save+4], eax
+    mov eax, [zoom]
+    mov [cam_save+8], eax
+    mov rdi, r12
+    lea rsi, [cam_save]
+    mov edx, 12
+    mov ecx, 1
+    CALLC SDL_RWwrite
     mov rdi, r12
     CALLC SDL_RWclose
+    cmp dword [save_quiet], 0
+    jne .out
     lea rdi, [s_saved]
     mov esi, UI_GOOD
     mov edx, -1
@@ -1719,11 +2138,13 @@ FUNC save_city, 16
     mov edi, SFX_CHIME
     call sfx_play
 .out:
+    mov dword [save_quiet], 0
     RETURN
 
 
-FUNC load_city, 16
+load_city:
     lea rdi, [s_savefile]
+FUNC load_city_from, 16
     lea rsi, [str_rb]
     CALLC SDL_RWFromFile
     test rax, rax
@@ -1752,8 +2173,25 @@ FUNC load_city, 16
     mov edx, 12
     mov ecx, 1
     CALLC SDL_RWread
+    mov dword [cam_save+8], 0
+    mov rdi, r12
+    lea rsi, [cam_save]
+    mov edx, 12
+    mov ecx, 1
+    CALLC SDL_RWread
     mov rdi, r12
     CALLC SDL_RWclose
+    mov edi, [cam_save+8]
+    test edi, edi
+    jz .nocam
+    call video_set_zoom
+    mov eax, [cam_save]
+    mov [cam_x], eax
+    mov eax, [cam_save+4]
+    mov [cam_y], eax
+    call camera_clamp
+.nocam:
+    mov dword [welcome], 0
     call agents_init
     call scenic_init
     call networks_update
@@ -1905,11 +2343,13 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
+SET_N     equ 5
+CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
-settings_magic db "CSCF"
+settings_magic db "CSC2"
 section .bss
 auto_view resd 1
-settings_buf resb 32
+settings_buf resb 64
 section .text
 
 ; settings: the remembered info-view switches
@@ -1926,9 +2366,12 @@ FUNC settings_save
     lea rsi, [auto_on]
     mov ecx, AUTO_ON_N
     rep movsb
+    lea rsi, [set_music]
+    mov ecx, SET_N*4
+    rep movsb
     mov rdi, r12
     lea rsi, [settings_buf]
-    mov edx, AUTO_ON_N+4
+    mov edx, CFG_SIZE
     mov ecx, 1
     CALLC SDL_RWwrite
     mov rdi, r12
@@ -1945,7 +2388,7 @@ FUNC settings_load
     mov r12, rax
     mov rdi, r12
     lea rsi, [settings_buf]
-    mov edx, AUTO_ON_N+4
+    mov edx, CFG_SIZE
     mov ecx, 1
     CALLC SDL_RWread
     mov r13, rax
@@ -1960,7 +2403,11 @@ FUNC settings_load
     lea rdi, [auto_on]
     mov ecx, AUTO_ON_N
     rep movsb
+    lea rdi, [set_music]
+    mov ecx, SET_N*4
+    rep movsb
 .o:
+    call apply_volumes
     RETURN
 
 ; =====================================================================
@@ -2106,6 +2553,67 @@ bz_mode:
     mov eax, 2
 .o: ret
 
+; road_stretch(edi x, esi y): push the straight run of road through
+; this tile, up to and including the next junction or bend each way
+FUNC road_stretch, 16
+    mov r12d, edi
+    mov r13d, esi
+    call tile_at
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .out
+    movzx ebx, byte [rax+T_SUB]
+    mov edi, r12d
+    mov esi, r13d
+    call tl_push
+    ; a junction on its own
+    popcnt eax, ebx
+    cmp eax, 2
+    jg .out
+    xor r14d, r14d                  ; direction
+.d:
+    bt ebx, r14d
+    jnc .dn
+    mov r15d, r12d
+    mov eax, r13d
+    mov [rbp-48], eax
+    mov dword [rbp-52], 0
+.w:
+    add r15d, [dir_dx+r14*4]
+    mov eax, [dir_dy+r14*4]
+    add [rbp-48], eax
+    inc dword [rbp-52]
+    cmp dword [rbp-52], MAP_W
+    jg .dn
+    mov edi, r15d
+    mov esi, [rbp-48]
+    call tile_at
+    test rax, rax
+    jz .dn
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .dn
+    test byte [rax+T_FLAGS], F_HIGHWAY
+    jnz .dn
+    movzx ecx, byte [rax+T_SUB]
+    mov [rbp-56], ecx
+    mov edi, r15d
+    mov esi, [rbp-48]
+    call tl_push
+    cmp eax, -1
+    je .out
+    mov ecx, [rbp-56]
+    popcnt eax, ecx
+    cmp eax, 2
+    jg .dn                          ; junction: included, stop
+    bt ecx, r14d
+    jnc .dn                         ; bend: included, stop
+    jmp .w
+.dn:
+    inc r14d
+    cmp r14d, 4
+    jl .d
+.out:
+    RETURN
+
 ; tile index of tl entry ebx -> eax
 tl_index:
     mov eax, [tl_y+rbx*4]
@@ -2117,6 +2625,8 @@ tl_index:
 tool_is_line:
     mov eax, [tool]
     cmp eax, T_ROAD
+    je .y
+    cmp eax, T_UPGRADE
     je .y
     cmp eax, T_POWERLN
     je .y
@@ -2323,7 +2833,7 @@ FUNC tool_evaluate, 32
     jmp .set
 .t7:
     cmp eax, T_BUSSTOP
-    jne .n
+    jne .t8
     cmp ecx, OBJ_ROAD
     jne .n
     cmp byte [r12+T_ROADTYPE], RT_HIGHWAY
@@ -2331,6 +2841,23 @@ FUNC tool_evaluate, 32
     test byte [r12+T_FLAGS2], F2_BUSSTOP
     jnz .n
     mov r13d, 60
+    jmp .set
+.t8:
+    cmp eax, T_UPGRADE
+    jne .n
+    cmp ecx, OBJ_ROAD
+    jne .n
+    test byte [r12+T_FLAGS], F_HIGHWAY
+    jnz .n
+    movzx r8d, byte [r12+T_ROADTYPE]
+    mov r9d, [up_type]
+    cmp r8d, r9d
+    je .n
+    mov r13d, [road_costs+r9*4]
+    sub r13d, [road_costs+r8*4]
+    cmp r13d, 2
+    jge .set
+    mov r13d, 2
     jmp .set
 .lend:
     cmp dword [tool], T_POWERLN
@@ -2434,6 +2961,7 @@ FUNC tool_apply
     cmp rax, [money]
     jg .broke
     sub [money], rax
+    call undo_begin
     cmp dword [tool], T_BUILD
     je .build
     xor ebx, ebx
@@ -2551,8 +3079,14 @@ FUNC tool_apply
     jmp .n                          ; pipes are underground: no dust
 .a7:
     cmp eax, T_BUSSTOP
-    jne .upd
+    jne .a8
     or byte [r12+T_FLAGS2], F2_BUSSTOP
+    jmp .upd
+.a8:
+    cmp eax, T_UPGRADE
+    jne .upd
+    mov eax, [up_type]
+    mov [r12+T_ROADTYPE], al
 .upd:
     mov edi, r13d
     mov esi, r14d
@@ -2586,11 +3120,15 @@ FUNC tool_apply
     inc ebx
     jmp .cl
 .snd:
+    mov edi, [tl_cost]
+    call undo_end
     mov dword [net_dirty], 1
     mov dword [cov_dirty], 1
     mov eax, [tool]
     mov edi, SFX_ROAD
     cmp eax, T_ROAD
+    je .play
+    cmp eax, T_UPGRADE
     je .play
     cmp eax, T_POWERLN
     je .play
@@ -2665,6 +3203,8 @@ FUNC tool_apply
     mov dword [net_dirty], 1
     call networks_update
     call coverage_update
+    mov edi, [tl_cost]
+    call undo_end
     mov edi, SFX_PLACE
     call sfx_play
     call cost_float
@@ -2763,6 +3303,19 @@ FUNC draw_tool_preview, 16
     cmp byte [tl_ok+rbx], 0
     je .dia
     mov eax, [tool]
+    cmp eax, T_UPGRADE
+    jne .gr
+    ; the road as it will look after the upgrade
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    movzx eax, byte [rax+T_SUB]
+    mov ecx, [up_type]
+    shl ecx, 4
+    add eax, ecx
+    mov edi, [spr_road+rax*4]
+    jmp .ghost
+.gr:
     cmp eax, T_ROAD
     jne .gz
     mov edi, r12d
@@ -3572,25 +4125,6 @@ FUNC draw_dock, 32
     inc ebx
     jmp .b
 .tip:
-    cmp dword [drag_active], 0
-    je .out
-    call tb_reset
-    lea rdi, [s_cost]
-    call tb_str
-    movsxd rdi, dword [tl_cost]
-    call tb_money
-    mov edi, [ui_w]
-    shr edi, 1
-    mov esi, r13d
-    sub esi, 14
-    lea rdx, [textbuf]
-    mov ecx, UI_GOLD
-    movsxd rax, dword [tl_cost]
-    cmp rax, [money]
-    jle .tc
-    mov ecx, UI_BAD
-.tc:
-    call draw_text_centered
 .out:
     RETURN
 
@@ -3611,6 +4145,12 @@ FUNC submenu_item_info
     jl .b
     mov r8d, 1
     xor ecx, ecx
+    cmp ebx, SI_UPGRADE
+    jne .t0
+    lea rax, [ti_upgrade]
+    mov edx, 15
+    RETURN
+.t0:
     cmp ebx, SI_BUSSTOP
     jg .z
     lea eax, [rbx-SI_STREET]
@@ -3692,6 +4232,11 @@ FUNC submenu_select
     mov dword [tool], T_ROAD
     jmp .close
 .s:
+    cmp ebx, SI_UPGRADE
+    jne .s2
+    mov dword [tool], T_UPGRADE
+    jmp .close
+.s2:
     cmp ebx, SI_BUSSTOP
     jne .z
     mov dword [tool], T_BUSSTOP
@@ -3751,6 +4296,12 @@ FUNC submenu_is_active
     sete al
     RETURN
 .s:
+    cmp ebx, SI_UPGRADE
+    jne .s2
+    cmp dword [tool], T_UPGRADE
+    sete al
+    RETURN
+.s2:
     cmp ebx, SI_BUSSTOP
     jne .z
     cmp dword [tool], T_BUSSTOP
@@ -5041,6 +5592,12 @@ FUNC draw_tool_hint, 16
     je .bld
     cmp eax, T_LAND
     je .land
+    cmp eax, T_UPGRADE
+    jne .nupg
+    lea r12, [ht_upgrade]
+    lea r13, [hx_upgrade]
+    jmp .draw
+.nupg:
     cmp eax, T_BULLDOZE
     jne .nbz
     cmp dword [bz_filter], 0
@@ -5090,6 +5647,10 @@ FUNC draw_tool_hint, 16
 .h:
     imul ecx, ebx, 10
     add ecx, 19
+    cmp dword [tool], T_UPGRADE
+    jne .h2
+    add ecx, 20                     ; room for the type buttons
+.h2:
     mov [rbp-48], ecx
     mov edi, 4
     mov esi, 42
@@ -5114,6 +5675,94 @@ FUNC draw_tool_hint, 16
     mov edi, 10
     mov rdx, r14
     mov ecx, UI_DIM
+    call draw_text
+.out:
+    cmp dword [tool], T_UPGRADE
+    jne .o2
+    cmp dword [welcome], 0
+    jne .o2
+    ; pick what to upgrade to
+    xor ebx, ebx
+.ub:
+    mov eax, [rbp-48]
+    lea esi, [rax+42-20]
+    imul edi, ebx, 62
+    add edi, 10
+    mov edx, 58
+    mov rcx, [up_names+rbx*8]
+    xor r8d, r8d
+    cmp ebx, [up_type]
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .ubn
+    ; highways unlock later
+    mov ecx, [road_unlock+rbx*4]
+    call unlocked_pop
+    cmp eax, ecx
+    jl .ubn
+    mov [up_type], ebx
+.ubn:
+    inc ebx
+    cmp ebx, 3
+    jl .ub
+.o2:
+    RETURN
+
+; price tag next to the cursor while placing things
+FUNC draw_cursor_cost
+    cmp dword [welcome], 0
+    jne .out
+    cmp dword [ui_captured], 0
+    jne .out
+    cmp dword [hover_valid], 0
+    je .out
+    mov eax, [tool]
+    cmp eax, T_INSPECT
+    je .out
+    cmp eax, T_LAND
+    je .out
+    cmp dword [tl_valid], 0
+    je .out
+    call tb_reset
+    movsxd rdi, dword [tl_cost]
+    call tb_money
+    ; tiles, for line and area tools
+    cmp dword [tool], T_BUILD
+    je .d
+    cmp dword [tl_valid], 1
+    jle .d
+    mov edi, ' '
+    call tb_char
+    mov edi, 6
+    call tb_char
+    movsxd rdi, dword [tl_valid]
+    call tb_num
+    lea rdi, [s_tiles]
+    call tb_str
+.d:
+    lea rdi, [textbuf]
+    call text_width
+    lea r12d, [rax+6]
+    mov r13d, [umx]
+    add r13d, 28
+    mov r14d, [umy]
+    add r14d, 16
+    mov edi, r13d
+    mov esi, r14d
+    mov edx, r12d
+    mov ecx, 12
+    mov r8d, UI_BG2
+    call draw_box
+    mov ecx, UI_GOLD
+    movsxd rax, dword [tl_cost]
+    cmp rax, [money]
+    jle .c
+    mov ecx, UI_BAD
+.c:
+    lea edi, [r13+3]
+    lea esi, [r14+2]
+    lea rdx, [textbuf]
     call draw_text
 .out:
     RETURN
@@ -5177,13 +5826,21 @@ FUNC draw_problem_icons, 16
 .big:
     ; hover: name the problem, click (inspect tool) to open the building
     mov dword [rbp-52], UI_BG2
-    lea edi, [r12-5]
-    mov esi, r13d
-    mov edx, 11
-    mov ecx, 11
-    call ui_over
-    test eax, eax
-    jz .bub
+    ; hovering names the problem; only the inspect tool takes the click,
+    ; so icons never get in the way of building
+    mov eax, [umx]
+    lea ecx, [r12-5]
+    sub eax, ecx
+    cmp eax, 11
+    jae .bub
+    mov eax, [umy]
+    sub eax, r13d
+    cmp eax, 11
+    jae .bub
+    cmp dword [tool], T_INSPECT
+    jne .nocap
+    mov dword [ui_captured], 1
+.nocap:
     mov dword [rbp-52], UI_BTN_HI
     mov rax, [prob_titles+r14*8]
     mov [tooltip], rax
@@ -5226,38 +5883,55 @@ FUNC draw_problem_icons, 16
     RETURN
 
 ; minimap colour for a tile (rdi tile) -> eax
-minimap_colour:
+minimap_colour:                     ; -> eax colour, edx priority
     movzx eax, byte [rdi+T_OBJ]
     cmp eax, OBJ_ROAD
     jne .a
-    mov eax, RAMP(R_GREY, 3)
-    cmp byte [rdi+T_ROADTYPE], RT_STREET
-    je .ar
+    mov edx, 4
+    movzx ecx, byte [rdi+T_ROADTYPE]
     mov eax, RAMP(R_GREY, 5)
+    cmp ecx, RT_STREET
+    je .ar
+    mov edx, 7
+    mov eax, RAMP(R_WHITE, 7)
+    cmp ecx, RT_HIGHWAY
+    jne .ar
+    mov eax, RAMP(R_YELLOW, 6)
+    mov edx, 7
 .ar:
     ret
 .a: cmp eax, OBJ_ZONEBLD
-    je .z
+    jne .a2
+    movzx eax, byte [rdi+T_ZONE]
+    movzx eax, byte [mini_zone+rax]
+    mov edx, 5
+    ret
+.a2:
     cmp eax, OBJ_SERVICE
     jne .b
-    mov eax, RAMP(R_WHITE, 6)
+    mov eax, RAMP(R_WHITE, 5)
+    mov edx, 6
     ret
 .b: cmp eax, OBJ_TREE
     jne .c
-    mov eax, RAMP(R_LEAF, 3)
+    mov eax, RAMP(R_LEAF, 2)
+    mov edx, 1
     ret
 .c: cmp eax, OBJ_NONE
     jne .t
     cmp byte [rdi+T_ZONE], 0
     je .t
-.z: movzx eax, byte [rdi+T_ZONE]
-    movzx eax, byte [mini_zone+rax]
+    movzx eax, byte [rdi+T_ZONE]
+    movzx eax, byte [mini_lot+rax]
+    mov edx, 3
     ret
-.t: cmp byte [rdi+T_TERRAIN], TER_WATER
+.t: mov edx, 2
+    cmp byte [rdi+T_TERRAIN], TER_WATER
     jne .g
     mov eax, RAMP(R_DEEPWATER, 3)
     ret
-.g: cmp byte [rdi+T_TERRAIN], TER_SAND
+.g: xor edx, edx
+    cmp byte [rdi+T_TERRAIN], TER_SAND
     jne .gg
     mov eax, RAMP(R_SAND, 5)
     ret
@@ -5265,7 +5939,8 @@ minimap_colour:
     mov eax, RAMP(R_GRASS, 4)
     ret
 section .data
-mini_zone db 0, RAMP(R_ZONER,5), RAMP(R_ZONEC,5), RAMP(R_ZONEI,5), RAMP(R_TEAL,5), RAMP(R_ZONER,2), RAMP(R_ZONEC,2)
+mini_zone db 0, RAMP(R_ZONER,5), RAMP(R_ZONEC,5), RAMP(R_ZONEI,5), RAMP(R_TEAL,5), RAMP(R_ZONER,3), RAMP(R_ZONEC,3)
+mini_lot  db 0, RAMP(R_ZONER,2), RAMP(R_ZONEC,2), RAMP(R_ZONEI,2), RAMP(R_TEAL,2), RAMP(R_ZONER,1), RAMP(R_ZONEC,1)
 section .text
 
 ; =====================================================================
@@ -5863,8 +6538,13 @@ FUNC render_ui
     jmp .hud
 .p5:
     cmp eax, PANEL_STATS
-    jne .hud
+    jne .p6
     call draw_stats
+    jmp .hud
+.p6:
+    cmp eax, PANEL_SETTINGS
+    jne .hud
+    call draw_settings
 .hud:
     call draw_topbar
     cmp dword [sel_x], 0
@@ -5882,6 +6562,7 @@ FUNC render_ui
     call draw_minimap
     call draw_ms_card
     call draw_overlay_legend
+    call draw_cursor_cost
     mov rdx, [tooltip]
     test rdx, rdx
     jz .cursor
@@ -5960,7 +6641,7 @@ FUNC render_ui
 .out:
     RETURN
 section .data
-tool_icon db ICON_INSPECT, ICON_BULLDOZE, ICON_ROAD, ICON_POWERLINE, ICON_ZONE_R, ICON_WATER, ICON_BUS, ICON_DEZONE, ICON_POWER, ICON_TREE
+tool_icon db ICON_INSPECT, ICON_BULLDOZE, ICON_ROAD, ICON_POWERLINE, ICON_ZONE_R, ICON_WATER, ICON_BUS, ICON_DEZONE, ICON_POWER, ICON_TREE, ICON_LAND, ICON_ROAD
 section .text
 
 ; =====================================================================
@@ -5968,6 +6649,14 @@ section .text
 ; =====================================================================
 FUNC ui_key
     mov eax, edi
+    ; Ctrl+Z: undo
+    cmp eax, SC_Z
+    jne .nz0
+    test dword [key_mod], 0xC0
+    jz .nz0
+    call undo_do
+    jmp .out
+.nz0:
     cmp eax, SC_ESCAPE
     jne .k1
     cmp dword [welcome], 0
@@ -6038,6 +6727,35 @@ FUNC ui_key
     mov ecx, T_LAND
     cmp eax, SC_K
     je .settool
+    mov ecx, T_UPGRADE
+    cmp eax, SC_U
+    je .settool
+    cmp eax, SC_H
+    jne .nh
+    mov eax, [set_xray]
+    inc eax
+    cmp eax, 3
+    jl .h1
+    xor eax, eax
+.h1:
+    mov [set_xray], eax
+    call settings_save
+    mov rdi, [s_xr_names+rax*8]
+    call tb_reset
+    push rdi
+    push rdi
+    lea rdi, [s_st_xray]
+    call tb_str
+    pop rdi
+    pop rdi
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_TEXT
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp .out
+.nh:
     cmp eax, SC_SPACE
     jne .k2
     cmp dword [sim_speed], 0

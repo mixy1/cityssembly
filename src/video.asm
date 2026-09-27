@@ -592,6 +592,40 @@ FUNC video_set_zoom
 .same:
     RETURN
 
+; zoom (edi) keeping the world point under the mouse where it is
+FUNC zoom_at_cursor
+    CLAMP edi, 1, 4
+    cmp edi, [zoom]
+    je .out
+    mov r12d, edi
+    mov eax, [mouse_x]
+    xor edx, edx
+    div dword [zoom]
+    add eax, [cam_x]
+    mov r13d, eax                   ; world x under the mouse
+    mov eax, [mouse_y]
+    xor edx, edx
+    div dword [zoom]
+    add eax, [cam_y]
+    mov r14d, eax
+    mov edi, r12d
+    call video_set_zoom
+    mov eax, [mouse_x]
+    xor edx, edx
+    div dword [zoom]
+    mov ecx, r13d
+    sub ecx, eax
+    mov [cam_x], ecx
+    mov eax, [mouse_y]
+    xor edx, edx
+    div dword [zoom]
+    mov ecx, r14d
+    sub ecx, eax
+    mov [cam_y], ecx
+    call camera_clamp
+.out:
+    RETURN
+
 FUNC video_toggle_fullscreen
     xor dword [fullscreen], 1
     mov rdi, [window]

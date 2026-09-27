@@ -22,7 +22,9 @@ frame_count     resd 1
 shot_frames     resd 1
 shot_file       resq 1
 demo_mode       resd 1
-sandbox         resd 1          ; demo / trailer: whole map is yours
+sandbox         resd 1
+key_mod         resd 1          ; modifiers of the last key press
+mouse_inside    resd 1          ; demo / trailer: whole map is yours
 demo_view       resd 1
 demo_no_ff      resd 1
 trailer_mode    resd 1
@@ -149,6 +151,7 @@ FUNC main
     mov [shot_file], rax
 .noargs:
     call video_init
+    mov dword [mouse_inside], 1
     call palette_init
     call font_init
     mov dword [world_seed], 1234567
@@ -161,12 +164,15 @@ FUNC main
     call audio_init
     call ui_init
     call settings_load
+    call check_saves
     ; demo and trailer worlds skip land plots and the starter creek
     mov eax, [trailer_mode]
     or eax, [demo_mode]
     cmp dword [demo_view], 'T'
     je .sbx0
     cmp dword [demo_view], 'L'
+    je .sbx0
+    cmp dword [demo_view], 'Z'
     je .sbx0
     cmp dword [demo_view], 'R'
     je .sbx0
@@ -209,6 +215,11 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    cmp dword [demo_view], 'Z'
+    jne .ldz
+    call pt_undo_test
+    jmp .nodemo
+.ldz:
     mov eax, [demo_view]
     cmp eax, 'R'
     je .ex
@@ -392,6 +403,16 @@ FUNC poll_events
     cmp eax, SDL_WINDOWEVENT
     jne .nw
     movzx eax, byte [event_buf+EV_WIN_EVENT]
+    cmp eax, SDL_WINDOWEVENT_ENTER
+    jne .we1
+    mov dword [mouse_inside], 1
+    jmp .next
+.we1:
+    cmp eax, SDL_WINDOWEVENT_LEAVE
+    jne .we2
+    mov dword [mouse_inside], 0
+    jmp .next
+.we2:
     cmp eax, SDL_WINDOWEVENT_SIZE_CHANGED
     jne .next
     call video_resize
@@ -490,14 +511,15 @@ FUNC poll_events
 .zin:
     inc edi
 .zset:
-    call video_set_zoom
-    call camera_clamp
+    call zoom_at_cursor
     jmp .next
 .nwh:
     cmp eax, SDL_KEYDOWN
     jne .next
     cmp byte [event_buf+EV_KEY_REPEAT], 0
     jne .next
+    movzx eax, word [event_buf+EV_KEY_MOD]
+    mov [key_mod], eax
     mov edi, [event_buf+EV_KEY_SCAN]
     call ui_key
     jmp .next
@@ -809,6 +831,56 @@ FUNC demo_build, 16
     inc ecx
     jmp .fi
 .v15:
+    cmp eax, 'e'
+    jne .v16
+    mov dword [panel], PANEL_SETTINGS
+.v16:
+    cmp eax, 'X'
+    jne .v17
+    mov dword [tool], T_ROAD
+    mov dword [mouse_x], 700
+    mov dword [mouse_y], 330
+.v17:
+    cmp eax, 'Y'
+    jne .v18
+    mov dword [tool], T_ROAD
+    mov dword [mouse_x], 700
+    mov dword [mouse_y], 330
+    mov dword [set_xray], 0
+.v18:
+    cmp eax, 'u'
+    jne .v19
+    mov dword [tool], T_UPGRADE
+    ; point at a straight north-south street near the middle
+    lea r13d, [r12-10]
+.us:
+    mov r14d, 28
+.ux:
+    mov edi, r14d
+    mov esi, r13d
+    call tile_at
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .un
+    cmp byte [rax+T_ROADTYPE], RT_STREET
+    jne .un
+    cmp byte [rax+T_SUB], 5
+    je .uf
+.un:
+    inc r14d
+    cmp r14d, 44
+    jl .ux
+    inc r13d
+    jmp .us
+.uf:
+    mov edi, r14d
+    mov esi, r13d
+    call tile_screen
+    imul eax, [zoom]
+    imul edx, [zoom]
+    add edx, 8
+    mov [mouse_x], eax
+    mov [mouse_y], edx
+.v19:
 .noff:
     RETURN
 
@@ -970,4 +1042,5 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "audio.asm"
 %include "ui.asm"
 %include "trailer.asm"
+%include "undo.asm"
 %include "playtest.asm"

@@ -239,7 +239,7 @@ FUNC tr_shot
     RETURN
 
 ; reveal the backed-up town outward from the highway, one ring per frame
-FUNC tr_reveal_step
+FUNC tr_reveal_step, 16
     mov r15d, [tr_reveal_d]
     mov r13d, [hwy_row]
     xor r14d, r14d                  ; tile index

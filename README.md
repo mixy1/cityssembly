@@ -59,6 +59,25 @@ one press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
 
+### Quality of life
+
+- **Settings** (Esc → Settings) cover music and sound volume sliders,
+  see-through buildings, edge scrolling, autosave (every 3 months), disasters,
+  day/night and fullscreen. They're remembered in `cityssembly.cfg`.
+- **Continue** your city from the welcome screen. Saves also remember where
+  you were looking.
+- **Undo** with Ctrl+Z: it takes back what the action changed and refunds the
+  money.
+- **Upgrade roads** tool: pick street / avenue / highway, then click a road to
+  upgrade its whole stretch (junctions included) or drag along roads.
+- **See-through buildings:** anything in front of what you're pointing at is
+  drawn see-through.
+- Placement tools show the **price and tile count next to the cursor**.
+- The mouse wheel **zooms toward the cursor**.
+- The **minimap** shows districts, your land and your view. Click or drag it
+  to move.
+- Clicking a notification jumps to where it happened and dismisses it.
+
 ### Progression (Cities: Skylines style)
 
 - **Land.** The map is a 5×5 grid of plots. You start with one plot, which
@@ -95,6 +114,9 @@ Then chase the advisor goals shown in the top-left.
 | `N` / `M` | lock daylight / music on-off |
 | `F5` / `F9` | save / load (`city.sav`) |
 | `F11`, `F1`, `Esc` | fullscreen, help, menu |
+| `Ctrl+Z` | undo (up to 24 actions, money refunded) |
+| `U` | upgrade roads (click a road to upgrade the whole stretch) |
+| `H` | see-through buildings: near cursor / all / off |
 
 Icons above buildings show their most urgent problem (no power, no water,
 sewage, garbage, missing goods, missing workers, fire, no road, no route).

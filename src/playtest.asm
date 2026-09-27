@@ -601,39 +601,60 @@ FUNC pt_dock_test, 16
 
 ; --demo 1 out.bmp M : click the minimap, print the camera
 section .data
-mm_fmt db "MINIMAP click at ui %d,%d: cam %d,%d -> %d,%d", 10, 0
+mm_fmt db "MINIMAP click on tile %d,%d -> view centred on %d,%d", 10, 0
+mm_tx dd 30, 100, 64, 10
+mm_ty dd 64, 20, 110, 10
 section .text
-FUNC pt_minimap_test, 16
+FUNC pt_minimap_test, 32
     mov dword [welcome], 0
     mov dword [minimap_on], 1
     call render_ui
-    mov r12d, [ui_w]
-    sub r12d, 136-20
-    mov r13d, [ui_h]
-    sub r13d, DOCK_BTN+86-20
-    mov eax, r12d
+    ; click where tile (tx,ty) is drawn: px=(x-y)/2+64, py=(x+y)/4
+    xor ebx, ebx
+.t:
+    cmp ebx, 4
+    jge .out
+    mov r14d, [mm_tx+rbx*4]
+    mov r15d, [mm_ty+rbx*4]
+    mov edi, r14d
+    mov esi, r15d
+    call tile_to_minimap
+    push r12
+    push r13
+    push rax
+    push rdx
+    call minimap_pos
+    pop rdx
+    pop rax
+    lea eax, [rax+r12+3]
+    lea edx, [rdx+r13+3]
+    pop r13
+    pop r12
     imul eax, [ui_scale]
     mov [mouse_x], eax
-    mov eax, r13d
-    imul eax, [ui_scale]
-    mov [mouse_y], eax
-    mov r14d, [cam_x]
-    mov r15d, [cam_y]
-    mov dword [lmb_down], 0          ; released within the frame
+    imul edx, [ui_scale]
+    mov [mouse_y], edx
+    mov dword [lmb_down], 0
     mov dword [click_pending], 1
     call render_ui
-    call world_input
+    ; which tile is at the screen centre now?
+    mov edi, [fb_w]
+    shr edi, 1
+    add edi, [cam_x]
+    mov esi, [fb_h]
+    shr esi, 1
+    add esi, [cam_y]
+    call world_to_tile
     lea rdi, [mm_fmt]
-    mov esi, r12d
-    mov edx, r13d
-    mov ecx, r14d
-    mov r8d, r15d
-    mov r9d, [cam_x]
-    push qword [cam_y]
-    push qword [cam_y]
+    mov esi, r14d
+    mov ecx, eax
+    mov r8d, edx
+    mov edx, r15d
     xor eax, eax
     call printf
-    add rsp, 16
+    inc ebx
+    jmp .t
+.out:
     RETURN
 
 ; --demo 1 out.bmp R : load city.sav, simulate, report traffic
@@ -1150,4 +1171,113 @@ FUNC pt_north_link
     jl .l
     call roads_update_all
     mov dword [net_dirty], 1
+    RETURN
+
+; --demo 1 out.bmp Z : build, undo, check
+section .data
+uz_fmt db "UNDO %s money=%d roads=%d zoned=%d services=%d pylons=%d wires=%d acts=%d", 10, 0
+uz_a db "start  ", 0
+uz_b db "built  ", 0
+uz_c db "undo1  ", 0
+uz_d db "undo2  ", 0
+uz_e db "undo3  ", 0
+uz_f db "undo4  ", 0
+uz_g db "undo5  ", 0
+section .text
+FUNC pt_undo_report, 16
+    mov [rbp-48], rdi
+    xor ebx, ebx
+    xor r12d, r12d
+    xor r13d, r13d
+    xor r14d, r14d
+    xor r15d, r15d
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    movzx ecx, byte [tiles+rax+T_OBJ]
+    cmp ecx, OBJ_ROAD
+    jne .a
+    test byte [tiles+rax+T_FLAGS], F_HIGHWAY
+    jnz .a
+    inc r12d
+.a: cmp byte [tiles+rax+T_ZONE], 0
+    je .b
+    inc r13d
+.b: cmp ecx, OBJ_SERVICE
+    jne .c
+    inc r14d
+.c: cmp ecx, OBJ_POWER
+    jne .n
+    inc r15d
+.n: inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    lea rdi, [uz_fmt]
+    mov rsi, [rbp-48]
+    mov rdx, [money]
+    mov ecx, r12d
+    mov r8d, r13d
+    mov r9d, r14d
+    mov eax, [n_acts]
+    push rax
+    mov eax, [n_wires]
+    push rax
+    push r15
+    xor eax, eax
+    call pt_printf8
+    add rsp, 24
+    RETURN
+
+FUNC pt_undo_test
+    mov dword [welcome], 0
+    lea rdi, [uz_a]
+    call pt_undo_report
+    mov dword [road_type], RT_STREET
+    mov edi, T_ROAD
+    mov esi, 26
+    mov edx, 64
+    mov ecx, 40
+    mov r8d, 64
+    call pt_drag
+    mov dword [zone_type], ZONE_R
+    mov edi, T_ZONETOOL
+    mov esi, 27
+    mov edx, 60
+    mov ecx, 35
+    mov r8d, 63
+    call pt_drag
+    mov edi, BK_COAL
+    mov esi, 43
+    mov edx, 72
+    call pt_place
+    mov edi, T_POWERLN
+    mov esi, 42
+    mov edx, 71
+    mov ecx, 30
+    mov r8d, 66
+    call pt_drag
+    ; bulldoze part of the road
+    mov edi, T_BULLDOZE
+    mov esi, 30
+    mov edx, 64
+    mov ecx, 33
+    mov r8d, 64
+    call pt_drag
+    lea rdi, [uz_b]
+    call pt_undo_report
+    call undo_do
+    lea rdi, [uz_c]
+    call pt_undo_report
+    call undo_do
+    lea rdi, [uz_d]
+    call pt_undo_report
+    call undo_do
+    lea rdi, [uz_e]
+    call pt_undo_report
+    call undo_do
+    lea rdi, [uz_f]
+    call pt_undo_report
+    call undo_do
+    lea rdi, [uz_g]
+    call pt_undo_report
     RETURN

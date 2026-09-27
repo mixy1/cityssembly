@@ -3418,6 +3418,7 @@ FUNC month_end, 32
 .ed:
     call check_milestone
     call random_event
+    call autosave_tick
     inc dword [month]
     cmp dword [month], 12
     jl .out
