@@ -40,6 +40,14 @@ jobs:
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./cityssembly --demo 1 playtest.bmp T | tee playtest.txt
           grep -q "powered=" playtest.txt
 
+      - name: Tour test (a player who follows the highlights finishes it)
+        run: |
+          mkdir -p tourtest && cd tourtest
+          for seed in 1 42 777; do
+            SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ../cityssembly --tourbot 20000 tour.bmp $seed | tee tour_$seed.txt
+            grep -q "TOUR end.*money 30000.*bubble 0" tour_$seed.txt
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: cityssembly-windows

@@ -31,6 +31,8 @@ tr_plan         resb TR_PLAN_MAX
 
 section .data
 str_trailer_flag db "--trailer", 0
+str_tourbot      db "--tourbot", 0
+bot_seed         dd 0
 str_shotfmt      db "SHOT %d %d", 10, 0
 str_tilefmt      db "TILE %d %d %d", 10, 0
 str_carfmt       db "CAR %d %d %d", 10, 0

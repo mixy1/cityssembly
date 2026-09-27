@@ -100,17 +100,27 @@ Then chase the advisor goals shown in the top-left.
 
 ### Quality of life
 
-- **Tour:** every new city offers a tour (Take the tour / No thanks) that
-  builds a practice village. The
-  tour walks through every mechanic: roads, homes, shops and industry,
-  power and power lines, water and sewage, time and demand, fire, health,
-  schools, garbage, parks, info views, the inspector and the budget. Money
-  is free, all land is yours and everything is unlocked. Each step
-  highlights what to use, dims the rest and moves on once you've done it.
-  Then meteors wipe out the village, you bulldoze the rubble, and your real
-  city begins on fresh land with the real budget and date. The practice
-  village is never saved. Skip tour starts the real game at any point;
-  Help (F1) → Take the tour replays it.
+- **Tour:** every new city offers a guided tour (Take the tour / No
+  thanks) in which you build a practice village step by step:
+  - moving the view (WASD, right-drag, the wheel);
+  - drawing the first street from the highway;
+  - zoning homes, shops and industry;
+  - a wind turbine and a power line across the street;
+  - a water tower, a pipe under the street and a sewage outlet on the creek;
+  - speeding up time and reading demand;
+  - a fire station, clinic, school, landfill and park;
+  - an info view, the inspector and the budget.
+
+  Each step leads the way: first the dock button (the rest dimmed), then the
+  item in its menu, then the place in the world (an outlined path with a
+  start arrow, an area to drag over, or a spot to click). It moves on once
+  you've done it. The village is planned from the map so that following
+  the tour always gives a working village. Money is free, all land is yours
+  and everything is unlocked. Then meteors fall on the village, you pick
+  the bulldozer and clear the rubble, and your real city begins on fresh
+  land with the real budget and date. The practice village is never saved.
+  Skip tour starts the real game at any point; Help (F1) → Take the tour
+  replays it.
 - **Several cities:** Save and Load (menu, F9) show seven city slots plus
   the autosave as cards, each with a picture of the city, the date,
   population and money. The latest save is marked; overwriting a city asks
@@ -384,4 +394,6 @@ cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, 
 cityssembly --demo 1 out.bmp L          # load city.sav, print a water/sewage report
 cityssembly --wav SECONDS out.wav [STYLE [INST]]  # render the soundtrack (STYLE 0-4, INST solo)
 cityssembly --trailer out.raw plan.bin W H         # film a scripted plan (trailer_work/plan.py)
+cityssembly --tourbot FRAMES out.bmp [seed]        # play the tour with real input, following its
+                                                   # highlights; prints each step (CI runs it)
 ```

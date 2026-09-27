@@ -123,6 +123,25 @@ FUNC main
     mov [init_h], eax
     jmp .noargs
 .nottrailer:
+    ; --tourbot FRAMES out.bmp [seed]: play the tour by its highlights
+    mov rdi, [r13+8]
+    lea rsi, [str_tourbot]
+    CALLC strcmp
+    test eax, eax
+    jnz .nottb
+    mov dword [bot_on], 1
+    mov rdi, [r13+16]
+    CALLC atoi
+    mov [shot_frames], eax
+    mov rax, [r13+24]
+    mov [shot_file], rax
+    cmp r12d, 5
+    jl .noargs
+    mov rdi, [r13+32]
+    CALLC atoi
+    mov [bot_seed], eax
+    jmp .noargs
+.nottb:
 %endif
     mov rdi, [r13+8]
     lea rsi, [str_wav_flag]
@@ -196,6 +215,13 @@ FUNC main
     CALLC SDL_GetPerformanceCounter
     mov [world_seed], eax
 .fixed:
+%ifndef WEB
+    mov eax, [bot_seed]
+    test eax, eax
+    jz .nbs
+    mov [world_seed], eax
+.nbs:
+%endif
     call sprites_init
     call light_init
     call threads_init
@@ -400,6 +426,9 @@ FUNC main
     mov dword [running], 1
 .loop:
     PERF_MARK -1
+%ifndef WEB
+    call tut_bot
+%endif
     call poll_events
     cmp dword [running], 0
     je .quit
@@ -463,6 +492,9 @@ FUNC main
     sub [cam_x], r14d
     sub [cam_y], r15d
     call video_present              ; (marks 5: lighting, 6: upload)
+%ifndef WEB
+    call tut_bot_after
+%endif
     PERF_MARK 6
     call audio_update
     PERF_MARK 7

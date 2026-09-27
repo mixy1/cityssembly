@@ -262,6 +262,8 @@ section .text
     jz %%ok
     cmp dword [%1], 0
     jne %%done
+    cmp dword [tut_bubble], 0       ; quiet during the tour's practice village
+    jne %%done
     mov dword [%1], 1
     lea rdi, [%2]
     mov esi, %3

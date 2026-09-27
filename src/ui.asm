@@ -7353,7 +7353,10 @@ FUNC render_ui
     jne .noinsp
     call draw_inspect
 .noinsp:
+    cmp dword [tut_step], 0         ; the tour's card explains instead
+    jge .nohint
     call draw_tool_hint
+.nohint:
     call draw_minimap
     call draw_ms_card
     call draw_overlay_legend
