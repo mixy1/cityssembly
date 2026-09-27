@@ -258,21 +258,25 @@ weathered, so the old town looks its age.
 
 ### Music: "Five Boroughs"
 
-The soundtrack is composed live, one bar at a time, on real recorded
-instruments. The style follows the city:
+The soundtrack is a songbook of five original tunes, one per style, played
+by a band of real recorded instruments. The style follows the city:
 
-| When | Style | Band |
+| When | Tune | Band |
 |---|---|---|
-| night | **Village Vanguard** swing | ride and brushes, walking upright bass, Steinway comping in rootless voicings, harmon-muted trumpet or tenor sax |
-| day | **Brooklyn boom bap** | dusty kick and snare, swung 16th hats, lo-fi piano chops over vinyl crackle, upright bass, sax phrases |
-| day | **Nuyorican salsa** | 2-3 son clave, conga tumbao, bongo martillo, cowbell, guiro, piano montuno, tumbao bass, trumpet and trombone mambos |
-| morning | **Broadway** | two-feel with stride piano, strings and clarinet |
-| fires | **Noir** | a slow minor ballad for tenor sax and strings, with sirens across the city |
+| night | **Autumn on Bleecker** (Village Vanguard swing, F major) | ride and brushes, walking upright bass, Steinway comping in rootless voicings, harmon-muted trumpet |
+| day | **Myrtle Avenue** (Brooklyn boom bap, D minor) | dusty kick and snare, swung 16th hats, lo-fi piano over vinyl crackle, a written bass riff, tenor sax |
+| day | **Loisaida** (Nuyorican salsa, A minor) | 2-3 son clave, conga tumbao, bongo martillo, cowbell, guiro, piano montuno, trumpet melody and a trumpet-trombone mambo |
+| morning | **Times Square Morning** (Broadway, C major) | two-feel with stride piano, strings and clarinet |
+| fires | **Rain on Mulberry** (noir ballad, C minor) | tenor sax and strings, with sirens across the city |
 
-Sections alternate between the band and a featured lead. Motifs are answered
-and resolved over 8 bars, the last bar gets a fill, and the key moves around
-the cycle of fourths. The band grows with your population. At night in New
-York you'll hear the odd siren anyway.
+Each tune has a written melody and chord chart (an A and a B section) and is
+played in a proper form: intro, head A, A, B, A, a solo chorus over the A and
+B changes, and the head out. In the solos the player works from the tune:
+neighbouring chord tones, split notes, anticipations, with the cadence played
+as written. Then the next tune for the time of day starts. A fire cuts
+straight to the noir tune. In a small town the pianist plays the melody; the
+horns join as the population grows. At night in New York you'll hear the odd
+siren anyway.
 
 The recordings are CC0 (public domain) from Versilian Studios' **VCSL** and
 **VSCO-2 Community Edition**: a Steinway B, an upright bass, harmon-muted and
@@ -309,7 +313,8 @@ replace the built-in instruments:
 | `src/agents.asm` | cars, pedestrians, particles, floating text |
 | `src/audio.asm` | instrument synthesis, recorded zones, sampler, reverb, sound effects |
 | `src/sprites3.asm` | neighbourhood architecture: six styles of home, low and high density |
-| `src/music.asm` | the generative "Five Boroughs" score |
+| `src/tunes.asm` | the songbook: chord charts and melodies |
+| `src/music.asm` | the "Five Boroughs" band: arranging, form, solos |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
 | `src/buildings.asm` | service building stats |
 

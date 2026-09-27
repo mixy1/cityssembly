@@ -30,12 +30,11 @@ Q_M7B5 equ 3
 
 section .bss
 mus_role        resd 1          ; 0 band, 1 lead feature
+mus_form        resd 1          ; position in the tune's form
+mus_kind        resd 1          ; F_* of the current section
 mus_swing       resd 1          ; 0 straight, 1 swung 8ths, 2 swung 16ths
 mus_scale       resq 1
 mel_prev        resd 1
-riff_step       resb 8
-riff_deg        resb 8
-riff_len        resd 1
 
 section .data
 force_style     dd -1           ; --wav tests pin a style
@@ -136,11 +135,7 @@ comp_swing  db 0,6,255,0,  6,14,255,0,  2,10,255,0,  0,10,255,0,  4,14,255,0,  6
 montuno_2   db 0,2,3,5,6,255,0,0
 montuno_3   db 1,2,4,6,7,255,0,0
 ; lead rhythm slots (16th steps across 2 bars) per style family
-mel_slots_swing db 0,6,8,14, 16,22,24,30
-mel_slots_bap   db 2,4,7,10, 18,20,23,26
-mel_slots_slow  db 0,8,12,16, 24,28,30,31
 ; salsa brass mambo: 16th steps over two bars
-mambo_steps db 2,6,10,12, 18,22,24,28
 
 section .text
 
@@ -155,6 +150,7 @@ FUNC music_init
     mov dword [mus_swing], 1
     mov qword [mus_next_bar], SR/2
     mov dword [mel_prev], 72
+    mov dword [mus_form], FORM_LEN-1    ; the first bar starts a tune
     call music_set_tempo
     RETURN
 
@@ -315,33 +311,15 @@ FUNC music_pick_style
 .set:
     CLAMP ebx, 0, 4
     mov [mus_style], ebx
-    ; progression (two per style)
-    call rand
-    test eax, 1
-    mov rax, [style_prog+rbx*8]
-    jz .p
-    mov rax, [style_prog2+rbx*8]
-.p:
-    mov [mus_prog], rax
+    ; the tune for this style: key, lead, scale
+    mov eax, [tune_key+rbx*4]
+    mov [mus_key], eax
+    mov eax, [tune_lead+rbx*4]
+    mov [mus_lead], eax
+    mov rax, [tune_scale+rbx*8]
+    mov [mus_scale], rax
     mov eax, [style_swing+rbx*4]
     mov [mus_swing], eax
-    ; scale for melodies
-    lea rax, [major_scale]
-    cmp ebx, ST_NOIR
-    je .mn
-    cmp ebx, ST_BOOMBAP
-    je .bl
-    mov rcx, [mus_prog]
-    lea rdx, [prog_salsa]
-    cmp rcx, rdx
-    jne .sc
-.mn:
-    lea rax, [minor_scale]
-    jmp .sc
-.bl:
-    lea rax, [blues_scale]
-.sc:
-    mov [mus_scale], rax
     call music_set_tempo
     ; the band grows with the city
     xor eax, eax
@@ -361,88 +339,8 @@ FUNC music_pick_style
     jl .ni
     mov dword [mus_intensity], 3
 .ni:
-    ; lead instrument
-    mov ecx, I_HARMON
-    cmp ebx, ST_VANGUARD
-    jne .l1
-    call rand
-    test eax, 3
-    mov ecx, I_HARMON
-    jnz .l9
-    mov ecx, I_SAX
-    jmp .l9
-.l1:
-    mov ecx, I_SAX
-    cmp ebx, ST_BOOMBAP
-    je .l9
-    cmp ebx, ST_NOIR
-    je .l9
-    mov ecx, I_CLAR
-    cmp ebx, ST_BROADWAY
-    je .l9
-    mov ecx, I_TPT                  ; salsa: the brass section
-.l9:
-    mov [mus_lead], ecx
-    call make_riff
     RETURN
 
-; a two-bar motif: slots from the style's rhythm table, scale steps
-FUNC make_riff
-    lea r12, [mel_slots_swing]
-    mov eax, [mus_style]
-    cmp eax, ST_BOOMBAP
-    jne .a
-    lea r12, [mel_slots_bap]
-.a:
-    cmp eax, ST_NOIR
-    jne .b
-    lea r12, [mel_slots_slow]
-.b:
-    cmp eax, ST_SALSA
-    jne .c
-    lea r12, [mambo_steps]
-.c:
-    mov edi, 3
-    call rand_range
-    lea r13d, [rax+4]               ; 4..6 notes
-    mov [riff_len], r13d
-    xor ebx, ebx                    ; slot index
-    xor r14d, r14d                  ; note index
-    xor r15d, r15d                  ; running degree
-.n:
-    cmp r14d, r13d
-    jge .out
-    ; spread notes over the 8 slots
-    mov eax, 8
-    sub eax, ebx
-    mov ecx, r13d
-    sub ecx, r14d
-    sub eax, ecx
-    jle .take
-    lea edi, [rax+1]
-    CLAMP edi, 1, 2
-    call rand_range
-    add ebx, eax
-.take:
-    CLAMP ebx, 0, 7
-    movzx eax, byte [r12+rbx]
-    mov [riff_step+r14], al
-    ; stepwise with the odd leap
-    call rand
-    and eax, 7
-    movzx eax, byte [riff_moves+rax]
-    movsx eax, al
-    add r15d, eax
-    CLAMP r15d, -4, 6
-    mov [riff_deg+r14], r15b
-    inc ebx
-    inc r14d
-    jmp .n
-.out:
-    RETURN
-section .data
-riff_moves db 1, 1, -1, -1, 2, -2, 0, 3
-section .text
 
 ; scale degree (edi, may be negative) -> midi around the key -> eax
 degree_note:
@@ -507,21 +405,47 @@ FUNC compose_bar, 32
     je .advance
     cmp dword [mus_bar], 0
     jne .nosec
-    call music_pick_style
-    ; sections alternate band / featured lead; modulate now and then
+    ; next section of the tune; a new tune when this one is done
     inc dword [mus_sections]
-    mov eax, [mus_sections]
-    and eax, 1
-    mov [mus_role], eax
-    test dword [mus_sections], 3
-    jnz .nosec
-    mov eax, [mus_key]
-    add eax, 5
-    cmp eax, 60
-    jl .k
-    sub eax, 12
-.k:
-    mov [mus_key], eax
+    mov eax, [mus_form]
+    inc eax
+    ; a fire cuts in: the noir tune starts at its head
+    cmp dword [cnt_fire], 0
+    je .nf
+    cmp dword [mus_style], ST_NOIR
+    je .nf
+    cmp dword [force_style], 0
+    jge .nf
+    mov eax, FORM_LEN
+.nf:
+    cmp eax, FORM_LEN
+    jl .same
+    call music_pick_style
+    xor eax, eax
+    cmp dword [cnt_fire], 0
+    je .same
+    mov eax, 1                      ; straight into the head
+.same:
+    mov [mus_form], eax
+    movzx eax, byte [form_seq+rax]
+    mov [mus_kind], eax
+    xor ecx, ecx
+    cmp eax, F_INTRO
+    je .r
+    mov ecx, 1
+.r:
+    mov [mus_role], ecx
+    ; chord chart: A or B
+    mov ebx, [mus_style]
+    mov rcx, [tune_ch_a+rbx*8]
+    cmp eax, F_HEAD_B
+    je .b
+    cmp eax, F_SOLO_B
+    jne .ch
+.b:
+    mov rcx, [tune_ch_b+rbx*8]
+.ch:
+    mov [mus_prog], rcx
 .nosec:
     ; chords for both half bars (+ the next bar's root)
     mov rsi, [mus_prog]
@@ -805,38 +729,35 @@ FUNC part_bass, 16
     call mnote
     RETURN
 .bap:
-    ; boom bap: a fat root, a pickup, a slide toward the next chord
-    mov edi, 100
+    ; boom bap: the written riff, on this bar's roots
+    lea r15, [bap_bass_0]
+    test dword [mus_bar], 1
+    jz .br
+    lea r15, [bap_bass_1]
+.br:
+    movzx edi, byte [r15]
+    cmp edi, 255
+    je .bd
+    call step_tick
+    mov [rbp-48], eax
+    movzx edi, byte [r15+3]
     call vel_f
-    mov edi, I_UBASS
+    movzx eax, byte [r15]
     mov esi, r12d
-    xor edx, edx
-    mov ecx, 20
-    call mnote
-    call rand
-    and eax, 1
-    jz .b2
-    mov edi, 10
-    call step_tick
-    mov [rbp-48], eax
-    mov edi, 84
-    call vel_f
+    cmp eax, 8
+    jl .brt
+    mov esi, r13d                   ; second half follows its chord
+.brt:
+    movzx eax, byte [r15+1]
+    add esi, eax
+    movzx ecx, byte [r15+2]
+    imul ecx, ecx, 3
     mov edi, I_UBASS
-    mov esi, r13d
     mov edx, [rbp-48]
-    mov ecx, 8
     call mnote
-.b2:
-    mov edi, 14
-    call step_tick
-    mov [rbp-48], eax
-    mov edi, 70
-    call vel_f
-    mov edi, I_UBASS
-    lea esi, [r14-2]
-    mov edx, [rbp-48]
-    mov ecx, 5
-    call mnote
+    add r15, 4
+    jmp .br
+.bd:
     RETURN
 .salsa:
     ; tumbao: the fifth on "and of 2", the next chord's root on 4
@@ -923,10 +844,14 @@ FUNC part_keys, 16
     je .stride
     cmp ebx, ST_NOIR
     je .noir
-    ; --- swing comping: one rhythm per bar
-    mov edi, 6
-    call rand_range
-    lea r12, [comp_swing+rax*4]
+    ; --- swing comping: the pianist's written rhythm for this bar
+    mov eax, [mus_bar]
+    lea eax, [rax*2+rax]
+    add eax, [mus_form]
+    xor edx, edx
+    mov ecx, 6
+    div ecx
+    lea r12, [comp_swing+rdx*4]
     xor r13d, r13d
 .c:
     movzx edi, byte [r12+r13]
@@ -1096,153 +1021,145 @@ FUNC part_piano_solo
 ; ---------------------------------------------------------------------
 ;  lead: the motif, answered and resolved over the section
 ; ---------------------------------------------------------------------
-FUNC part_lead, 32
-    cmp dword [mus_intensity], 2
-    jl .out
-    cmp dword [mus_role], 1
-    jne .out
+FUNC part_lead, 48
+    mov eax, [mus_kind]
+    cmp eax, F_INTRO
+    je .out
     mov ebx, [mus_style]
-    cmp ebx, ST_SALSA
-    je .mambo
-    ; bars 0-1 motif, 2-3 motif on the new chords, 4-5 again, 6-7 answer
-    mov eax, [mus_bar]
-    and eax, 1
-    mov [rbp-48], eax               ; which bar of the pair
-    mov eax, [mus_bar]
-    shr eax, 1
-    mov [rbp-52], eax               ; pair 0..3
-    ; lead register
-    mov eax, [mus_lead]
-    mov r14d, 64                    ; low bound
-    cmp eax, I_SAX
-    jne .rg
-    mov r14d, 56
-.rg:
-    xor r13d, r13d                  ; note index
-.n:
-    cmp r13d, [riff_len]
-    jge .out
-    movzx eax, byte [riff_step+r13]
-    mov r12d, eax
-    ; only the notes that fall in this bar
-    mov ecx, [rbp-48]
-    shl ecx, 4
-    sub eax, ecx
-    js .nn
-    cmp eax, 16
-    jge .nn
-    mov [rbp-56], eax               ; step in this bar
-    movsx edi, byte [riff_deg+r13]
-    ; the answer (pair 3) steps down toward home
-    cmp dword [rbp-52], 3
-    jne .d
-    mov eax, [riff_len]
-    sub eax, r13d
-    sub edi, eax
-    add edi, 2
-.d:
-    call degree_note
-    mov edi, eax
-    mov esi, r14d
-    lea edx, [r14+16]
-    call fit_range
-    mov edi, eax
-    ; strong steps land on chord tones
-    mov eax, [rbp-56]
-    test eax, 3
-    jnz .ns
-    xor esi, esi
-    cmp eax, 8
-    jl .sh
-    mov esi, 1
-.sh:
-    call snap_chord
-    mov edi, eax
-.ns:
-    mov [rbp-60], edi
-    ; duration: up to the next note (or long at the end of a phrase)
-    mov ecx, 10
-    lea eax, [r13+1]
-    cmp eax, [riff_len]
-    jl .du
-    mov ecx, 20
-    cmp dword [rbp-52], 3
-    jne .du
-    mov ecx, 36
-.du:
-    mov [rbp-64], ecx
-    mov edi, [rbp-56]
-    call step_tick
-    mov [rbp-56], eax
-    call rand
-    and eax, 15
-    lea edi, [rax+86]
-    call vel_f
-    mov edi, [mus_lead]
-    mov esi, [rbp-60]
-    mov edx, [rbp-56]
-    mov ecx, [rbp-64]
-    call mnote
-.nn:
-    inc r13d
-    jmp .n
-.mambo:
-    ; brass mambo: trumpets on top, trombones a chord tone below
-    mov eax, [mus_bar]
-    and eax, 1
-    shl eax, 2
-    mov [rbp-48], eax               ; first slot for this bar
-    xor r13d, r13d
+    ; which melody
+    mov r12, [tune_mel_a+rbx*8]
+    cmp eax, F_HEAD_B
+    je .mb
+    cmp eax, F_SOLO_B
+    jne .m
 .mb:
-    cmp r13d, 4
-    jge .out
-    mov eax, [rbp-48]
-    add eax, r13d
-    movzx edi, byte [mambo_steps+rax]
-    and edi, 15
-    call step_tick
-    mov [rbp-52], eax
-    xor edi, edi
-    cmp dword [rbp-52], 24
-    jl .mh
-    mov edi, 1
-.mh:
-    mov [rbp-56], edi
-    mov eax, r13d
+    mov r12, [tune_mel_b+rbx*8]
+.m:
+    ; who plays it: the horns in a real city, the pianist in a small town
+    mov eax, [mus_lead]
+    mov [rbp-48], eax
+    cmp dword [mus_intensity], 2
+    jge .who
+    mov dword [rbp-48], I_PIANO
+.who:
+    mov eax, [mus_key]
+    add eax, [tune_base+rbx*4]
+    mov [rbp-52], eax               ; melody base
+    ; the salsa mambo (B) is a horn section: trombones under the trumpets
+    xor eax, eax
+    cmp ebx, ST_SALSA
+    jne .ns
+    cmp dword [mus_kind], F_HEAD_B
+    je .sec
+    cmp dword [mus_kind], F_SOLO_B
+    jne .ns
+.sec:
+    cmp dword [mus_intensity], 2
+    jl .ns
+    mov eax, 1
+.ns:
+    mov [rbp-56], eax
+.n:
+    movzx eax, byte [r12]
+    cmp eax, 255
+    je .out
+    cmp eax, [mus_bar]
+    jne .next
+    movzx r13d, byte [r12+1]        ; step
+    movsx eax, byte [r12+2]
+    add eax, [rbp-52]
+    mov r14d, eax                   ; midi
+    movzx r15d, byte [r12+3]        ; length (16ths)
+    movzx eax, byte [r12+4]
+    mov [rbp-60], eax               ; velocity
+    ; solos: the soloist plays on the tune rather than reading it
+    mov eax, [mus_kind]
+    cmp eax, F_SOLO_A
+    je .var
+    cmp eax, F_SOLO_B
+    jne .play
+.var:
+    cmp dword [mus_bar], 7          ; the cadence stays as written
+    je .play
+    call rand
+    and eax, 3
+    jz .play
+    cmp eax, 1
+    jne .v2
+    ; a neighbouring chord tone
+    call rand
     and eax, 1
-    lea esi, [rax+1]                ; 3rd / 5th on top
-    call chord_tone
-    mov edi, eax
-    mov esi, 67
-    mov edx, 79
-    call fit_range
-    mov r12d, eax
-    mov edi, 104
-    call vel_f
-    mov edi, I_TPT
-    mov esi, r12d
-    mov edx, [rbp-52]
-    mov ecx, 5
-    call mnote
-    mov edi, [rbp-56]
+    lea eax, [rax*2+rax-1]          ; -1 or +2
+    lea edi, [r14+rax]
     xor esi, esi
-    call chord_tone
-    mov edi, eax
-    mov esi, 50
-    mov edx, 62
-    call fit_range
-    mov r12d, eax
-    mov edi, 100
-    call vel_f
-    mov edi, I_TBN
-    mov esi, r12d
-    mov edx, [rbp-52]
-    mov ecx, 5
-    call mnote
-    inc r13d
-    jmp .mb
+    cmp r13d, 8
+    jl .vh
+    mov esi, 1
+.vh:
+    call snap_chord
+    mov r14d, eax
+    jmp .play
+.v2:
+    cmp eax, 2
+    jne .v3
+    ; split a long note into two, stepping up
+    cmp r15d, 4
+    jl .play
+    shr r15d, 1
+    mov edi, r13d
+    call step_tick
+    mov [rbp-64], eax
+    call .note
+    add r13d, r15d
+    add r14d, 2
+    jmp .play
+.v3:
+    ; play it a little early
+    cmp r13d, 2
+    jl .play
+    sub r13d, 2
+.play:
+    mov edi, r13d
+    call step_tick
+    mov [rbp-64], eax
+    call .note
+.next:
+    add r12, 5
+    jmp .n
 .out:
     RETURN
+.note:                              ; r14 midi, r15 16ths, [rbp-64] tick
+    mov edi, [rbp-60]
+    call vel_f
+    mov edi, [rbp-48]
+    mov esi, r14d
+    mov edx, [rbp-64]
+    lea ecx, [r15*2+r15]
+    call mnote
+    cmp dword [rbp-56], 0
+    je .nr
+    ; the trombone a chord tone below
+    lea edi, [r14-4]
+    xor esi, esi
+    cmp r13d, 8
+    jl .th
+    mov esi, 1
+.th:
+    call snap_chord
+    mov edi, eax
+    mov esi, 48
+    mov edx, 62
+    call fit_range
+    mov [rbp-68], eax
+    mov edi, [rbp-60]
+    call vel_f
+    mov edi, I_TBN
+    mov esi, [rbp-68]
+    mov edx, [rbp-64]
+    lea ecx, [r15*2+r15]
+    call mnote
+.nr:
+    ret
 
 ; ---------------------------------------------------------------------
 ;  the city itself: sirens far away while something burns (and, it being

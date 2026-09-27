@@ -1125,6 +1125,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"
+%include "tunes.asm"
 %include "ui.asm"
 %include "trailer.asm"
 %include "undo.asm"
