@@ -215,6 +215,11 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    cmp dword [demo_view], 'm'
+    jne .ldm
+    call pt_minimap_loop_setup
+    jmp .nodemo
+.ldm:
     cmp dword [demo_view], 'Z'
     jne .ldz
     call pt_undo_test
@@ -313,9 +318,12 @@ FUNC main
 .render:
     call update_hover
     call palette_update
-    ; screen shake
-    mov r14d, [cam_x]
-    mov r15d, [cam_y]
+    ; screen shake: offset the camera for this frame only.  Only the
+    ; offset is taken back afterwards - restoring the old position would
+    ; throw away camera moves made while drawing (minimap clicks,
+    ; notification jumps)
+    xor r14d, r14d
+    xor r15d, r15d
     mov eax, [shake]
     test eax, eax
     jz .ns
@@ -327,10 +335,12 @@ FUNC main
     mov ecx, [shake]
     shr ecx, 3
     sub eax, ecx
+    mov r14d, eax
     add [cam_x], eax
     mov edi, 5
     call rand_range
     sub eax, 2
+    mov r15d, eax
     add [cam_y], eax
 .ns:
     call render_world
@@ -339,8 +349,8 @@ FUNC main
     call render_ui
     call draw_tool_preview
     call world_input
-    mov [cam_x], r14d
-    mov [cam_y], r15d
+    sub [cam_x], r14d
+    sub [cam_y], r15d
     call video_present
     call audio_update
     inc dword [frame_count]
@@ -352,6 +362,9 @@ FUNC main
     jl .loop
     mov rdi, [shot_file]
     call video_screenshot
+    cmp dword [demo_view], 'm'
+    jne .quit
+    call pt_minimap_loop_report
 .quit:
     CALLC SDL_Quit
     xor eax, eax

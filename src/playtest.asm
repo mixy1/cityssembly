@@ -1281,3 +1281,47 @@ FUNC pt_undo_test
     lea rdi, [uz_g]
     call pt_undo_report
     RETURN
+
+; --demo 3 out.bmp m : queue a minimap click and let the real loop run
+section .data
+ml_fmt db "LOOP minimap click on 100,20 -> view centred on %d,%d", 10, 0
+section .text
+FUNC pt_minimap_loop_setup
+    mov dword [welcome], 0
+    mov dword [minimap_on], 1
+    mov dword [shake], 40           ; shaking, like after a meteor
+    mov edi, 100
+    mov esi, 20
+    call tile_to_minimap
+    push r12
+    push r13
+    push rax
+    push rdx
+    call minimap_pos
+    pop rdx
+    pop rax
+    lea eax, [rax+r12+3]
+    lea edx, [rdx+r13+3]
+    pop r13
+    pop r12
+    imul eax, [ui_scale]
+    mov [mouse_x], eax
+    imul edx, [ui_scale]
+    mov [mouse_y], edx
+    mov dword [click_pending], 1
+    mov dword [minimap_age], 0
+    RETURN
+
+FUNC pt_minimap_loop_report
+    mov edi, [fb_w]
+    shr edi, 1
+    add edi, [cam_x]
+    mov esi, [fb_h]
+    shr esi, 1
+    add esi, [cam_y]
+    call world_to_tile
+    lea rdi, [ml_fmt]
+    mov esi, eax
+    xor eax, eax
+    CALLC printf
+    RETURN

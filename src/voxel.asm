@@ -1259,10 +1259,6 @@ FUNC blit_sprite, 32
     inc dword [rbp-64]
     jmp .row
 .colD:                              ; see-through: checkerboard of pixels
-    mov eax, ebx
-    xor eax, [rbp-72]
-    test eax, 1
-    jnz .cnD
     movzx eax, byte [rsi]
     test eax, eax
     jz .cnD
@@ -1270,7 +1266,14 @@ FUNC blit_sprite, 32
     add ecx, r10d
     cmp cx, [rdx]
     jb .cnD
+    ; every pixel keeps the building's depth, so smoke and cars that move
+    ; behind it later stay hidden (no flicker through the holes); only
+    ; what was already drawn behind shows through
     mov [rdx], cx
+    mov ecx, ebx
+    xor ecx, [rbp-72]
+    test ecx, 1
+    jnz .cnD
     mov al, [r11+rax]
     mov [rbx], al
     mov cl, [blit_tint]
