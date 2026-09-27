@@ -374,137 +374,214 @@ FUNC poll_events
     RETURN
 
 ; ---------------------------------------------------------------------
-;  demo: lay out a small town next to the highway and fast-forward
+;  demo: lay out a town next to the highway and fast-forward
 ; ---------------------------------------------------------------------
 FUNC demo_build, 16
     mov dword [welcome], 0
-    mov qword [money], 200000
+    mov qword [money], 400000
     mov r12d, [hwy_row]
-    ; main street continuing the highway east, cross streets every 7
+    ; avenue continuing the highway
     mov ebx, 22
 .ms:
     mov edi, ebx
     mov esi, r12d
+    mov edx, RT_AVENUE
     call demo_road
     inc ebx
-    cmp ebx, 52
+    cmp ebx, 60
     jl .ms
-    mov ebx, 24
+    ; service street and cross streets
+    mov ebx, 22
 .cs:
-    mov r13d, -12
+    mov r13d, -14
 .csy:
     mov edi, ebx
     lea esi, [r12+r13]
+    mov edx, RT_STREET
     call demo_road
     inc r13d
-    cmp r13d, 13
+    cmp r13d, 15
     jl .csy
-    add ebx, 7
-    cmp ebx, 52
+    add ebx, 4
+    cmp ebx, 26
     jl .cs
-    ; parallel streets
-    mov r13d, -12
+    mov ebx, 26
+.cs2:
+    mov r13d, -14
+.cs2y:
+    mov edi, ebx
+    lea esi, [r12+r13]
+    mov edx, RT_STREET
+    call demo_road
+    inc r13d
+    cmp r13d, 15
+    jl .cs2y
+    add ebx, 7
+    cmp ebx, 55
+    jl .cs2
+    mov r13d, -14
 .ps:
-    mov ebx, 24
+    cmp r13d, 0
+    je .psn
+    mov ebx, 22
 .psx:
     mov edi, ebx
     lea esi, [r12+r13]
+    mov edx, RT_STREET
     call demo_road
     inc ebx
-    cmp ebx, 46
+    cmp ebx, 55
     jl .psx
-    add r13d, 6
-    cmp r13d, 13
+.psn:
+    add r13d, 7
+    cmp r13d, 15
     jl .ps
+    ; north highway link down to the town
+    mov r13d, 18
+.nh:
+    mov edi, 44
+    mov esi, r13d
+    mov edx, RT_HIGHWAY
+    call demo_road
+    inc r13d
+    lea eax, [r12-14]
+    cmp r13d, eax
+    jl .nh
     call roads_update_all
-    ; zones: residential north, commercial along main, industry south
-    mov r13d, -11
+    ; zones
+    mov r13d, -13
 .zy:
-    mov ebx, 25
+    mov ebx, 27
 .zx:
     mov edi, ebx
     lea esi, [r12+r13]
     call tile_at
     test rax, rax
     jz .zn
-    cmp byte [rax+T_OBJ], OBJ_NONE
+    mov cl, [rax+T_OBJ]
+    cmp cl, OBJ_NONE
     je .zok
-    cmp byte [rax+T_OBJ], OBJ_TREE
+    cmp cl, OBJ_TREE
     jne .zn
 .zok:
     cmp byte [rax+T_TERRAIN], TER_WATER
     je .zn
     mov byte [rax+T_OBJ], OBJ_NONE
+    ; north: homes (dense to the east), middle: shops / offices,
+    ; south: shops + dense homes, far south: industry
     mov cl, ZONE_R
-    cmp r13d, -1
+    cmp r13d, -7
+    jl .zr
+    mov cl, ZONE_CH
+    cmp ebx, 40
+    jl .zm
+    mov cl, ZONE_O
+.zm:
+    cmp r13d, 0
     jl .zset
     mov cl, ZONE_C
-    cmp r13d, 1
-    jle .zset
-    mov cl, ZONE_I
+    cmp ebx, 40
+    jl .zc
+    mov cl, ZONE_RH
+.zc:
     cmp r13d, 7
-    jge .zset
-    mov cl, ZONE_R
+    jl .zset
+    mov cl, ZONE_I
+    jmp .zset
+.zr:
+    cmp ebx, 40
+    jl .zset
+    mov cl, ZONE_RH
 .zset:
     mov [rax+T_ZONE], cl
 .zn:
     inc ebx
-    cmp ebx, 45
+    cmp ebx, 54
     jl .zx
     inc r13d
-    cmp r13d, 12
+    cmp r13d, 14
     jl .zy
-    ; services
-    mov edi, BK_COAL
-    mov esi, 46
-    lea edx, [r12+8]
-    call demo_place
-    mov edi, BK_WTOWER
-    mov esi, 46
-    lea edx, [r12-3]
-    call demo_place
-    mov edi, BK_WTOWER
-    mov esi, 46
-    lea edx, [r12-4]
-    call demo_place
-    mov edi, BK_WTOWER
-    mov esi, 46
-    lea edx, [r12-5]
-    call demo_place
-    mov edi, BK_POLICE
-    mov esi, 18
-    lea edx, [r12-6]
-    call demo_place
-    mov edi, BK_FIRE
-    mov esi, 18
-    lea edx, [r12+3]
-    call demo_place
-    mov edi, BK_CLINIC
-    mov esi, 20
-    lea edx, [r12-2]
-    call demo_place
-    mov edi, BK_SCHOOL
-    mov esi, 18
-    lea edx, [r12-10]
-    call demo_place
-    mov edi, BK_PARK
-    mov esi, 21
-    lea edx, [r12-2]
-    call demo_place
-    mov edi, BK_WIND
-    mov esi, 46
-    lea edx, [r12+12]
-    call demo_place
-    ; fast-forward
-    mov dword [sim_speed], 1
-    mov ebx, 700
+    ; services along the service street and the east side
+%macro DPLACE 3
+    mov edi, %1
+    mov esi, %2
+    lea edx, [r12+%3]
+    call demo_force
+%endmacro
+    DPLACE BK_BUSDEPOT, 24, -12
+    DPLACE BK_HIGH, 24, -9
+    DPLACE BK_CLINIC, 25, -6
+    DPLACE BK_POLICE, 24, -4
+    DPLACE BK_PARK, 25, -2
+    DPLACE BK_FIRE, 24, 2
+    DPLACE BK_ELEM, 25, 5
+    DPLACE BK_LANDFILL, 24, 8
+    DPLACE BK_WTOWER, 55, -3
+    DPLACE BK_WTOWER, 55, -4
+    DPLACE BK_WTOWER, 55, -5
+    DPLACE BK_WTOWER, 55, -6
+    DPLACE BK_WTOWER, 55, -7
+    DPLACE BK_WTOWER, 55, -9
+    DPLACE BK_WTOWER, 55, -10
+    DPLACE BK_WTOWER, 55, -11
+    DPLACE BK_SEWAGE, 55, 3
+    DPLACE BK_SEWAGE, 55, 4
+    DPLACE BK_WIND, 55, 2
+    DPLACE BK_COAL, 56, 8
+    DPLACE BK_COAL, 56, 11
+    DPLACE BK_WTOWER, 55, -12
+    DPLACE BK_WTOWER, 55, -13
+    DPLACE BK_WTOWER, 56, -3
+    DPLACE BK_WTOWER, 56, -4
+    DPLACE BK_WTOWER, 56, -5
+    DPLACE BK_WTOWER, 56, -6
+    ; power line down the east edge links the plants to the city
+    mov r13d, -8
+.pl:
+    mov edi, 55
+    lea esi, [r12+r13]
+    call tile_at
+    test rax, rax
+    jz .pln
+    cmp byte [rax+T_OBJ], OBJ_NONE
+    jne .pln
+    mov byte [rax+T_OBJ], OBJ_POWER
+    mov byte [rax+T_ZONE], 0
+.pln:
+    inc r13d
+    cmp r13d, 14
+    jl .pl
+    call roads_update_all
+    ; bus stops
+    mov edi, 30
+    mov esi, r12d
+    call demo_stop
+    mov edi, 44
+    mov esi, r12d
+    call demo_stop
+    mov edi, 33
+    lea esi, [r12-10]
+    call demo_stop
+    mov edi, 47
+    lea esi, [r12+10]
+    call demo_stop
+    mov dword [net_dirty], 1
+    call networks_update
+    call coverage_update
+    call stats_update
+    ; fast-forward: full ticks so traffic and deliveries run too
+    mov dword [sim_speed], 3
+    mov ebx, 700*5
 .ff:
-    call sim_day
+    call sim_tick
+    call agents_tick
+    inc dword [anim_tick]
     dec ebx
     jnz .ff
+    mov dword [sim_speed], 1
     mov rax, [money]
     mov [money_shown], rax
-    mov edi, 34
+    mov edi, 38
     mov esi, r12d
     call camera_center_tile
     ; optional view for screenshots
@@ -515,7 +592,7 @@ FUNC demo_build, 16
 .v1:
     cmp eax, 'm'
     jne .v2
-    mov dword [panel], PANEL_MENU
+    mov dword [panel], PANEL_STATS
 .v2:
     cmp eax, 'o'
     jne .v3
@@ -527,86 +604,36 @@ FUNC demo_build, 16
 .v4:
     cmp eax, 'i'
     jne .v5
-    mov dword [sel_x], 28
-    mov ecx, r12d
-    sub ecx, 4
+    mov dword [sel_x], 44
+    lea ecx, [r12-3]
     mov [sel_y], ecx
 .v5:
     cmp eax, 's'
     jne .v6
-    mov dword [submenu], 5
-    mov dword [submenu_x], 400
+    mov dword [submenu], 3
+    mov dword [submenu_x], 300
 .v6:
     cmp eax, 'p'
     jne .v7
-    mov dword [overlay_mode], OV_POWER
+    mov dword [tool], T_POWERLN
 .v7:
-    cmp eax, 'l'
+    cmp eax, 'w'
     jne .v8
-    ; save, wipe with a new city, load back
-    call save_city
-    call new_city
-    mov dword [welcome], 0
-    call load_city
-    mov edi, 34
-    mov esi, [hwy_row]
-    call camera_center_tile
+    mov dword [tool], T_PIPE
 .v8:
     cmp eax, 't'
     jne .v9
-    ; exercise the drag tools the way a mouse release does
-    mov dword [drag_active], 1
-    mov dword [tool], T_ROAD
-    mov dword [drag_sx], 52
-    mov [drag_sy], r12d
-    mov dword [hover_tx], 60
-    lea eax, [r12-8]
-    mov [hover_ty], eax
-    mov dword [hover_valid], 1
-    call tool_collect
-    call tool_apply
-    mov dword [tool], T_ZONE_R
-    mov dword [drag_sx], 53
-    lea eax, [r12-7]
-    mov [drag_sy], eax
-    mov dword [hover_tx], 59
-    lea eax, [r12-1]
-    mov [hover_ty], eax
-    call tool_collect
-    call tool_apply
-    mov dword [tool], T_BULLDOZE
-    mov dword [drag_sx], 30
-    lea eax, [r12-11]
-    mov [drag_sy], eax
-    mov dword [hover_tx], 36
-    lea eax, [r12-8]
-    mov [hover_ty], eax
-    call tool_collect
-    call tool_apply
-    mov dword [tool], T_TREE
-    mov dword [drag_sx], 53
-    lea eax, [r12+2]
-    mov [drag_sy], eax
-    mov dword [hover_tx], 58
-    lea eax, [r12+5]
-    mov [hover_ty], eax
-    call tool_collect
-    call tool_apply
-    mov dword [tool], T_POWERLN
-    mov dword [drag_sx], 61
-    lea eax, [r12-8]
-    mov [drag_sy], eax
-    mov dword [hover_tx], 61
-    lea eax, [r12+4]
-    mov [hover_ty], eax
-    call tool_collect
-    call tool_apply
-    mov dword [drag_active], 0
-    mov dword [tool], T_INSPECT
-    mov edi, 50
-    mov esi, [hwy_row]
-    call camera_center_tile
+    mov dword [overlay_mode], OV_TRAFFIC
 .v9:
+    cmp eax, 'y'
+    jne .v10
+    mov dword [panel], PANEL_POLICIES
+.v10:
+    cmp eax, 'z'
+    jne .v11
+    mov dword [tool], T_ZONETOOL
+    mov dword [zone_type], ZONE_RH
+.v11:
     RETURN
 
 ; offline render of the soundtrack into a wav (for testing)
@@ -667,25 +694,68 @@ FUNC wav_dump
 .out:
     RETURN
 
-; demo_road(edi x, esi y)
+; demo_road(edi x, esi y, edx type): road with a pipe underneath
 FUNC demo_road
+    mov ebx, edx
     call tile_at
     test rax, rax
     jz .o
     mov byte [rax+T_OBJ], OBJ_ROAD
     mov byte [rax+T_ZONE], 0
+    mov [rax+T_ROADTYPE], bl
+    or byte [rax+T_FLAGS2], F2_PIPE
 .o:
     RETURN
 
-; demo_place(edi kind, esi x, edx y)
-FUNC demo_place
+; demo_stop(edi x, esi y)
+FUNC demo_stop
+    call tile_at
+    test rax, rax
+    jz .o
+    or byte [rax+T_FLAGS2], F2_BUSSTOP
+.o:
+    RETURN
+
+; demo_force(edi kind, esi x, edx y): place without the usual checks
+FUNC demo_force
     mov [build_kind], edi
     mov dword [tool], T_BUILD
     mov dword [tl_n], 1
     mov [tl_x], esi
     mov [tl_y], edx
-    call tool_evaluate
+    ; clear the footprint first
+    mov r12d, esi
+    mov r13d, edx
+    call bld_rec
+    movzx r14d, byte [rax+BI_SIZE]
+    xor ebx, ebx
+.y:
+    xor r15d, r15d
+.x:
+    lea edi, [r12+r15]
+    lea esi, [r13+rbx]
+    call tile_at
+    test rax, rax
+    jz .n
+    mov byte [rax+T_OBJ], OBJ_NONE
+    mov byte [rax+T_ZONE], 0
+    mov byte [rax+T_TERRAIN], TER_GRASS
+.n:
+    inc r15d
+    cmp r15d, r14d
+    jl .x
+    inc ebx
+    cmp ebx, r14d
+    jl .y
+    mov edi, [build_kind]
+    call bld_rec
+    mov eax, [rax+BI_COST]
+    mov [tl_cost], eax
+    mov byte [tl_ok], 1
+    mov dword [tl_valid], 1
+    mov dword [force_place], 1
     call tool_apply
+    mov dword [force_place], 0
     mov dword [tool], T_INSPECT
     RETURN
 
@@ -701,8 +771,10 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "voxel.asm"
 %include "buildings.asm"
 %include "sprites.asm"
+%include "sprites2.asm"
 %include "render.asm"
 %include "sim.asm"
+%include "traffic.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "ui.asm"

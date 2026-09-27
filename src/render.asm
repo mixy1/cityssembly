@@ -9,6 +9,11 @@
 ORIGIN_X equ MAP_W*16
 
 section .bss
+eff_overlay     resd 1
+prob_n          resd 1
+prob_x          resd 256
+prob_y          resd 256
+prob_t          resb 256
 mouse_x         resd 1          ; window pixels
 mouse_y         resd 1
 mouse_wx        resd 1          ; world pixels
@@ -236,7 +241,11 @@ FUNC ground_sprite
     movzx eax, byte [rbx+T_OBJ]
     cmp eax, OBJ_ROAD
     jne .nr
-    movzx eax, byte [rbx+T_SUB]
+    movzx eax, byte [rbx+T_ROADTYPE]
+    CLAMP eax, 0, 2
+    shl eax, 4
+    movzx ecx, byte [rbx+T_SUB]
+    add eax, ecx
     mov eax, [spr_road+rax*4]
     RETURN
 .nr:
@@ -286,6 +295,8 @@ FUNC ground_sprite
 ;  render_world
 ; ---------------------------------------------------------------------
 FUNC render_world, 32
+    call compute_eff_overlay
+    mov dword [prob_n], 0
     call set_target_world
     mov edi, RAMP(R_DEEPWATER, 1)
     call clear_target
@@ -340,7 +351,7 @@ FUNC render_world, 32
     mov edx, [draw_sy]
     mov ecx, r14d
     xor r8d, r8d
-    cmp dword [overlay_mode], 0
+    cmp dword [eff_overlay], 0
     je .gblit
     push rax
     push rax
@@ -372,7 +383,14 @@ FUNC render_world, 32
     je .zbld
     cmp eax, OBJ_SERVICE
     je .svc
+    cmp eax, OBJ_ROAD
+    je .road
     jmp .next
+.road:
+    test byte [rbx+T_FLAGS2], F2_BUSSTOP
+    jz .next
+    mov edi, [spr_busstop]
+    jmp .blitobj
 .tree:
     movzx eax, byte [rbx+T_SUB]
     movzx ecx, byte [rbx+T_VARIANT]
@@ -387,8 +405,13 @@ FUNC render_world, 32
     mov edi, [spr_power+rax*4]
     jmp .blitobj
 .zbld:
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .next
     test byte [rbx+T_FLAGS], F_BUILD
     jz .grown
+    mov edi, [spr_construct2]
+    cmp byte [rbx+T_SIZE], 2
+    je .blitobj
     movzx eax, byte [rbx+T_TIMER]
     shr eax, 5
     CLAMP eax, 0, 2
@@ -399,26 +422,40 @@ FUNC render_world, 32
     movzx esi, byte [rbx+T_LEVEL]
     CLAMP esi, 1, 5
     movzx edx, byte [rbx+T_VARIANT]
+    movzx ecx, byte [rbx+T_SIZE]
+    xor r8d, r8d
+    cmp edi, ZONE_I
+    jne .gz
+    movzx r8d, byte [rbx+T_SUB]
+.gz:
     call zone_sprite
     mov edi, eax
-    xor r8d, r8d
-    test byte [rbx+T_FLAGS], F_ABANDON
-    jz .nab
-    lea r8, [remap_dark]
-.nab:
-    test byte [rbx+T_FLAGS], F_FIRE
-    jz .blit2
-    lea r8, [remap_fire]
-    jmp .blit2
+    mov [rbp-48], eax
+    mov rsi, rbx
+    call building_remap
+    mov r8, rax
+    mov esi, [draw_sx]
+    mov edx, [draw_sy]
+    mov ecx, r14d
+    mov edi, [rbp-48]
+    call blit_sprite
+    mov edi, [rbp-48]
+    call note_problem
+    jmp .fires
 .svc:
     test byte [rbx+T_FLAGS], F_ANCHOR
     jz .next
     movzx eax, byte [rbx+T_SUB]
     mov edi, [spr_bld+rax*4]
-    xor r8d, r8d
-    test byte [rbx+T_FLAGS], F_FIRE
-    jz .svc2
-    lea r8, [remap_fire]
+    mov [rbp-48], edi
+    push rax
+    push rax
+    mov rsi, rbx
+    call building_remap
+    mov r8, rax
+    pop rax
+    pop rax
+    mov edi, [rbp-48]
 .svc2:
     mov r15d, eax
     mov esi, [draw_sx]
@@ -465,6 +502,184 @@ FUNC render_world, 32
     inc r13d
     cmp r13d, MAP_W
     jl .ty
+    cmp dword [eff_overlay], OV_WATER
+    jne .np
+    call draw_pipes
+.np:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  building_remap(rsi tile) -> rax colour table for info views
+; ---------------------------------------------------------------------
+building_remap:
+    xor eax, eax
+    test byte [rsi+T_FLAGS], F_FIRE
+    jz .a
+    lea rax, [remap_fire]
+    ret
+.a: test byte [rsi+T_FLAGS], F_ABANDON
+    jz .b
+    lea rax, [remap_dark]
+    ret
+.b: mov ecx, [eff_overlay]
+    cmp ecx, OV_POWER
+    jne .c
+    test byte [rsi+T_FLAGS], F_POWER
+    jnz .ok
+    lea rax, [remap_red]
+    ret
+.c: cmp ecx, OV_WATER
+    jne .ok
+    cmp byte [rsi+T_OBJ], OBJ_ZONEBLD
+    jne .ok
+    test byte [rsi+T_FLAGS], F_WATER
+    jnz .ok
+    lea rax, [remap_red]
+    ret
+.ok:
+    ret
+
+; ---------------------------------------------------------------------
+;  note_problem(edi sprite): remember an icon above this building
+; ---------------------------------------------------------------------
+note_problem:
+    movzx eax, byte [rbx+T_PROBLEM]
+    test eax, eax
+    jz .o
+    mov ecx, [prob_n]
+    cmp ecx, 256
+    jge .o
+    mov [prob_t+rcx], al
+    mov eax, [draw_sx]
+    mov [prob_x+rcx*4], eax
+    shl edi, 4
+    movsx eax, word [spr_table+rdi+6]
+    mov edx, [draw_sy]
+    sub edx, eax
+    sub edx, 4
+    mov [prob_y+rcx*4], edx
+    inc dword [prob_n]
+.o: ret
+
+; ---------------------------------------------------------------------
+;  draw_pipes: the water / sewage network, shown in the water view
+; ---------------------------------------------------------------------
+FUNC draw_pipes, 32
+    xor r13d, r13d
+.ty:
+    xor r12d, r12d
+.tx:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    mov rbx, rax
+    mov rdi, rbx
+    call is_pipe_node
+    test eax, eax
+    jz .next
+    mov edi, r12d
+    mov esi, r13d
+    call tile_screen
+    cmp eax, -20
+    jl .next
+    mov ecx, [fb_w]
+    add ecx, 20
+    cmp eax, ecx
+    jg .next
+    cmp edx, -20
+    jl .next
+    mov ecx, [fb_h]
+    add ecx, 20
+    cmp edx, ecx
+    jg .next
+    mov [rbp-48], eax               ; top x
+    add edx, 8
+    mov [rbp-52], edx               ; centre y
+    xor r14d, r14d
+.d:
+    mov edi, r12d
+    mov esi, r13d
+    add edi, [dir_dx+r14*4]
+    add esi, [dir_dy+r14*4]
+    call tile_at
+    test rax, rax
+    jz .dn
+    mov rdi, rax
+    call is_pipe_node
+    test eax, eax
+    jz .dn
+    ; segment from the centre to the shared edge
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    mov edx, [pipe_ex+r14*4]
+    add edx, edi
+    mov ecx, [pipe_ey+r14*4]
+    add ecx, esi
+    call pipe_line
+.dn:
+    inc r14d
+    cmp r14d, 4
+    jl .d
+    ; junction dot
+    mov edi, [rbp-48]
+    dec edi
+    mov esi, [rbp-52]
+    dec esi
+    mov edx, 3
+    mov ecx, 2
+    mov r8d, RAMP(R_GLASS, 7)
+    call fill_rect
+.next:
+    inc r12d
+    cmp r12d, MAP_W
+    jl .tx
+    inc r13d
+    cmp r13d, MAP_W
+    jl .ty
+    RETURN
+
+section .data
+pipe_ex dd 8, 8, -8, -8
+pipe_ey dd -4, 4, 4, -4
+section .text
+
+; thick pipe line (edi x0, esi y0, edx x1, ecx y1): 2:1 isometric steps
+FUNC pipe_line
+    mov r12d, edi
+    mov r13d, esi
+    mov r14d, edx
+    mov r15d, ecx
+    ; steps along x (always 8 px, with y changing by 4)
+    xor ebx, ebx
+.l:
+    cmp ebx, 8
+    jg .o
+    mov eax, r14d
+    sub eax, r12d
+    imul eax, ebx
+    sar eax, 3
+    lea edi, [r12+rax]
+    mov eax, r15d
+    sub eax, r13d
+    imul eax, ebx
+    sar eax, 3
+    lea esi, [r13+rax]
+    push rdi
+    push rsi
+    dec edi
+    mov edx, 3
+    mov ecx, 2
+    mov r8d, RAMP(R_DEEPWATER, 1)
+    call fill_rect
+    pop rsi
+    pop rdi
+    mov edx, 2
+    mov ecx, 1
+    mov r8d, RAMP(R_GLASS, 7)
+    call fill_rect
+    inc ebx
+    jmp .l
+.o:
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -523,55 +738,71 @@ FUNC draw_diamond, 16
 .d:
     RETURN
 
-; overlay_remap(rdi tile) -> rax remap table (heat colour tint)
+; overlay_remap(rdi tile) -> rax remap table for the ground
 FUNC overlay_remap
     mov rbx, rdi
     mov r12, rdi
     sub r12, tiles
     shr r12, TILE_SHIFT             ; map index
-    mov eax, [overlay_mode]
+    mov eax, [eff_overlay]
     cmp eax, OV_POWER
     jne .w
-    mov edi, F_POWER
-    mov r13d, 6
-    mov r14d, 14
-    jmp .util
-.w:
-    cmp eax, OV_WATER
-    jne .maps
-    mov edi, F_WATER
-    mov r13d, 2
-    mov r14d, 13
-.util:
-    test [rbx+T_FLAGS], dil
-    jnz .good
-    ; only mark things that want the utility
-    push rdi
-    push rdi
+    test byte [rbx+T_FLAGS], F_POWER
+    jnz .g6
     mov rdi, rbx
-    xor esi, esi
-    call conductive
-    pop rdi
-    pop rdi
+    call power_conductive
     test eax, eax
     jz .ident
-    mov eax, r14d
+    mov eax, 14
     jmp .tab
-.good:
-    mov eax, r13d
+.g6:
+    mov eax, 6
     jmp .tab
-.maps:
+.w:
+    cmp eax, OV_WATER
+    jne .tr
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    jne .wl
+    ; water pollution on rivers and lakes
+    movzx eax, byte [map_wpol+r12]
+    test eax, eax
+    jz .wc
+    shr eax, 4
+    add eax, 8
+    CLAMP eax, 8, 15
+    jmp .tab
+.wc:
+    mov eax, 2
+    jmp .tab
+.wl:
+    test byte [rbx+T_FLAGS], F_WATER
+    jz .ident
+    mov eax, 3
+    test byte [rbx+T_FLAGS2], F2_DIRTY
+    jz .tab
+    mov eax, 11
+    jmp .tab
+.tr:
     cmp eax, OV_TRAFFIC
     jne .m2
     cmp byte [rbx+T_OBJ], OBJ_ROAD
     jne .ident
-    movzx eax, byte [rbx+T_TRAFFIC]
-    jmp .bad
+    ; green = flowing, yellow = busy, red = jammed
+    movzx eax, byte [rbx+T_JAM]
+    shl eax, 1
+    movzx ecx, byte [rbx+T_TRAFFIC]
+    shr ecx, 2
+    add eax, ecx
+    CLAMP eax, 0, 255
+    imul eax, 10
+    shr eax, 8
+    add eax, 5
+    jmp .tab
 .m2:
     cmp eax, OV_HAPPY
     jne .m3
-    cmp byte [rbx+T_ZONE], ZONE_R
-    jne .ident
+    cmp byte [rbx+T_ZONE], 0
+    je .ident
     cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
     jne .ident
     movzx eax, byte [rbx+T_HAPPY]
@@ -579,6 +810,57 @@ FUNC overlay_remap
     shr eax, 1
     jmp .goodv
 .m3:
+    cmp eax, OV_GARBAGE
+    jne .m4
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .gcov
+    movzx eax, byte [rbx+T_GARBAGE]
+    jmp .bad
+.gcov:
+    movzx eax, byte [map_garb+r12]
+    test eax, eax
+    jz .ident
+    jmp .goodv
+.m4:
+    cmp eax, OV_RESOURCE
+    jne .m5
+    movzx eax, byte [rbx+T_RES]
+    test eax, eax
+    jz .ident
+    movzx eax, byte [res_heat+rax]
+    jmp .tab
+.m5:
+    cmp eax, OV_EDU
+    jne .m6
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .ecov
+    movzx eax, byte [rbx+T_ZONE]
+    cmp byte [zone_class+rax], ZC_RES
+    jne .ecov
+    movzx eax, byte [rbx+T_EDU]
+    jmp .goodv
+.ecov:
+    movzx eax, byte [map_elem+r12]
+    movzx ecx, byte [map_high+r12]
+    add eax, ecx
+    movzx ecx, byte [map_uni+r12]
+    add eax, ecx
+    shr eax, 1
+    test eax, eax
+    jz .ident
+    jmp .goodv
+.m6:
+    cmp eax, OV_DESIRE_R
+    jb .m7
+    ; zone desirability preview
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    je .ident
+    mov edi, eax
+    sub edi, OV_DESIRE_R
+    mov esi, r12d
+    call desirability_at
+    jmp .goodv
+.m7:
     mov rcx, [ov_maps+rax*8]
     test rcx, rcx
     jz .ident
@@ -605,8 +887,39 @@ FUNC overlay_remap
     lea rax, [remap_dark]
     RETURN
 
+; quick desirability for a zone class (edi class, esi map index) -> eax
+desirability_at:
+    movzx eax, byte [map_lv+rsi]
+    cmp edi, ZC_IND
+    jne .n1
+    shr eax, 1
+    add eax, 60
+    movzx ecx, byte [map_crime+rsi]
+    shr ecx, 2
+    sub eax, ecx
+    jmp .o
+.n1:
+    movzx ecx, byte [map_pol+rsi]
+    sub eax, ecx
+    cmp edi, ZC_RES
+    jne .n2
+    movzx ecx, byte [map_noise+rsi]
+    shr ecx, 1
+    sub eax, ecx
+    movzx ecx, byte [map_park+rsi]
+    shr ecx, 2
+    add eax, ecx
+    jmp .o
+.n2:
+    movzx ecx, byte [map_noise+rsi]
+    shr ecx, 2
+    add eax, ecx
+.o: CLAMP eax, 0, 255
+    ret
+
 section .data
 align 8
-ov_maps dq 0, 0, 0, map_pol, map_crime, map_lv, 0, map_police, map_fire, map_health, map_edu, 0
-ov_good db 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1
+ov_maps dq 0, 0, 0, map_pol, map_noise, map_crime, map_lv, 0, map_police, map_fire, map_health, 0, 0, map_transit, 0, 0
+ov_good db 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1
+res_heat db 0, 6, 4, 10
 section .text

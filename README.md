@@ -34,53 +34,104 @@ Run `dist/cityssembly.exe` from Windows, or straight from WSL with
 
 ## Playing
 
-Start by extending the **highway** on the west edge with a road, zone some
-**residential (1)** and **industrial (3)** land next to it, and add a power
-plant. Roads, zoned lots and buildings all carry power and water, so power
-lines are only needed to bridge gaps. Then chase the advisor goals shown in
-the top-left.
+Start by extending one of the two **regional highways** (west and north) with
+a road, zone some homes and industry next to it, and add a power plant. Every
+tool shows its own **info view** while you use it:
+
+- power tools show the grid
+- water tools show the underground **pipe network** and who is served
+- zoning shows desirability for that zone
+- roads show traffic
+- services show their coverage
+
+Then chase the advisor goals shown in the top-left.
 
 | Input | Action |
 |---|---|
-| Left drag | build with the current tool (roads draw L-shapes, zones draw rectangles) |
-| Right drag / WASD / arrows | pan (Shift = faster) |
-| Right click | cancel drag / back to Inspect |
+| Left drag | build with the current tool (roads/pipes/lines draw L-shapes, zones draw rectangles) |
+| Right drag / WASD / arrows | pan (Shift = faster); right click cancels |
 | Mouse wheel, `-` `=` | zoom |
-| `Q` `B` `R` `L` `T` | inspect, bulldoze, road, power line, trees |
-| `1` `2` `3` `X` | residential, commercial, industrial, de-zone |
+| `Q` `B` `R` `T` `P` `L` | inspect, bulldoze, road, trees, water pipes, power lines |
+| `1` - `6` | zones: residential, commercial, industry, office, dense residential, dense commercial |
+| `X` | de-zone empty lots |
 | `Space`, `[` `]` | pause, game speed |
-| `O` | cycle data overlays (power, water, pollution, crime, land value, traffic, coverage, happiness) |
-| `F2` | budget and taxes (with history charts) |
+| `O` | cycle info views |
+| `F2` `F3` `F4` | budget & taxes, policies, city statistics |
 | `Tab` | minimap (click it to jump) |
-| `N` | lock daylight, `M` music on/off |
+| `N` / `M` | lock daylight / music on-off |
 | `F5` / `F9` | save / load (`city.sav`) |
-| `F11` | fullscreen, `F1` help, `Esc` menu |
+| `F11`, `F1`, `Esc` | fullscreen, help, menu |
+
+Icons above buildings show their most urgent problem (no power, no water,
+sewage, garbage, missing goods, missing workers, fire, no road, no route).
+Inspect a building for the full picture and what it needs to grow.
 
 ### How the city works
 
-- **Growth.** Each zoned tile computes a desirability from land value, demand,
-  services, pollution and crime. Buildings grow through five levels (cottage
-  → tower); each level has requirements:
-  - level 1: road access and power; residential and industry also need a road
-    link to the regional highway
-  - level 2: running water
-  - level 4: police and fire cover
-  - level 5: schools and health care (high-tech industry needs education)
-- **Why won't it grow?** Inspect a building: the panel tells you what's missing.
-- **Utilities** are real networks. A power plant only supplies the grid it
-  touches. Overloaded grids brown out, dimming a share of the city. Water pumps
-  must touch water and need power themselves.
-- **Services** (police, fire, health, education, parks) cover a radius and only
-  work when powered. Their coverage feeds land value, crime and growth.
-- **Pollution** comes from industry, coal and traffic. It drifts over
-  neighbourhoods and lowers land value. Trees and parks soak it up.
-- **Traffic.** Every building sends trips onto nearby roads. Busy roads slow
-  cars and add pollution; more, better-spread roads relieve it.
-- **Fires** break out and spread. Fire stations extinguish them, or you can
-  send firefighters from the inspector. Big cities may be hit by **meteors**
-  (disasters can be turned off in the menu).
-- **Money.** Taxes (0–20%) change demand and happiness; upkeep is paid monthly.
-  Milestones and goals pay cash rewards and unlock buildings.
+**Zones.** There are six zone types: low- and high-density residential and
+commercial, industry, and offices. Buildings grow through five levels, and
+dense zones merge into **2x2 buildings** (courtyard blocks, twin towers, malls,
+cinemas, HQ towers, big factories). Industry specialises by the land beneath
+it: farms on fertile soil, forestry in forests, mines on ore, manufacturing
+elsewhere. The *Natural resources* info view shows where each is.
+
+Each level has requirements:
+
+- level 1: road access and electricity; homes and factories also need a road
+  link to the region
+- level 2: water and sewage
+- level 3: garbage collection, goods for shops, staff for jobs, clean water
+- level 4: police and fire cover; homes also need health care and schools,
+  and offices need high schools
+- level 5: higher education and parks (a university for jobs)
+
+**Electricity** spreads between buildings within 2 tiles. Roads don't carry
+it, so use power lines to reach across gaps. Overloaded grids brown out.
+
+**Water** flows through pipes from pumps (which must touch water) and water
+towers, and serves buildings within 3 tiles of a pipe. Sewage goes back
+through the same pipes to **sewage outlets**, and outlets **pollute the river
+downstream**. A pump drawing polluted water supplies dirty water, which makes
+people sick.
+
+**Traffic** is agent-based. Every vehicle has a real origin, destination and
+route (Dijkstra over the road graph with live congestion):
+
+- commuters and shoppers
+- goods trucks from industry to shops
+- exports and imports over the highways
+- visitors
+- fire trucks that must reach a fire to put it out
+- garbage trucks that sweep a block and return to their depot
+- police patrols
+
+Roads have per-lane capacity, so queues and jams form; stuck drivers re-route.
+Streets, avenues (4 lanes with a median) and highways (fast, but no building
+access) have different capacity and speed. Build a highway to the map edge for
+another regional link.
+
+**Transit.** A bus depot runs buses between every bus stop. Residents near a
+stop ride instead of driving, which cuts traffic and earns fares.
+
+**Workforce.** Elementary schools, high schools and universities raise
+residents' education. Offices need educated workers and hi-tech industry needs
+graduates; the wrong mix leaves jobs unfilled.
+
+**Garbage** piles up without collection. Landfills fill up; incinerators burn
+waste and make power, but pollute.
+
+**Pollution, noise, crime and land value** interact; trees and parks help.
+
+**Budget.** Separate tax rates for residential, commercial, industry and
+offices, plus fares, exports and tourism income, against road, service and
+policy upkeep.
+
+**Policies:** smoke detectors, recycling, free public transport, high-rise
+ban, encourage biking, industrial filters, education boost, and parks &
+recreation.
+
+**Hazards.** Fires spread and meteors strike big cities (disasters can be
+turned off).
 
 ### Music
 
@@ -111,9 +162,10 @@ replace the built-in instruments:
 | `src/palette.asm` | shading ramps, seasons, day/night, glow and water cycling |
 | `src/draw.asm`, `src/font.asm` | 2D primitives, proportional pixel font (ASCII art) |
 | `src/voxel.asm` | voxel primitives, material shaders, isometric ray-caster, z-buffered blitter |
-| `src/sprites.asm` | every model: terrain, roads, trees, 45 zone buildings, 17 services, vehicles |
+| `src/sprites.asm`, `src/sprites2.asm` | every model: terrain, 3 road types, trees, ~40 zone building designs x 4 variants, 2x2 buildings, farms / forestry / mines, 22 services, 6 vehicle types |
 | `src/world.asm` | map, noise, terrain generation, road/power masks |
-| `src/sim.asm` | the simulation |
+| `src/sim.asm` | growth, utilities (power / pipes / sewage), services, workforce, budget |
+| `src/traffic.asm` | pathfinding, vehicles, trips, buses, service dispatch |
 | `src/agents.asm` | cars, pedestrians, particles, floating text |
 | `src/audio.asm` | instrument synthesis, sampler, reverb, composer, sound effects |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
@@ -126,8 +178,8 @@ replace the built-in instruments:
 
 ```sh
 cityssembly --shot N out.bmp            # render N frames, save a screenshot
-cityssembly --demo N out.bmp [view]     # auto-build a town, simulate 700 days, screenshot
-                                        # view: b budget, m menu, i inspect, s build menu,
-                                        #       o/p overlays, n night, t tools, l save/load
+cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, screenshot
+                                        # view: b budget, m stats, y policies, i inspect,
+                                        #       s water menu, w/p/z/t/o info views, n night
 cityssembly --wav SECONDS out.wav       # render the soundtrack offline
 ```

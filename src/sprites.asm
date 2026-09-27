@@ -84,7 +84,8 @@
 %endmacro
 
 ZONE_LEVELS  equ 5
-ZONE_VARS    equ 3
+ZONE_VARS    equ 4
+VEH_TYPES    equ 6
 
 section .bss
 spr_grass       resd 4
@@ -92,13 +93,17 @@ spr_water       resd 16
 spr_sand        resd 2
 spr_dirt        resd 1
 spr_rubble      resd 1
-spr_road        resd 16
-spr_lot         resd 4
+spr_road        resd 48            ; road type * 16 + mask
+spr_busstop     resd 1
+spr_construct2  resd 1
+spr_lot         resd 8
 spr_tree        resd 8
-spr_zone        resd 3*ZONE_LEVELS*ZONE_VARS
+spr_zone        resd ZONE_TYPES*ZONE_LEVELS*ZONE_VARS
+spr_zone2       resd ZONE_TYPES*3*2    ; 2x2 buildings, levels 3..5
+spr_spec        resd 4*3*2             ; industry specialisations
 spr_bld         resd BK_COUNT
 spr_power       resd 16
-spr_car         resd 12            ; type*4 + dir
+spr_car         resd VEH_TYPES*4   ; type*4 + dir
 spr_construct   resd 3
 spr_rotor       resd 4
 spr_flame       resd 2
@@ -107,6 +112,7 @@ loading_done    resd 1
 loading_total   resd 1
 
 section .data
+lot_mats        db 0, M_ZONE_R, M_ZONE_C, M_ZONE_I, M_TEAL, M_LEAF, M_BLUE, 0
 house_walls     db M_CREAM_WIN, M_WHITE_WIN, M_BRICK_WIN, M_BLUE_WIN
 house_roofs     db M_ROOF_RED, M_ROOF_BLUE, M_ROOF_GREY, M_ROOF_BROWN, M_ROOF_GREEN
 apt_walls       db M_BRICK_WIN, M_CREAM_WIN, M_WHITE_WIN
@@ -319,8 +325,7 @@ FUNC gen_lot
     BEGIN 16, 4, eax
     MAT M_GRASS
     BOX 0,0,0,16,16,1
-    mov eax, M_ZONE_R-1
-    add eax, r12d
+    movzx eax, byte [lot_mats+r12]
     mov [vox_mat], eax
     mov r15d, eax
     ; dashed border
@@ -352,6 +357,35 @@ FUNC gen_lot
     inc ebx
     cmp ebx, 16
     jl .b
+    ; dense zones get a second, inner border
+    cmp r12d, ZONE_O
+    jb .stakes
+    xor ebx, ebx
+.b2:
+    mov eax, ebx
+    and eax, 1
+    jnz .b2n
+    lea edi, [rbx+2]
+    mov esi, 2
+    xor edx, edx
+    call vset
+    lea edi, [rbx+2]
+    mov esi, 13
+    xor edx, edx
+    call vset
+    mov edi, 2
+    lea esi, [rbx+2]
+    xor edx, edx
+    call vset
+    mov edi, 13
+    lea esi, [rbx+2]
+    xor edx, edx
+    call vset
+.b2n:
+    inc ebx
+    cmp ebx, 12
+    jl .b2
+.stakes:
     ; corner stakes
     BOX 1,1,1,2,2,3
     BOX 14,1,1,15,2,3
@@ -890,13 +924,22 @@ FUNC com_2                         ; shops with offices above
     BOX 15,1,5,16,15,6
     MAT M_ROOF_GREY
     BOX 2,2,17,14,14,18
-    ; rooftop billboard
+    ; rooftop billboard on some, plant room on others
+    test r12d, 1
+    jz .plant
     MAT M_DARK
     BOX 4,8,18,5,9,22
     BOX 11,8,18,12,9,22
     PICK sign_mats, 2
     mov [vox_mat], eax
     BOX 3,8,22,13,9,28
+    jmp .cdone
+.plant:
+    MAT M_METAL
+    BOX 3,3,18,8,7,22
+    MAT M_LEAF
+    BOX 9,4,18,14,13,19
+.cdone:
     call finish_model
     RETURN
 
@@ -1092,10 +1135,58 @@ FUNC ind_5                         ; high-tech campus
 
 section .data
 align 8
+; zone type 1..6 x level 1..5 x 4 variants: each variant is a different
+; building so streets never repeat the same model
 zone_models:
-    dq res_1, res_2, res_3, res_4, res_5
-    dq com_1, com_2, com_3, com_4, com_5
-    dq ind_1, ind_2, ind_3, ind_4, ind_5
+    ; R low
+    dq res_1, res_cabin, res_1, res_2
+    dq res_2, res_duplex, res_rowhouse, res_2
+    dq res_villa, res_duplex, res_rowhouse, res_modern
+    dq res_mansion, res_villa, res_modern, res_duplex
+    dq res_mansion, res_modern, res_villa, res_mansion
+    ; C low
+    dq com_1, com_cafe, com_1, com_gas
+    dq com_cafe, com_diner, com_1, com_market
+    dq com_diner, com_gas, com_market, com_cafe
+    dq com_market, com_diner, com_gas, com_2
+    dq com_market, com_2, com_diner, com_dept
+    ; I
+    dq ind_1, ind_2, ind_1, ind_3
+    dq ind_2, ind_3, ind_1, ind_2
+    dq ind_3, ind_4, ind_2, ind_3
+    dq ind_4, ind_3, ind_4, ind_2
+    dq ind_5, ind_5, ind_4, ind_5
+    ; O
+    dq off_small, off_mid, off_small, com_3
+    dq off_mid, com_3, off_small, off_mid
+    dq com_3, off_mid, off_tower, com_4
+    dq off_tower, com_4, off_tower, com_5
+    dq com_5, off_tower, com_5, off_tower
+    ; R high
+    dq res_3, apt_walkup, res_3, res_rowhouse
+    dq apt_walkup, res_3, res_4, apt_walkup
+    dq res_4, apt_walkup, apt_tower, res_4
+    dq apt_tower, res_4, res_5, apt_tower
+    dq res_5, apt_tower, res_5, apt_tower
+    ; C high
+    dq com_2, com_dept, com_market, com_2
+    dq com_dept, com_2, com_3, com_hotel
+    dq com_3, com_hotel, com_dept, com_4
+    dq com_hotel, com_4, com_3, com_hotel
+    dq com_4, com_5, com_hotel, com_4
+; 2x2 buildings for zone 1..6, levels 3..5 (0 = none)
+zone2_models:
+    dq 0, 0, 0
+    dq 0, 0, 0
+    dq ind_big, ind_big, ind_big
+    dq off_hq, off_hq, off_twin
+    dq apt_courtyard, apt_twin, apt_sky
+    dq com_mall, com_cinema, off_hq
+; industry specialisation looks (farm, forestry, ore) x 3
+spec_models:
+    dq farm_field, farm_barn, farm_green
+    dq forest_yard, forest_mill, forest_mill
+    dq ore_quarry, ore_mine, ore_mine
 section .text
 
 ; construction stage edi = 0..2
@@ -1670,7 +1761,9 @@ section .data
 align 8
 bld_models:
     dq bld_coal, bld_wind, bld_solar, bld_nuclear, bld_pump, bld_wtower
-    dq bld_police, bld_fire, bld_clinic, bld_hospital, bld_school, bld_univ
+    dq bld_sewage, bld_landfill, bld_incin
+    dq bld_police, bld_fire, bld_clinic, bld_hospital
+    dq bld_elem, bld_school, bld_univ, bld_busdepot
     dq bld_park, bld_plaza, bld_stadium, bld_cityhall, bld_landmark
 section .text
 
@@ -1839,7 +1932,7 @@ FUNC gen_flame
 ;  sprites_init - build everything
 ; =====================================================================
 FUNC sprites_init
-    mov dword [loading_total], 150
+    mov dword [loading_total], 340
     call remaps_init
     ; ground
     xor ebx, ebx
@@ -1878,6 +1971,12 @@ FUNC sprites_init
     call gen_road
     mov [spr_road+rbx*4], eax
     mov edi, ebx
+    call gen_avenue
+    mov [spr_road+rbx*4+64], eax
+    mov edi, ebx
+    call gen_highway
+    mov [spr_road+rbx*4+128], eax
+    mov edi, ebx
     call gen_power
     mov [spr_power+rbx*4], eax
     inc ebx
@@ -1889,7 +1988,7 @@ FUNC sprites_init
     call gen_lot
     mov [spr_lot+rbx*4], eax
     inc ebx
-    cmp ebx, 4
+    cmp ebx, ZONE_TYPES
     jl .lot
     ; trees
     xor ebx, ebx
@@ -1900,22 +1999,64 @@ FUNC sprites_init
     inc ebx
     cmp ebx, 8
     jl .tr
-    ; zone buildings
-    xor r12d, r12d                  ; model index 0..14
+    ; zone buildings: 6 zone types x 5 levels x 4 variant models
+    xor r12d, r12d                  ; (zone-1)*5 + level-1
 .zm:
     xor r13d, r13d                  ; variant
 .zv:
+    lea eax, [r12*4+r13]
     mov edi, r13d
-    call [zone_models+r12*8]
-    imul ecx, r12d, ZONE_VARS
+    add edi, r12d                   ; vary the colour seed too
+    call [zone_models+rax*8]
+    lea ecx, [r12+ZONE_LEVELS]      ; skip zone 0
+    imul ecx, ecx, ZONE_VARS
     add ecx, r13d
     mov [spr_zone+rcx*4], eax
     inc r13d
     cmp r13d, ZONE_VARS
     jl .zv
     inc r12d
-    cmp r12d, 15
+    cmp r12d, 30
     jl .zm
+    ; 2x2 buildings
+    xor r12d, r12d
+.z2:
+    mov rax, [zone2_models+r12*8]
+    test rax, rax
+    jz .z2n
+    xor r13d, r13d
+.z2v:
+    mov edi, r13d
+    mov rax, [zone2_models+r12*8]
+    call rax
+    lea ecx, [r12+3]                ; zone offset (zone 0 row)
+    imul ecx, ecx, 2
+    add ecx, r13d
+    mov [spr_zone2+rcx*4], eax
+    inc r13d
+    cmp r13d, 2
+    jl .z2v
+.z2n:
+    inc r12d
+    cmp r12d, 18
+    jl .z2
+    ; industry specialisations
+    xor r12d, r12d
+.sp:
+    xor r13d, r13d
+.spv:
+    mov edi, r13d
+    call [spec_models+r12*8]
+    lea ecx, [r12+3]
+    imul ecx, ecx, 2
+    add ecx, r13d
+    mov [spr_spec+rcx*4], eax
+    inc r13d
+    cmp r13d, 2
+    jl .spv
+    inc r12d
+    cmp r12d, 9
+    jl .sp
     ; construction
     xor ebx, ebx
 .co:
@@ -1957,6 +2098,26 @@ FUNC sprites_init
     inc r12d
     cmp r12d, 3
     jl .ct
+    ; service vehicles (types 3..5)
+    mov r12d, 3
+.v2:
+    xor r13d, r13d
+.v2d:
+    mov edi, r12d
+    mov esi, r13d
+    call gen_vehicle2
+    lea ecx, [r12*4+r13]
+    mov [spr_car+rcx*4], eax
+    inc r13d
+    cmp r13d, 4
+    jl .v2d
+    inc r12d
+    cmp r12d, VEH_TYPES
+    jl .v2
+    call gen_busstop
+    mov [spr_busstop], eax
+    call gen_construct2
+    mov [spr_construct2], eax
     mov edi, 0
     call gen_flame
     mov [spr_flame], eax
@@ -1965,17 +2126,54 @@ FUNC sprites_init
     mov [spr_flame+4], eax
     RETURN
 
-; zone_sprite(edi zone 1..3, esi level 1..5, edx variant) -> eax
+; zone_sprite(edi zone 1..6, esi level 1..5, edx variant, ecx size,
+;             r8d industry spec) -> eax sprite id
 zone_sprite:
-    dec edi
+    and edx, 0xFF
+    cmp ecx, 2
+    je .big
+    cmp edi, ZONE_I
+    jne .std
+    test r8d, r8d
+    jz .std
+    ; specialised industry: 3 looks, levels 1-2, 3-4, 5
+    mov eax, esi
+    dec eax
+    shr eax, 1
+    cmp eax, 2
+    jbe .sl
+    mov eax, 2
+.sl:
+    lea ecx, [r8*2+r8]
+    add eax, ecx                    ; spec*3 + look
+    shl eax, 1
+    and edx, 1
+    add eax, edx
+    mov eax, [spr_spec+rax*4]
+    ret
+.big:
+    mov eax, esi
+    sub eax, 3
+    jns .b1
+    xor eax, eax
+.b1:
+    cmp eax, 2
+    jbe .b2
+    mov eax, 2
+.b2:
+    imul ecx, edi, 3
+    add eax, ecx
+    shl eax, 1
+    and edx, 1
+    add eax, edx
+    mov eax, [spr_zone2+rax*4]
+    ret
+.std:
     imul edi, edi, ZONE_LEVELS
     add edi, esi
     dec edi
     imul edi, edi, ZONE_VARS
-    mov eax, edx
-    xor edx, edx
-    mov ecx, ZONE_VARS
-    div ecx
+    and edx, ZONE_VARS-1
     add edi, edx
     mov eax, [spr_zone+rdi*4]
     ret

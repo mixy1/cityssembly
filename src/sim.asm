@@ -1,31 +1,53 @@
 ; =====================================================================
 ;  SIM - the city simulation
 ;
-;  Time: a day passes every DAY_TICKS[speed] ticks.  Each day
-;    * construction / fires advance for every tile
+;  A day passes every DAY_TICKS[speed] ticks.  Each day:
+;    * construction, fires, garbage and shop stock tick for every tile
 ;    * one eighth of the map runs the zone growth model
-;    * every 4 days the utility networks are re-flooded
-;    * every 8 days coverage, pollution, crime, traffic and land value
-;      maps are rebuilt
-;  At month end the budget is settled and milestones are checked.
+;    * statistics, workforce and demand are recomputed
+;  every 4 days the utility networks are re-flooded (power, pipes,
+;  sewage, road links) and every 8 days the coverage / pollution /
+;  noise / crime / land value / traffic maps are rebuilt.
+;  Month end settles the budget, policies and milestones.
 ; =====================================================================
 
 OV_NONE     equ 0
 OV_POWER    equ 1
 OV_WATER    equ 2
 OV_POLLUTE  equ 3
-OV_CRIME    equ 4
-OV_LANDVAL  equ 5
-OV_TRAFFIC  equ 6
-OV_POLICE   equ 7
-OV_FIRE     equ 8
-OV_HEALTH   equ 9
-OV_EDU      equ 10
-OV_HAPPY    equ 11
-OV_COUNT    equ 12
+OV_NOISE    equ 4
+OV_CRIME    equ 5
+OV_LANDVAL  equ 6
+OV_TRAFFIC  equ 7
+OV_POLICE   equ 8
+OV_FIRE     equ 9
+OV_HEALTH   equ 10
+OV_EDU      equ 11
+OV_GARBAGE  equ 12
+OV_TRANSIT  equ 13
+OV_HAPPY    equ 14
+OV_RESOURCE equ 15
+OV_DESIRE_R equ 16      ; tool context overlays (zone desirability)
+OV_DESIRE_C equ 17
+OV_DESIRE_I equ 18
+OV_DESIRE_O equ 19
+OV_COUNT    equ 16      ; user-cyclable overlays
 
-MISC_NET    equ 1       ; road reaches the highway
-MISC_NEARW  equ 2       ; near water (scenic)
+MISC_NET    equ 1       ; road reaches the outside
+MISC_NEARW  equ 2
+
+; policies
+P_SMOKE     equ 1
+P_RECYCLE   equ 2
+P_FREEBUS   equ 4
+P_HIGHRISE  equ 8
+P_BIKE      equ 16
+P_FILTERS   equ 32
+P_EDUBOOST  equ 64
+P_PARKS     equ 128
+POLICY_COUNT equ 8
+
+MAX_LIST    equ 8192
 
 section .bss
 alignb 16
@@ -35,59 +57,98 @@ map_crime       resb MAP_TILES
 map_police      resb MAP_TILES
 map_fire        resb MAP_TILES
 map_health      resb MAP_TILES
-map_edu         resb MAP_TILES
+map_elem        resb MAP_TILES
+map_high        resb MAP_TILES
+map_uni         resb MAP_TILES
 map_park        resb MAP_TILES
-map_traffic     resb MAP_TILES
+map_garb        resb MAP_TILES
+map_transit     resb MAP_TILES
+map_noise       resb MAP_TILES
+map_traffic     resb MAP_TILES      ; scratch
+map_wpol        resb MAP_TILES
 map_scenic      resb MAP_TILES
 alignb 16
 comp_map        resw MAP_TILES
+cons_comp       resw MAP_TILES
 bfs_queue       resw MAP_TILES+16
 MAX_COMPS equ 4096
 comp_supply     resd MAX_COMPS
 comp_demand     resd MAX_COMPS
+comp_sewcap     resd MAX_COMPS
+comp_dirty      resb MAX_COMPS
+alignb 16
+list_res        resw MAX_LIST
+list_com        resw MAX_LIST
+list_ind        resw MAX_LIST
+list_off        resw MAX_LIST
+list_svc        resw 1024
+n_res           resd 1
+n_com           resd 1
+n_ind           resd 1
+n_off           resd 1
+n_svc           resd 1
 
+; ---- saved state block ----
 money           resq 1
-sim_speed       resd 1          ; 0 paused, 1..3
+sim_speed       resd 1
 day_timer       resd 1
-day             resd 1          ; 0..29
-month           resd 1          ; 0..11
+day             resd 1
+month           resd 1
 year            resd 1
-day_count       resd 1          ; days since start
-tax_rate        resd 1
-
+day_count       resd 1
+tax_rate        resd 4          ; per zone class
+policies        resd 1
+; -- cleared every stats pass (population .. cnt_nogoods) --
 population      resd 1
+workers         resd 1
+edu_workers     resd 1
+hedu_workers    resd 1
+jobs            resd 4          ; per zone class
 jobs_c          resd 1
 jobs_i          resd 1
-workers         resd 1
+unemployed      resd 1
 cnt_r           resd 1
 cnt_c           resd 1
 cnt_i           resd 1
+cnt_o           resd 1
 cnt_abandon     resd 1
 cnt_fire        resd 1
 cnt_unpowered   resd 1
 cnt_nowater     resd 1
 cnt_noroad      resd 1
-demand_r        resd 1          ; -100..100
-demand_c        resd 1
-demand_i        resd 1
-happy_avg       resd 1          ; 0..100
+cnt_garbage     resd 1
+cnt_nogoods     resd 1
+; --
+staff_basic     resd 1          ; 0..256
+staff_edu       resd 1
+staff_hedu      resd 1
+demand          resd 4          ; -100..100 per zone class
+happy_avg       resd 1
 power_supply    resd 1
 power_demand    resd 1
 water_supply    resd 1
 water_demand    resd 1
+sewage_cap      resd 1
+sewage_demand   resd 1
 avg_traffic     resd 1
 avg_pollution   resd 1
 avg_crime       resd 1
-ext_demand      resd 1          ; grows with time (industry trade)
-
+avg_edu         resd 1
+ext_demand      resd 1
+landfill_used   resd 1
+landfill_cap    resd 1
+garbage_total   resd 1
 income_last     resd 1
 expense_last    resd 1
-inc_res         resd 1
-inc_com         resd 1
-inc_ind         resd 1
+inc_class       resd 4
+inc_other       resd 1          ; fares, tourism, exports
 exp_roads       resd 1
 exp_services    resd 1
+exp_policies    resd 1
+exports_month   resd 1
+fares_month     resd 1
 road_tiles      resd 1
+road_cost       resd 1
 svc_count       resd BK_COUNT
 milestone       resd 1
 hist_pop        resd 64
@@ -99,20 +160,47 @@ disasters_on    resd 1
 goal_index      resd 1
 brownout_warned resd 1
 water_warned    resd 1
+sewage_warned   resd 1
+garbage_warned  resd 1
+island_warned   resd 1
+landfull_warned resd 1
+trips_ok        resd 1
+trips_failed    resd 1
+commute_sum     resd 1
+commute_n       resd 1
+avg_commute     resd 1
+flow_pct        resd 1
+bus_riders      resd 1
+riders_month    resd 1
 sim_state_end:
+
+demand_r equ demand
+demand_c equ demand+4
+demand_i equ demand+8
+demand_o equ demand+12
 
 section .data
 DAY_TICKS   dd 0, 30, 14, 5
-res_pop     dd 0, 8, 22, 60, 150, 380
-com_jobs    dd 0, 6, 16, 40, 100, 240
-ind_jobs    dd 0, 10, 26, 50, 90, 140
+; residents / jobs by zone type (row = zone) and level
+zone_pop:
+    dd 0, 0, 0, 0, 0, 0
+    dd 0, 6, 10, 14, 18, 24         ; R low
+    dd 0, 4, 8, 12, 16, 20          ; C low
+    dd 0, 10, 20, 34, 50, 70        ; I
+    dd 0, 16, 34, 70, 130, 240      ; O
+    dd 0, 20, 45, 90, 170, 320      ; R high
+    dd 0, 14, 30, 60, 110, 190      ; C high
+zone_class  db 0, ZC_RES, ZC_COM, ZC_IND, ZC_OFF, ZC_RES, ZC_COM
 ind_poll    db 0, 35, 50, 75, 100, 20
+spec_poll   db 0, 8, 25, 45
 use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
-cov_strength db 0, 220, 220, 200, 200, 150
-bld_cov_boost db 0,0,0,0,0,0, 0,0,0,40,0,50, 0,20,40,20,60
+cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
+bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60
+policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
+; which services stop working without power
+svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1
 
-; milestones: population, reward, name
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
 milestone_cash  dd 0, 1000, 2000, 3500, 5000, 8000, 12000, 16000, 25000, 50000, 0
 milestone_names dq ms0, ms1, ms2, ms3, ms4, ms5, ms6, ms7, ms8, ms9, ms9
@@ -131,36 +219,61 @@ month_names db "Jan",0,"Feb",0,"Mar",0,"Apr",0,"May",0,"Jun",0
             db "Jul",0,"Aug",0,"Sep",0,"Oct",0,"Nov",0,"Dec",0
 
 msg_brownout db "Brownout! Your city needs more power.", 0
-msg_nowater  db "Taps are running dry - build water pumps.", 0
+msg_nowater  db "Not enough water - build pumps and pipes.", 0
+msg_nosewage db "Sewage is backing up - build a sewage outlet.", 0
+msg_garbage  db "Garbage is piling up - build a landfill.", 0
 msg_fire     db "Fire! A building is burning.", 0
 msg_fire_out db "Firefighters put out a blaze.", 0
 msg_burned   db "A building burned down.", 0
 msg_milestone db "MILESTONE: ", 0
 msg_reward   db "  Reward: ", 0
 msg_broke    db "The treasury is empty! Raise taxes or cut costs.", 0
-msg_abandon  db "Residents are abandoning buildings.", 0
 msg_meteor   db "A METEOR has struck the city!", 0
-msg_tourists db "Tourists flock to the Asm Tower: +$", 0
 msg_boom     db "Industrial boom! Exports surge.", 0
 msg_newyear  db "Happy new year! Year ", 0
+msg_landfull db "The landfill is full! Build another, or an incinerator.", 0
+msg_island   db "A power plant isn't connected to anything - use power lines.", 0
 
 section .text
+
+%macro WARN_ONCE 3      ; flag var, message, colour  (eax = 1 when bad)
+    test eax, eax
+    jz %%ok
+    cmp dword [%1], 0
+    jne %%done
+    mov dword [%1], 1
+    lea rdi, [%2]
+    mov esi, %3
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp %%done
+%%ok:
+    mov dword [%1], 0
+%%done:
+%endmacro
 
 ; ---------------------------------------------------------------------
 FUNC sim_init
     mov qword [money], 25000
     mov dword [sim_speed], 1
     mov dword [tax_rate], 9
+    mov dword [tax_rate+4], 9
+    mov dword [tax_rate+8], 9
+    mov dword [tax_rate+12], 9
     mov dword [year], 2026
     mov dword [month], 2
     mov dword [day], 0
-    mov dword [ext_demand], 30
+    mov dword [ext_demand], 35
     mov dword [net_dirty], 1
     mov dword [cov_dirty], 1
     mov dword [disasters_on], 1
-    mov dword [demand_r], 60
-    mov dword [demand_c], 10
-    mov dword [demand_i], 40
+    mov dword [demand], 60
+    mov dword [demand+4], 10
+    mov dword [demand+8], 40
+    mov dword [demand+12], 0
+    mov dword [staff_basic], 256
+    mov dword [flow_pct], 100
     call scenic_init
     call networks_update
     call coverage_update
@@ -211,8 +324,6 @@ FUNC scenic_init
     RETURN
 
 ; ---------------------------------------------------------------------
-;  sim_tick: called at 60 Hz
-; ---------------------------------------------------------------------
 FUNC sim_tick
     mov eax, [sim_speed]
     test eax, eax
@@ -229,7 +340,6 @@ FUNC sim_tick
 FUNC sim_day
     inc dword [day_count]
     call daily_tiles
-    ; one eighth of the map per day
     mov eax, [day_count]
     and eax, 7
     shl eax, 4
@@ -240,6 +350,7 @@ FUNC sim_day
     and eax, 3
     jnz .nn
     call networks_update
+    jmp .nd
 .nn:
     cmp dword [net_dirty], 0
     je .nd
@@ -249,13 +360,15 @@ FUNC sim_day
     and eax, 7
     jnz .nc
     call coverage_update
+    jmp .ncd
 .nc:
     cmp dword [cov_dirty], 0
     je .ncd
-    mov dword [cov_dirty], 0
     call coverage_update
 .ncd:
+    mov dword [cov_dirty], 0
     call stats_update
+    call dispatch_services
     call check_goals
     inc dword [day]
     cmp dword [day], 30
@@ -266,72 +379,127 @@ FUNC sim_day
     RETURN
 
 ; ---------------------------------------------------------------------
-;  daily per-tile work: construction progress and fires
+;  daily per-tile work: construction, fires, garbage, shop stock
 ; ---------------------------------------------------------------------
 FUNC daily_tiles
-    xor r13d, r13d                  ; y
-.y:
-    xor r12d, r12d
-.x:
-    mov eax, r13d
-    shl eax, MAP_SHIFT
-    add eax, r12d
-    mov r14d, eax                   ; index
+    xor r14d, r14d                  ; tile index
+.l:
+    mov eax, r14d
     shl eax, TILE_SHIFT
     lea rbx, [tiles+rax]
-    mov al, [rbx+T_FLAGS]
-    test al, F_BUILD
-    jz .nb
+    mov r12d, r14d
+    and r12d, MAP_W-1               ; x
+    mov r13d, r14d
+    shr r13d, MAP_SHIFT             ; y
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .fires
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .fires
+    test byte [rbx+T_FLAGS], F_BUILD
+    jz .grown
     ; construction
     movzx eax, byte [rbx+T_TIMER]
     add eax, 14
+    cmp byte [rbx+T_SIZE], 2
+    jne .cs
+    sub eax, 6                      ; big buildings take longer
+.cs:
     cmp eax, 96
     jl .bstore
-    ; finished: level up
-    and byte [rbx+T_FLAGS], ~F_BUILD
     mov byte [rbx+T_TIMER], 0
     inc byte [rbx+T_LEVEL]
     cmp byte [rbx+T_LEVEL], 5
     jbe .lvok
     mov byte [rbx+T_LEVEL], 5
 .lvok:
+    mov edi, r12d
+    mov esi, r13d
+    call footprint_clear_build
     mov rdi, rbx
     call set_tile_pop
     mov edi, r12d
     mov esi, r13d
     call fx_building_done
-    jmp .nb
+    jmp .fires
 .bstore:
     mov [rbx+T_TIMER], al
-.nb:
+    jmp .fires
+.grown:
+    test byte [rbx+T_FLAGS], F_ABANDON
+    jnz .fires
+    ; garbage accumulates with activity (every 4th day, staggered)
+    mov ecx, [day_count]
+    add ecx, r14d
+    and ecx, 3
+    jnz .ng0
+    movzx eax, word [rbx+T_POP]
+    shr eax, 4
+    inc eax
+    test dword [policies], P_RECYCLE
+    jz .nr
+    lea eax, [rax*2+rax]
+    shr eax, 2
+.nr:
+    movzx ecx, byte [rbx+T_GARBAGE]
+    add eax, ecx
+    CLAMP eax, 0, 255
+    mov [rbx+T_GARBAGE], al
+.ng0:
+    movzx eax, byte [rbx+T_GARBAGE]
+    and byte [rbx+T_FLAGS2], ~F2_GARBAGE
+    cmp eax, 190
+    jb .ng
+    or byte [rbx+T_FLAGS2], F2_GARBAGE
+.ng:
+    ; commerce sells goods, industry makes them
+    movzx eax, byte [rbx+T_ZONE]
+    movzx eax, byte [zone_class+rax]
+    cmp eax, ZC_COM
+    jne .ind
+    movzx ecx, word [rbx+T_POP]
+    shr ecx, 4
+    inc ecx
+    movzx eax, byte [rbx+T_GOODS]
+    sub eax, ecx
+    jge .gs
+    xor eax, eax
+.gs:
+    mov [rbx+T_GOODS], al
+    and byte [rbx+T_FLAGS2], ~F2_NOGOODS
+    cmp eax, 20
+    jae .fires
+    or byte [rbx+T_FLAGS2], F2_NOGOODS
+    jmp .fires
+.ind:
+    cmp eax, ZC_IND
+    jne .fires
+    movzx ecx, word [rbx+T_POP]
+    imul ecx, [staff_basic]
+    shr ecx, 12
+    inc ecx
+    movzx eax, byte [rbx+T_GOODS]
+    add eax, ecx
+    CLAMP eax, 0, 255
+    mov [rbx+T_GOODS], al
+.fires:
     test byte [rbx+T_FLAGS], F_FIRE
     jz .next
-    ; burning
     movzx eax, byte [rbx+T_TIMER]
     inc eax
     mov [rbx+T_TIMER], al
-    ; chance of extinguish from fire coverage
-    movzx ecx, byte [map_fire+r14]
+    ; without a fire truck, a small chance to burn out on its own
     call rand
     and eax, 255
-    shr ecx, 2
-    add ecx, 3
-    cmp eax, ecx
+    cmp eax, 6
     jae .spread
     and byte [rbx+T_FLAGS], ~F_FIRE
     mov byte [rbx+T_TIMER], 0
-    lea rdi, [msg_fire_out]
-    mov esi, UI_GOOD
-    mov edx, r12d
-    mov ecx, r13d
-    call notify
     jmp .next
 .spread:
     call rand
     and eax, 63
-    cmp eax, 6
+    cmp eax, 5
     jae .burnout
-    ; ignite a random neighbour
     call rand
     and eax, 3
     mov edi, r12d
@@ -354,20 +522,83 @@ FUNC daily_tiles
     or byte [rax+T_FLAGS], F_FIRE
     mov byte [rax+T_TIMER], 0
 .burnout:
-    cmp byte [rbx+T_TIMER], 16
+    cmp byte [rbx+T_TIMER], 22
     jb .next
-    ; destroyed
     mov edi, r12d
     mov esi, r13d
     call destroy_to_rubble
 .next:
-    inc r12d
-    cmp r12d, MAP_W
+    inc r14d
+    cmp r14d, MAP_TILES
+    jl .l
+    RETURN
+
+; clear F_BUILD over a zone building footprint (edi, esi = anchor)
+FUNC footprint_clear_build
+    mov r12d, edi
+    mov r13d, esi
+    call tile_at
+    movzx r14d, byte [rax+T_SIZE]
+    CLAMP r14d, 1, 2
+    xor ebx, ebx
+.y:
+    xor r15d, r15d
+.x:
+    lea edi, [r12+r15]
+    lea esi, [r13+rbx]
+    call tile_at
+    test rax, rax
+    jz .n
+    and byte [rax+T_FLAGS], ~F_BUILD
+.n:
+    inc r15d
+    cmp r15d, r14d
     jl .x
-    inc r13d
-    cmp r13d, MAP_W
+    inc ebx
+    cmp ebx, r14d
     jl .y
     RETURN
+
+; anchor_of(edi x, esi y) -> eax x, edx y of the building's anchor
+anchor_of:
+    push rdi
+    push rsi
+    call tile_at
+    pop rsi
+    pop rdi
+    test rax, rax
+    jz .same
+    movzx ecx, byte [rax+T_ANCHOR]
+    mov edx, ecx
+    and ecx, 15
+    shr edx, 4
+    mov eax, edi
+    sub eax, ecx
+    sub esi, edx
+    mov edx, esi
+    ret
+.same:
+    mov eax, edi
+    mov edx, esi
+    ret
+
+; footprint size of the building at an anchor tile (rdi tile) -> eax
+footprint_size:
+    mov eax, 1
+    cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
+    jne .svc
+    movzx eax, byte [rdi+T_SIZE]
+    CLAMP eax, 1, 2
+    ret
+.svc:
+    cmp byte [rdi+T_OBJ], OBJ_SERVICE
+    jne .o
+    push rdi
+    movzx edi, byte [rdi+T_SUB]
+    call bld_rec
+    movzx eax, byte [rax+BI_SIZE]
+    pop rdi
+.o: ret
 
 ; destroy whatever is at (edi,esi) leaving rubble (whole footprint)
 FUNC destroy_to_rubble
@@ -376,21 +607,23 @@ FUNC destroy_to_rubble
     call tile_at
     test rax, rax
     jz .out
-    cmp byte [rax+T_OBJ], OBJ_SERVICE
+    mov cl, [rax+T_OBJ]
+    cmp cl, OBJ_SERVICE
+    je .multi
+    cmp cl, OBJ_ZONEBLD
     jne .single
-    ; walk to anchor
-    movzx ecx, byte [rax+T_ANCHOR]
-    mov edx, ecx
-    and ecx, 15
-    shr edx, 4
-    sub r12d, ecx
-    sub r13d, edx
+.multi:
+    mov edi, r12d
+    mov esi, r13d
+    call anchor_of
+    mov r12d, eax
+    mov r13d, edx
     mov edi, r12d
     mov esi, r13d
     call tile_at
-    movzx edi, byte [rax+T_SUB]
-    call bld_rec
-    movzx r14d, byte [rax+BI_SIZE]
+    mov rdi, rax
+    call footprint_size
+    mov r14d, eax
     xor ebx, ebx
 .fy:
     xor r15d, r15d
@@ -398,8 +631,11 @@ FUNC destroy_to_rubble
     lea edi, [r12+r15]
     lea esi, [r13+rbx]
     call tile_at
+    test rax, rax
+    jz .fn
     mov rdi, rax
     call make_rubble
+.fn:
     inc r15d
     cmp r15d, r14d
     jl .fx
@@ -421,27 +657,37 @@ FUNC destroy_to_rubble
 make_rubble:
     mov byte [rdi+T_OBJ], OBJ_RUBBLE
     mov byte [rdi+T_FLAGS], 0
+    and byte [rdi+T_FLAGS2], F2_PIPE
     mov byte [rdi+T_LEVEL], 0
     mov byte [rdi+T_TIMER], 0
     mov word [rdi+T_POP], 0
     mov byte [rdi+T_ANCHOR], 0
+    mov byte [rdi+T_SIZE], 0
+    mov byte [rdi+T_GARBAGE], 0
+    mov byte [rdi+T_PROBLEM], 0
     ret
 
-; set_tile_pop(rdi tile): residents/jobs from zone + level
+; set_tile_pop(rdi tile): residents/jobs from zone, level and size
 set_tile_pop:
     movzx eax, byte [rdi+T_LEVEL]
     CLAMP eax, 0, 5
     movzx ecx, byte [rdi+T_ZONE]
-    cmp ecx, ZONE_R
-    jne .c
-    mov eax, [res_pop+rax*4]
-    jmp .s
-.c: cmp ecx, ZONE_C
-    jne .i
-    mov eax, [com_jobs+rax*4]
-    jmp .s
-.i: mov eax, [ind_jobs+rax*4]
-.s: test byte [rdi+T_FLAGS], F_ABANDON
+    CLAMP ecx, 0, 6
+    imul ecx, ecx, 6
+    add ecx, eax
+    mov eax, [zone_pop+rcx*4]
+    cmp byte [rdi+T_ZONE], ZONE_I
+    jne .sz
+    cmp byte [rdi+T_SUB], 0
+    je .sz
+    lea eax, [rax*2+rax]
+    shr eax, 2
+.sz:
+    cmp byte [rdi+T_SIZE], 2
+    jne .ab
+    lea eax, [rax*4+rax]            ; a 2x2 building holds 5 tiles' worth
+.ab:
+    test byte [rdi+T_FLAGS], F_ABANDON
     jz .w
     xor eax, eax
 .w: mov [rdi+T_POP], ax
@@ -470,7 +716,8 @@ FUNC zone_slice, 16
 .out:
     RETURN
 
-; has_road_near(edi x, esi y) -> eax: 0 none, 1 road, 2 road on highway net
+; road_near(edi x, esi y) -> eax: 0 none, 1 local road, 2 road linked
+; to the region.  Highways don't give building access.
 FUNC road_near
     mov r12d, edi
     mov r13d, esi
@@ -498,6 +745,8 @@ FUNC road_near
     jz .n
     cmp byte [rax+T_OBJ], OBJ_ROAD
     jne .n
+    cmp byte [rax+T_ROADTYPE], RT_HIGHWAY
+    je .n
     mov ecx, 1
     test byte [rax+T_MISC], MISC_NET
     jz .one
@@ -519,7 +768,7 @@ FUNC road_near
 ; ---------------------------------------------------------------------
 ;  zone_update(edi x, esi y) - the growth model for one tile
 ; ---------------------------------------------------------------------
-FUNC zone_update, 32
+FUNC zone_update, 48
     mov r12d, edi
     mov r13d, esi
     call tile_at
@@ -528,11 +777,15 @@ FUNC zone_update, 32
     test eax, eax
     jz .out
     mov [rbp-48], eax               ; zone
+    movzx ecx, byte [zone_class+rax]
+    mov [rbp-60], ecx               ; class
     movzx eax, byte [rbx+T_OBJ]
     cmp eax, OBJ_NONE
     je .ok
     cmp eax, OBJ_ZONEBLD
     jne .out
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .out                         ; parts of big buildings follow their anchor
 .ok:
     test byte [rbx+T_FLAGS], F_FIRE | F_BUILD
     jnz .out
@@ -554,41 +807,44 @@ FUNC zone_update, 32
 
     ; ---- desirability ----
     movzx r15d, byte [map_lv+r14]
-    shr r15d, 1                     ; 0..127
-    mov eax, [rbp-48]
-    cmp eax, ZONE_R
-    jne .dc
-    mov eax, [demand_r]
+    shr r15d, 1
+    mov ecx, [rbp-60]
+    mov eax, [demand+rcx*4]
     sar eax, 1
     add r15d, eax
+    cmp ecx, ZC_RES
+    jne .dc
     movzx eax, byte [map_health+r14]
     shr eax, 3
     add r15d, eax
-    movzx eax, byte [map_edu+r14]
+    movzx eax, byte [map_elem+r14]
     shr eax, 3
     add r15d, eax
     movzx eax, byte [map_park+r14]
     shr eax, 3
     add r15d, eax
+    movzx eax, byte [map_transit+r14]
+    shr eax, 4
+    add r15d, eax
     movzx eax, byte [map_pol+r14]
     shr eax, 1
+    sub r15d, eax
+    movzx eax, byte [map_noise+r14]
+    shr eax, 2
     sub r15d, eax
     movzx eax, byte [map_crime+r14]
     shr eax, 2
     sub r15d, eax
     jmp .dd
 .dc:
-    cmp eax, ZONE_C
+    cmp ecx, ZC_COM
     jne .di
-    mov eax, [demand_c]
-    sar eax, 1
-    add r15d, eax
-    movzx eax, byte [map_traffic+r14]
+    movzx eax, byte [map_noise+r14]     ; busy streets = customers
     CLAMP eax, 0, 120
     shr eax, 3
     add r15d, eax
-    movzx eax, byte [map_edu+r14]
-    shr eax, 4
+    movzx eax, byte [map_transit+r14]
+    shr eax, 3
     add r15d, eax
     movzx eax, byte [map_crime+r14]
     shr eax, 2
@@ -598,17 +854,29 @@ FUNC zone_update, 32
     sub r15d, eax
     jmp .dd
 .di:
-    ; industry cares little about land value
+    cmp ecx, ZC_IND
+    jne .do
     shr r15d, 1
-    add r15d, 30
-    mov eax, [demand_i]
-    sar eax, 1
-    add r15d, eax
-    movzx eax, byte [map_edu+r14]
-    shr eax, 3
-    add r15d, eax
+    add r15d, 34
     movzx eax, byte [map_crime+r14]
     shr eax, 3
+    sub r15d, eax
+    jmp .dd
+.do:
+    movzx eax, byte [map_high+r14]
+    shr eax, 3
+    add r15d, eax
+    movzx eax, byte [map_uni+r14]
+    shr eax, 4
+    add r15d, eax
+    movzx eax, byte [map_transit+r14]
+    shr eax, 3
+    add r15d, eax
+    movzx eax, byte [map_pol+r14]
+    shr eax, 2
+    sub r15d, eax
+    movzx eax, byte [map_crime+r14]
+    shr eax, 2
     sub r15d, eax
 .dd:
     CLAMP r15d, 0, 255
@@ -620,9 +888,11 @@ FUNC zone_update, 32
     je .tdone
     test byte [rbx+T_FLAGS], F_POWER
     jz .tdone
-    ; R and I need the highway (immigrants / trade)
-    cmp dword [rbp-48], ZONE_C
-    je .l1
+    cmp dword [rbp-60], ZC_RES
+    je .needlink
+    cmp dword [rbp-60], ZC_IND
+    jne .l1
+.needlink:
     cmp dword [rbp-52], 2
     jne .tdone
 .l1:
@@ -631,44 +901,69 @@ FUNC zone_update, 32
     mov ecx, 1
     test byte [rbx+T_FLAGS], F_WATER
     jz .tdone
-    cmp r15d, 58
+    test byte [rbx+T_FLAGS2], F2_SEWAGE
+    jz .tdone
+    cmp r15d, 56
     jl .tdone
     mov ecx, 2
-    cmp r15d, 92
+    test byte [rbx+T_FLAGS2], F2_GARBAGE | F2_NOGOODS | F2_NOWORKERS | F2_DIRTY
+    jnz .tdone
+    cmp r15d, 88
     jl .tdone
     mov ecx, 3
-    ; level 4+ needs services
+    test dword [policies], P_HIGHRISE
+    jz .nohr
     mov eax, [rbp-48]
+    cmp eax, ZONE_R
+    je .nohr
+    cmp eax, ZONE_C
+    je .nohr
     cmp eax, ZONE_I
-    je .ind45
+    je .nohr
+    jmp .tdone
+.nohr:
     movzx eax, byte [map_police+r14]
-    add al, [map_fire+r14]
-    jc .svc_ok
+    movzx edx, byte [map_fire+r14]
+    add eax, edx
     cmp eax, 60
     jl .tdone
-.svc_ok:
-    cmp r15d, 128
+    cmp r15d, 122
     jl .tdone
-    mov ecx, 4
-    movzx eax, byte [map_edu+r14]
-    cmp eax, 40
-    jl .tdone
+    mov eax, [rbp-60]
+    cmp eax, ZC_RES
+    jne .l4c
     movzx eax, byte [map_health+r14]
     cmp eax, 30
     jl .tdone
-    cmp r15d, 162
+    movzx eax, byte [map_elem+r14]
+    cmp eax, 30
     jl .tdone
-    mov ecx, 5
-    jmp .tdone
-.ind45:
-    cmp r15d, 120
+    jmp .l4
+.l4c:
+    cmp eax, ZC_OFF
+    jne .l4
+    movzx eax, byte [map_high+r14]
+    cmp eax, 30
     jl .tdone
+.l4:
     mov ecx, 4
-    movzx eax, byte [map_edu+r14]
-    cmp eax, 90
+    cmp r15d, 156
     jl .tdone
-    cmp r15d, 140
+    mov eax, [rbp-60]
+    cmp eax, ZC_RES
+    jne .l5c
+    movzx eax, byte [map_high+r14]
+    cmp eax, 30
     jl .tdone
+    movzx eax, byte [map_park+r14]
+    cmp eax, 20
+    jl .tdone
+    jmp .l5
+.l5c:
+    movzx eax, byte [map_uni+r14]
+    cmp eax, 30
+    jl .tdone
+.l5:
     mov ecx, 5
 .tdone:
     mov [rbp-56], ecx               ; target
@@ -676,7 +971,7 @@ FUNC zone_update, 32
     ; ---- happiness (drifts toward conditions) ----
     mov eax, r15d
     shr eax, 1
-    add eax, 20
+    add eax, 24
     test byte [rbx+T_FLAGS], F_POWER
     jnz .hp
     sub eax, 40
@@ -685,17 +980,46 @@ FUNC zone_update, 32
     cmp ecx, 2
     jl .hw
     test byte [rbx+T_FLAGS], F_WATER
+    jnz .hs
+    sub eax, 25
+.hs:
+    test byte [rbx+T_FLAGS2], F2_SEWAGE
     jnz .hw
-    sub eax, 30
+    sub eax, 15
 .hw:
+    test byte [rbx+T_FLAGS2], F2_GARBAGE
+    jz .hg
+    sub eax, 15
+.hg:
+    test byte [rbx+T_FLAGS2], F2_DIRTY
+    jz .hd
+    sub eax, 15
+.hd:
+    test byte [rbx+T_FLAGS2], F2_NOROUTE
+    jz .hrt
+    sub eax, 10
+.hrt:
     cmp dword [rbp-52], 0
     jne .hr
     sub eax, 40
 .hr:
-    mov ecx, [tax_rate]
+    test dword [policies], P_PARKS
+    jz .hpk
+    add eax, 5
+.hpk:
+    mov ecx, [rbp-60]
+    mov ecx, [tax_rate+rcx*4]
     sub ecx, 9
     imul ecx, 3
     sub eax, ecx
+    cmp dword [rbp-60], ZC_RES
+    jne .hc
+    mov ecx, [avg_commute]
+    sub ecx, 300
+    sar ecx, 5
+    CLAMP ecx, 0, 10
+    sub eax, ecx
+.hc:
     CLAMP eax, 0, 100
     movzx ecx, byte [rbx+T_HAPPY]
     test ecx, ecx
@@ -707,6 +1031,12 @@ FUNC zone_update, 32
     shr ecx, 2
     CLAMP ecx, 1, 100
     mov [rbx+T_HAPPY], cl
+
+    push rcx
+    push rcx
+    call pick_problem
+    pop rcx
+    pop rcx
 
     ; ---- abandoned buildings ----
     cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
@@ -740,38 +1070,65 @@ FUNC zone_update, 32
     jne .hl
     xor eax, eax
 .hl:
+    mov [rbp-64], eax               ; current level
     cmp eax, [rbp-56]
     jge .maybe_decline
-    ; zone demand gate
-    mov ecx, [rbp-48]
-    mov edx, [demand_r+rcx*4-4]
+    mov ecx, [rbp-60]
+    mov edx, [demand+rcx*4]
     cmp edx, -30
     jl .out
-    ; growth chance: 1 in (4 - demand/40)
     call rand
     and eax, 255
-    mov ecx, [rbp-48]
-    mov edx, [demand_r+rcx*4-4]
+    mov ecx, [rbp-60]
+    mov edx, [demand+rcx*4]
     add edx, 110
     CLAMP edx, 20, 230
     cmp eax, edx
     jae .out
-    ; start construction
+    ; dense zones may merge into a 2x2 building at level 3+
+    cmp dword [rbp-64], 2
+    jl .single
+    cmp byte [rbx+T_SIZE], 2
+    je .up
+    mov eax, [rbp-48]
+    cmp eax, ZONE_R
+    je .single
+    cmp eax, ZONE_C
+    je .single
+    call rand
+    and eax, 3
+    jnz .single
+    mov edi, r12d
+    mov esi, r13d
+    call try_merge
+    test eax, eax
+    jnz .started
+.single:
     cmp byte [rbx+T_OBJ], OBJ_NONE
     jne .up
     mov byte [rbx+T_OBJ], OBJ_ZONEBLD
     mov byte [rbx+T_LEVEL], 0
+    mov byte [rbx+T_SIZE], 1
+    mov byte [rbx+T_ANCHOR], 0
+    mov byte [rbx+T_GARBAGE], 0
+    or byte [rbx+T_FLAGS], F_ANCHOR
+    mov byte [rbx+T_GOODS], 120
     call rand
     mov [rbx+T_VARIANT], al
+    mov byte [rbx+T_SUB], 0
+    cmp byte [rbx+T_ZONE], ZONE_I
+    jne .up
+    mov al, [rbx+T_RES]
+    mov [rbx+T_SUB], al
 .up:
     or byte [rbx+T_FLAGS], F_BUILD
     mov byte [rbx+T_TIMER], 0
+.started:
     mov edi, r12d
     mov esi, r13d
     call fx_construct_start
     jmp .out
 .maybe_decline:
-    ; much worse than current -> slowly degrade
     mov ecx, [rbp-56]
     add ecx, 1
     cmp eax, ecx
@@ -779,34 +1136,171 @@ FUNC zone_update, 32
     call rand
     and eax, 7
     jnz .out
+    cmp byte [rbx+T_SIZE], 2
+    jne .dec1
+    cmp byte [rbx+T_LEVEL], 3
+    jle .out
+.dec1:
     dec byte [rbx+T_LEVEL]
     cmp byte [rbx+T_LEVEL], 0
     jne .dp
     mov byte [rbx+T_OBJ], OBJ_NONE
+    and byte [rbx+T_FLAGS], ~F_ANCHOR
 .dp:
     mov rdi, rbx
     call set_tile_pop
 .out:
     RETURN
 
-; ---------------------------------------------------------------------
-;  conductive(rdi tile, esi mode) -> eax 1/0
-;  mode 0 = power, 1 = water
-; ---------------------------------------------------------------------
-conductive:
+; choose the most urgent problem for the icon (rbx tile)
+pick_problem:
+    xor eax, eax
+    mov cl, [rbx+T_FLAGS]
+    mov dl, [rbx+T_FLAGS2]
+    test cl, F_FIRE
+    jz .p1
+    mov eax, PR_FIRE
+    jmp .s
+.p1:
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .s
+    test cl, F_ROADOK
+    jnz .p2
+    mov eax, PR_ROAD
+    jmp .s
+.p2:
+    test cl, F_POWER
+    jnz .p3
+    mov eax, PR_POWER
+    jmp .s
+.p3:
+    cmp byte [rbx+T_LEVEL], 1
+    jb .p5
+    test cl, F_WATER
+    jnz .p4
+    mov eax, PR_WATER
+    jmp .s
+.p4:
+    test dl, F2_SEWAGE
+    jnz .p5
+    mov eax, PR_SEWAGE
+    jmp .s
+.p5:
+    test dl, F2_GARBAGE
+    jz .p6
+    mov eax, PR_GARBAGE
+    jmp .s
+.p6:
+    test dl, F2_DIRTY
+    jz .p7
+    mov eax, PR_DIRTY
+    jmp .s
+.p7:
+    test dl, F2_NOGOODS
+    jz .p8
+    mov eax, PR_GOODS
+    jmp .s
+.p8:
+    test dl, F2_NOWORKERS
+    jz .p9
+    mov eax, PR_WORKERS
+    jmp .s
+.p9:
+    test dl, F2_NOROUTE
+    jz .s
+    mov eax, PR_ROUTE
+.s:
+    mov [rbx+T_PROBLEM], al
+    ret
+
+; try_merge(edi x, esi y): turn a 2x2 block of the same dense zone into
+; one big building site -> eax 1 on success
+FUNC try_merge
+    mov r12d, edi
+    mov r13d, esi
+    call tile_at
+    movzx r14d, byte [rax+T_ZONE]
+    xor ebx, ebx
+.chk:
+    mov edi, ebx
+    and edi, 1
+    add edi, r12d
+    mov esi, ebx
+    shr esi, 1
+    add esi, r13d
+    call tile_at
+    test rax, rax
+    jz .no
+    cmp [rax+T_ZONE], r14b
+    jne .no
+    test byte [rax+T_FLAGS], F_FIRE | F_BUILD | F_ABANDON
+    jnz .no
+    mov cl, [rax+T_OBJ]
+    cmp cl, OBJ_NONE
+    je .cn
+    cmp cl, OBJ_ZONEBLD
+    jne .no
+    cmp byte [rax+T_SIZE], 1
+    jne .no
+.cn:
+    inc ebx
+    cmp ebx, 4
+    jl .chk
+    call rand
+    mov r15d, eax
+    xor ebx, ebx
+.cv:
+    mov edi, ebx
+    and edi, 1
+    add edi, r12d
+    mov esi, ebx
+    shr esi, 1
+    add esi, r13d
+    call tile_at
+    mov byte [rax+T_OBJ], OBJ_ZONEBLD
+    mov byte [rax+T_SIZE], 2
+    mov byte [rax+T_LEVEL], 2
+    mov word [rax+T_POP], 0
+    mov byte [rax+T_GARBAGE], 0
+    mov byte [rax+T_GOODS], 120
+    mov byte [rax+T_PROBLEM], 0
+    mov [rax+T_VARIANT], r15b
+    mov byte [rax+T_SUB], 0
+    and byte [rax+T_FLAGS], F_POWER | F_WATER | F_ROADOK
+    or byte [rax+T_FLAGS], F_BUILD
+    mov byte [rax+T_TIMER], 0
+    mov ecx, ebx
+    and ecx, 1
+    mov edx, ebx
+    shr edx, 1
+    shl edx, 4
+    or ecx, edx
+    mov [rax+T_ANCHOR], cl
+    test ecx, ecx
+    jnz .na
+    or byte [rax+T_FLAGS], F_ANCHOR
+.na:
+    inc ebx
+    cmp ebx, 4
+    jl .cv
+    mov eax, 1
+    RETURN
+.no:
+    xor eax, eax
+    RETURN
+
+; =====================================================================
+;  utility networks
+; =====================================================================
+; power_conductive(rdi tile) -> eax
+power_conductive:
     movzx eax, byte [rdi+T_OBJ]
-    cmp eax, OBJ_ROAD
+    cmp eax, OBJ_POWER
     je .y
     cmp eax, OBJ_ZONEBLD
     je .y
     cmp eax, OBJ_SERVICE
     je .y
-    cmp eax, OBJ_POWER
-    jne .lot
-    test esi, esi
-    jz .y
-    jmp .n
-.lot:
     cmp eax, OBJ_NONE
     jne .n
     cmp byte [rdi+T_ZONE], 0
@@ -816,69 +1310,50 @@ conductive:
 .n: xor eax, eax
     ret
 
-; producer / consumer amounts for a tile in a network
-; tile_supply(rdi tile, esi mode, edx x, ecx y) -> eax supply
-FUNC tile_supply
-    mov rbx, rdi
-    mov r12d, esi
-    mov r13d, edx
-    mov r14d, ecx
+conductive:
+    jmp power_conductive
+
+; power supplied by an anchor tile (rbx tile) -> eax
+FUNC power_supply_of
     xor eax, eax
     cmp byte [rbx+T_OBJ], OBJ_SERVICE
     jne .out
     test byte [rbx+T_FLAGS], F_ANCHOR
     jz .out
     test byte [rbx+T_FLAGS], F_FIRE
-    jnz .none
+    jnz .zero
     movzx edi, byte [rbx+T_SUB]
-    mov r15d, edi
+    mov r12d, edi
     call bld_rec
-    test r12d, r12d
-    jnz .water
     mov eax, [rax+BI_POWER]
-    cmp r15d, BK_WIND
+    cmp r12d, BK_WIND
     jne .out
-    ; wind output varies gently with the season
     mov ecx, [month]
     and ecx, 3
     imul ecx, 5
     add eax, ecx
     jmp .out
-.water:
-    mov eax, [rax+BI_WATER]
-    test eax, eax
-    jz .out
-    ; water works need power
-    test byte [rbx+T_FLAGS], F_POWER
-    jz .none
-    cmp r15d, BK_PUMP
-    jne .out
-    push rax
-    push rax
-    mov edi, r13d
-    mov esi, r14d
-    call count_water_near
-    mov ecx, eax
-    pop rax
-    pop rax
-    test ecx, ecx
-    jnz .out
-.none:
+.zero:
     xor eax, eax
 .out:
     RETURN
 
-tile_demand:  ; (rdi tile, esi mode) -> eax
+; power used by an anchor tile (rdi tile) -> eax
+tile_power_use:
     xor eax, eax
     cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
     jne .svc
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .o
     movzx eax, byte [rdi+T_LEVEL]
     CLAMP eax, 0, 5
     mov eax, [use_power+rax*4]
-    movzx ecx, byte [rdi+T_ZONE]
-    cmp ecx, ZONE_I
+    cmp byte [rdi+T_SIZE], 2
+    jne .i
+    shl eax, 2
+.i: cmp byte [rdi+T_ZONE], ZONE_I
     jne .o
-    lea eax, [rax+rax]
+    add eax, eax
     ret
 .svc:
     cmp byte [rdi+T_OBJ], OBJ_SERVICE
@@ -889,81 +1364,318 @@ tile_demand:  ; (rdi tile, esi mode) -> eax
 .o: ret
 
 ; ---------------------------------------------------------------------
-;  flood one network kind (esi mode) and set F_POWER / F_WATER
+;  power: conductive tiles connect when within 2 tiles of each other
+;  (power lines reach 1)
 ; ---------------------------------------------------------------------
-FUNC network_flood, 48
-    mov [rbp-48], esi               ; mode
-    mov eax, F_POWER
-    test esi, esi
-    jz .f
-    mov eax, F_WATER
-.f:
-    mov [rbp-52], eax               ; flag
+FUNC power_flood, 64
     lea rdi, [comp_map]
     xor eax, eax
     mov ecx, MAP_TILES/2
     rep stosd
     lea rdi, [comp_supply]
-    mov ecx, MAX_COMPS
+    mov ecx, MAX_COMPS*2
     rep stosd
-    lea rdi, [comp_demand]
-    mov ecx, MAX_COMPS
-    rep stosd
-    mov dword [rbp-56], 0           ; comp count
-    mov dword [rbp-60], 0           ; total supply
-    mov dword [rbp-64], 0           ; total demand
-
-    xor r15d, r15d                  ; tile index
+    mov dword [rbp-56], 0
+    mov dword [rbp-60], 0
+    mov dword [rbp-64], 0
+    xor r15d, r15d
 .scan:
     cmp r15d, MAP_TILES
     jge .assign
     cmp word [comp_map+r15*2], 0
-    jne .snext
+    jne .sn
     mov eax, r15d
     shl eax, TILE_SHIFT
     lea rdi, [tiles+rax]
-    mov esi, [rbp-48]
-    call conductive
+    call power_conductive
     test eax, eax
-    jz .snext
-    ; new component
+    jz .sn
     mov eax, [rbp-56]
     inc eax
     cmp eax, MAX_COMPS-1
-    jge .snext
+    jge .sn
     mov [rbp-56], eax
-    mov [rbp-68], eax               ; comp id
-    ; BFS
+    mov [rbp-68], eax
     mov [comp_map+r15*2], ax
     mov [bfs_queue], r15w
-    xor r12d, r12d                  ; head
-    mov r13d, 1                     ; tail
+    xor r12d, r12d
+    mov r13d, 1
 .bfs:
     cmp r12d, r13d
-    jge .snext
+    jge .sn
     movzx r14d, word [bfs_queue+r12*2]
     inc r12d
-    ; account supply / demand
     mov eax, r14d
     shl eax, TILE_SHIFT
-    lea rdi, [tiles+rax]
-    mov [rbp-80], rdi
-    mov esi, [rbp-48]
-    mov edx, r14d
-    and edx, MAP_W-1
-    mov ecx, r14d
-    shr ecx, MAP_SHIFT
-    call tile_supply
+    lea rbx, [tiles+rax]
+    push r12
+    push r13
+    call power_supply_of
+    pop r13
+    pop r12
     mov ecx, [rbp-68]
     add [comp_supply+rcx*4], eax
     add [rbp-60], eax
-    mov rdi, [rbp-80]
-    mov esi, [rbp-48]
-    call tile_demand
+    mov rdi, rbx
+    call tile_power_use
     mov ecx, [rbp-68]
     add [comp_demand+rcx*4], eax
     add [rbp-64], eax
-    ; neighbours
+    mov eax, 2
+    cmp byte [rbx+T_OBJ], OBJ_POWER
+    jne .rad
+    mov eax, 1
+.rad:
+    mov [rbp-72], eax
+    neg eax
+    mov [rbp-76], eax               ; dy
+.ny:
+    mov eax, [rbp-76]
+    cmp eax, [rbp-72]
+    jg .bfs
+    mov eax, [rbp-72]
+    neg eax
+    mov [rbp-80], eax               ; dx
+.nx:
+    mov eax, [rbp-80]
+    cmp eax, [rbp-72]
+    jg .nyn
+    mov edi, r14d
+    and edi, MAP_W-1
+    add edi, [rbp-80]
+    mov esi, r14d
+    shr esi, MAP_SHIFT
+    add esi, [rbp-76]
+    cmp edi, MAP_W
+    jae .nxn
+    cmp esi, MAP_W
+    jae .nxn
+    shl esi, MAP_SHIFT
+    add esi, edi
+    cmp word [comp_map+rsi*2], 0
+    jne .nxn
+    mov [rbp-84], esi
+    shl esi, TILE_SHIFT
+    lea rdi, [tiles+rsi]
+    call power_conductive
+    test eax, eax
+    jz .nxn
+    ; power lines only link to things they touch
+    cmp byte [rdi+T_OBJ], OBJ_POWER
+    jne .link
+    mov eax, [rbp-80]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp eax, 1
+    jg .nxn
+    mov eax, [rbp-76]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp eax, 1
+    jg .nxn
+.link:
+    mov eax, [rbp-84]
+    mov ecx, [rbp-68]
+    mov [comp_map+rax*2], cx
+    mov [bfs_queue+r13*2], ax
+    inc r13d
+.nxn:
+    inc dword [rbp-80]
+    jmp .nx
+.nyn:
+    inc dword [rbp-76]
+    jmp .ny
+.sn:
+    inc r15d
+    jmp .scan
+.assign:
+    xor r15d, r15d
+.as:
+    cmp r15d, MAP_TILES
+    jge .done
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    and byte [rbx+T_FLAGS], ~F_POWER
+    movzx r12d, word [comp_map+r15*2]
+    test r12d, r12d
+    jz .asn
+    mov ecx, [comp_supply+r12*4]
+    test ecx, ecx
+    jz .asn
+    cmp ecx, [comp_demand+r12*4]
+    jge .on
+    mov eax, ecx
+    shl eax, 8
+    xor edx, edx
+    div dword [comp_demand+r12*4]
+    mov r13d, eax
+    mov edi, r15d
+    add edi, [day_count]
+    shr edi, 3
+    xor edi, r15d
+    call hash32
+    and eax, 255
+    cmp eax, r13d
+    jae .asn
+.on:
+    or byte [rbx+T_FLAGS], F_POWER
+.asn:
+    inc r15d
+    jmp .as
+.done:
+    mov eax, [rbp-60]
+    mov [power_supply], eax
+    mov eax, [rbp-64]
+    mov [power_demand], eax
+    ; a plant whose network has nothing to power?
+    xor eax, eax
+    mov ecx, 1
+.isl:
+    cmp ecx, [rbp-56]
+    jg .isd
+    cmp dword [comp_supply+rcx*4], 0
+    je .isn
+    cmp dword [comp_demand+rcx*4], 10
+    jg .isn
+    mov eax, 1
+.isn:
+    inc ecx
+    jmp .isl
+.isd:
+    WARN_ONCE island_warned, msg_island, UI_WARN
+    RETURN
+
+; ---------------------------------------------------------------------
+;  water: pipes carry clean water from pumps and towers, and sewage to
+;  outlets.  Buildings within 2 tiles of a pipe are served.
+; ---------------------------------------------------------------------
+is_pipe_node:
+    test byte [rdi+T_FLAGS2], F2_PIPE
+    jnz .y
+    cmp byte [rdi+T_OBJ], OBJ_SERVICE
+    jne .n
+    movzx eax, byte [rdi+T_SUB]
+    cmp eax, BK_PUMP
+    je .y
+    cmp eax, BK_WTOWER
+    je .y
+    cmp eax, BK_SEWAGE
+    je .y
+.n: xor eax, eax
+    ret
+.y: mov eax, 1
+    ret
+
+; water / sewage use of an anchor (rdi tile) -> eax
+tile_water_use:
+    xor eax, eax
+    cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
+    je .z
+    cmp byte [rdi+T_OBJ], OBJ_SERVICE
+    jne .o
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .o
+    mov eax, 4
+    ret
+.z: test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .o
+    movzx eax, byte [rdi+T_LEVEL]
+    CLAMP eax, 1, 5
+    mov eax, [use_water+rax*4]
+    cmp byte [rdi+T_SIZE], 2
+    jne .o
+    shl eax, 2
+.o: ret
+
+FUNC water_flood, 64
+    lea rdi, [comp_map]
+    xor eax, eax
+    mov ecx, MAP_TILES/2
+    rep stosd
+    lea rdi, [cons_comp]
+    mov ecx, MAP_TILES/2
+    rep stosd
+    lea rdi, [comp_supply]
+    mov ecx, MAX_COMPS*3
+    rep stosd
+    lea rdi, [comp_dirty]
+    mov ecx, MAX_COMPS/4
+    rep stosd
+    mov dword [rbp-56], 0
+    mov [water_supply], eax
+    mov [water_demand], eax
+    mov [sewage_cap], eax
+    mov [sewage_demand], eax
+    ; 1. label pipe networks (4-connected) and add producers
+    xor r15d, r15d
+.scan:
+    cmp r15d, MAP_TILES
+    jge .consumers
+    cmp word [comp_map+r15*2], 0
+    jne .sn
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rdi, [tiles+rax]
+    call is_pipe_node
+    test eax, eax
+    jz .sn
+    mov eax, [rbp-56]
+    inc eax
+    cmp eax, MAX_COMPS-1
+    jge .sn
+    mov [rbp-56], eax
+    mov [rbp-68], eax
+    mov [comp_map+r15*2], ax
+    mov [bfs_queue], r15w
+    xor r12d, r12d
+    mov r13d, 1
+.bfs:
+    cmp r12d, r13d
+    jge .sn
+    movzx r14d, word [bfs_queue+r12*2]
+    inc r12d
+    mov eax, r14d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    cmp byte [rbx+T_OBJ], OBJ_SERVICE
+    jne .nbr
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .nbr
+    movzx edi, byte [rbx+T_SUB]
+    mov [rbp-72], edi
+    call bld_rec
+    mov ecx, [rax+BI_WATER]
+    mov edx, [rbp-68]
+    cmp dword [rbp-72], BK_SEWAGE
+    jne .wp
+    add [comp_sewcap+rdx*4], ecx
+    add [sewage_cap], ecx
+    jmp .nbr
+.wp:
+    test byte [rbx+T_FLAGS], F_POWER
+    jz .nbr
+    cmp dword [rbp-72], BK_PUMP
+    jne .addw
+    mov [rbp-88], ecx
+    mov edi, r14d
+    and edi, MAP_W-1
+    mov esi, r14d
+    shr esi, MAP_SHIFT
+    call water_quality_near
+    mov ecx, [rbp-88]
+    mov edx, [rbp-68]
+    cmp eax, -1
+    je .nbr
+    cmp eax, 50
+    jl .addw
+    mov byte [comp_dirty+rdx], 1
+.addw:
+    add [comp_supply+rdx*4], ecx
+    add [water_supply], ecx
+.nbr:
     xor ebx, ebx
 .nb:
     mov edi, r14d
@@ -976,19 +1688,17 @@ FUNC network_flood, 48
     jae .nbn
     cmp esi, MAP_W
     jae .nbn
-    mov eax, esi
-    shl eax, MAP_SHIFT
-    add eax, edi
-    cmp word [comp_map+rax*2], 0
+    shl esi, MAP_SHIFT
+    add esi, edi
+    cmp word [comp_map+rsi*2], 0
     jne .nbn
-    mov [rbp-72], eax
-    shl eax, TILE_SHIFT
-    lea rdi, [tiles+rax]
-    mov esi, [rbp-48]
-    call conductive
+    mov [rbp-76], esi
+    shl esi, TILE_SHIFT
+    lea rdi, [tiles+rsi]
+    call is_pipe_node
     test eax, eax
     jz .nbn
-    mov eax, [rbp-72]
+    mov eax, [rbp-76]
     mov ecx, [rbp-68]
     mov [comp_map+rax*2], cx
     mov [bfs_queue+r13*2], ax
@@ -998,12 +1708,71 @@ FUNC network_flood, 48
     cmp ebx, 4
     jl .nb
     jmp .bfs
-.snext:
+.sn:
     inc r15d
     jmp .scan
 
+.consumers:
+    ; 2. every consumer anchor attaches to a pipe within 2 tiles
+    xor r15d, r15d
+.cl:
+    cmp r15d, MAP_TILES
+    jge .assign
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    mov rdi, rbx
+    call tile_water_use
+    test eax, eax
+    jz .cn
+    mov [rbp-80], eax
+    mov rdi, rbx
+    call footprint_size
+    mov [rbp-84], eax
+    mov r12d, -3
+.sy:
+    mov eax, [rbp-84]
+    add eax, 2
+    cmp r12d, eax
+    jg .cn
+    mov r13d, -3
+.sx:
+    mov eax, [rbp-84]
+    add eax, 2
+    cmp r13d, eax
+    jg .syn
+    mov edi, r15d
+    and edi, MAP_W-1
+    add edi, r13d
+    mov esi, r15d
+    shr esi, MAP_SHIFT
+    add esi, r12d
+    cmp edi, MAP_W
+    jae .sxn
+    cmp esi, MAP_W
+    jae .sxn
+    shl esi, MAP_SHIFT
+    add esi, edi
+    movzx eax, word [comp_map+rsi*2]
+    test eax, eax
+    jz .sxn
+    mov [cons_comp+r15*2], ax
+    mov ecx, [rbp-80]
+    add [comp_demand+rax*4], ecx
+    add [water_demand], ecx
+    add [sewage_demand], ecx
+    jmp .cn
+.sxn:
+    inc r13d
+    jmp .sx
+.syn:
+    inc r12d
+    jmp .sy
+.cn:
+    inc r15d
+    jmp .cl
+
 .assign:
-    ; set flags from component balance
     xor r15d, r15d
 .as:
     cmp r15d, MAP_TILES
@@ -1011,67 +1780,272 @@ FUNC network_flood, 48
     mov eax, r15d
     shl eax, TILE_SHIFT
     lea rbx, [tiles+rax]
-    mov ecx, [rbp-52]
-    not ecx
-    and [rbx+T_FLAGS], cl
-    movzx eax, word [comp_map+r15*2]
-    test eax, eax
+    and byte [rbx+T_FLAGS], ~F_WATER
+    and byte [rbx+T_FLAGS2], ~(F2_SEWAGE | F2_DIRTY)
+    movzx r12d, word [cons_comp+r15*2]
+    test r12d, r12d
     jz .asn
-    mov ecx, [comp_supply+rax*4]
+    mov ecx, [comp_sewcap+r12*4]
+    cmp ecx, [comp_demand+r12*4]
+    jl .nsw
+    or byte [rbx+T_FLAGS2], F2_SEWAGE
+.nsw:
+    mov ecx, [comp_supply+r12*4]
     test ecx, ecx
     jz .asn
-    mov edx, [comp_demand+rax*4]
-    cmp ecx, edx
+    cmp ecx, [comp_demand+r12*4]
     jge .on
-    ; brownout: a deterministic share of tiles stays lit
-    imul ecx, 256
-    push rdx
     mov eax, ecx
+    shl eax, 8
     xor edx, edx
-    pop rcx
-    test ecx, ecx
-    jz .on
-    div ecx
-    mov r12d, eax                   ; share 0..255
+    div dword [comp_demand+r12*4]
+    mov r13d, eax
     mov edi, r15d
-    add edi, [day_count]
-    shr edi, 3
-    xor edi, r15d
+    xor edi, 0x5bd1e995
     call hash32
     and eax, 255
-    cmp eax, r12d
+    cmp eax, r13d
     jae .asn
 .on:
-    mov ecx, [rbp-52]
-    or [rbx+T_FLAGS], cl
+    or byte [rbx+T_FLAGS], F_WATER
+    cmp byte [comp_dirty+r12], 0
+    je .asn
+    or byte [rbx+T_FLAGS2], F2_DIRTY
 .asn:
     inc r15d
     jmp .as
 .done:
-    mov eax, [rbp-60]
-    mov edx, [rbp-64]
-    cmp dword [rbp-48], 0
-    jne .ws
-    mov [power_supply], eax
-    mov [power_demand], edx
-    RETURN
-.ws:
-    mov [water_supply], eax
-    mov [water_demand], edx
+    call spread_footprint_utilities
     RETURN
 
-; road connectivity to the highway (MISC_NET)
+; copy utility flags from anchors to the rest of their footprint
+FUNC spread_footprint_utilities
+    xor r15d, r15d
+.l:
+    cmp r15d, MAP_TILES
+    jge .out
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .n
+    mov rdi, rbx
+    call footprint_size
+    cmp eax, 1
+    jle .n
+    mov r14d, eax
+    mov r12b, [rbx+T_FLAGS]
+    and r12b, F_WATER
+    mov r13b, [rbx+T_FLAGS2]
+    and r13b, F2_SEWAGE | F2_DIRTY
+    xor ecx, ecx
+.fy:
+    xor edx, edx
+.fx:
+    mov edi, r15d
+    and edi, MAP_W-1
+    add edi, edx
+    mov esi, r15d
+    shr esi, MAP_SHIFT
+    add esi, ecx
+    push rcx
+    push rdx
+    call tile_at
+    pop rdx
+    pop rcx
+    test rax, rax
+    jz .fn
+    and byte [rax+T_FLAGS], ~F_WATER
+    or [rax+T_FLAGS], r12b
+    and byte [rax+T_FLAGS2], ~(F2_SEWAGE | F2_DIRTY)
+    or [rax+T_FLAGS2], r13b
+.fn:
+    inc edx
+    cmp edx, r14d
+    jl .fx
+    inc ecx
+    cmp ecx, r14d
+    jl .fy
+.n:
+    inc r15d
+    jmp .l
+.out:
+    RETURN
+
+; highest water pollution touching tile (edi,esi) -> eax, -1 if no water
+FUNC water_quality_near
+    mov r12d, edi
+    mov r13d, esi
+    mov ebx, -1
+    mov r14d, -1
+.dy:
+    mov r15d, -1
+.dx:
+    lea edi, [r12+r15]
+    lea esi, [r13+r14]
+    call tile_at
+    test rax, rax
+    jz .n
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    jne .n
+    sub rax, tiles
+    shr eax, TILE_SHIFT
+    movzx eax, byte [map_wpol+rax]
+    cmp eax, ebx
+    jle .n
+    mov ebx, eax
+.n:
+    inc r15d
+    cmp r15d, 1
+    jle .dx
+    inc r14d
+    cmp r14d, 1
+    jle .dy
+    mov eax, ebx
+    RETURN
+
+; sewage outlets pollute the water they drain into (flood over water)
+FUNC water_pollution_update, 16
+    lea rdi, [map_wpol]
+    xor eax, eax
+    mov ecx, MAP_TILES/4
+    rep stosd
+    lea rdi, [comp_map]
+    mov ecx, MAP_TILES/2
+    rep stosd
+    mov eax, [sewage_demand]
+    CLAMP eax, 20, 1000
+    shr eax, 2
+    add eax, 60
+    CLAMP eax, 0, 255
+    mov [rbp-48], eax
+    xor r15d, r15d
+.l:
+    cmp r15d, MAP_TILES
+    jge .out
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    cmp byte [rbx+T_OBJ], OBJ_SERVICE
+    jne .n
+    cmp byte [rbx+T_SUB], BK_SEWAGE
+    jne .n
+    xor r13d, r13d
+    xor ecx, ecx
+.sd:
+    mov edi, r15d
+    and edi, MAP_W-1
+    add edi, [dir_dx+rcx*4]
+    mov esi, r15d
+    shr esi, MAP_SHIFT
+    add esi, [dir_dy+rcx*4]
+    push rcx
+    push rcx
+    call tile_at
+    pop rcx
+    pop rcx
+    test rax, rax
+    jz .sdn
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    jne .sdn
+    sub rax, tiles
+    shr eax, TILE_SHIFT
+    mov word [comp_map+rax*2], 1
+    mov [bfs_queue+r13*2], ax
+    inc r13d
+.sdn:
+    inc ecx
+    cmp ecx, 4
+    jl .sd
+    xor r12d, r12d
+.bfs:
+    cmp r12d, r13d
+    jge .clr
+    movzx r14d, word [bfs_queue+r12*2]
+    inc r12d
+    movzx ecx, word [comp_map+r14*2]
+    mov eax, 22
+    sub eax, ecx
+    jle .bfs
+    imul eax, [rbp-48]
+    xor edx, edx
+    mov ecx, 22
+    div ecx
+    movzx ecx, byte [map_wpol+r14]
+    add eax, ecx
+    CLAMP eax, 0, 255
+    mov [map_wpol+r14], al
+    xor ebx, ebx
+.nb:
+    mov edi, r14d
+    and edi, MAP_W-1
+    add edi, [dir_dx+rbx*4]
+    mov esi, r14d
+    shr esi, MAP_SHIFT
+    add esi, [dir_dy+rbx*4]
+    call tile_at
+    test rax, rax
+    jz .nbn
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    jne .nbn
+    sub rax, tiles
+    shr eax, TILE_SHIFT
+    cmp word [comp_map+rax*2], 0
+    jne .nbn
+    movzx ecx, word [comp_map+r14*2]
+    inc ecx
+    mov [comp_map+rax*2], cx
+    mov [bfs_queue+r13*2], ax
+    inc r13d
+.nbn:
+    inc ebx
+    cmp ebx, 4
+    jl .nb
+    jmp .bfs
+.clr:
+    lea rdi, [comp_map]
+    xor eax, eax
+    mov ecx, MAP_TILES/2
+    rep stosd
+.n:
+    inc r15d
+    jmp .l
+.out:
+    RETURN
+
+; is_border_highway(ecx tile index, rax = tile offset) -> ecx 1/0
+; any highway road on the edge of the map links to the region
+is_border_highway:
+    cmp byte [tiles+rax+T_ROADTYPE], RT_HIGHWAY
+    jne .n
+    mov edx, ecx
+    and edx, MAP_W-1
+    jz .y
+    cmp edx, MAP_W-1
+    je .y
+    shr ecx, MAP_SHIFT
+    jz .y
+    cmp ecx, MAP_W-1
+    je .y
+.n: xor ecx, ecx
+    ret
+.y: mov ecx, 1
+    ret
+
+; road connectivity to the outside (MISC_NET)
 FUNC road_connectivity
     xor r15d, r15d
-    xor r13d, r13d                  ; queue tail
+    xor r13d, r13d
 .clr:
     mov eax, r15d
     shl eax, TILE_SHIFT
     and byte [tiles+rax+T_MISC], ~MISC_NET
-    test byte [tiles+rax+T_FLAGS], F_HIGHWAY
-    jz .cn
     cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
     jne .cn
+    mov ecx, r15d
+    call is_border_highway
+    test ecx, ecx
+    jz .cn
     or byte [tiles+rax+T_MISC], MISC_NET
     mov [bfs_queue+r13*2], r15w
     inc r13d
@@ -1113,52 +2087,55 @@ FUNC road_connectivity
 .out:
     RETURN
 
+
+
 FUNC networks_update
     mov dword [net_dirty], 0
     call road_connectivity
-    xor esi, esi
-    call network_flood
-    mov esi, 1
-    call network_flood
-    ; warnings (once until fixed)
-    mov eax, [power_demand]
-    cmp eax, [power_supply]
-    jle .pok
-    cmp dword [brownout_warned], 0
-    jne .w
-    mov dword [brownout_warned], 1
-    lea rdi, [msg_brownout]
-    mov esi, UI_WARN
-    mov edx, -1
-    mov ecx, -1
-    call notify
-    jmp .w
-.pok:
-    mov dword [brownout_warned], 0
+    call power_flood
+    call water_pollution_update
+    call water_flood
+    xor eax, eax
+    mov ecx, [power_demand]
+    cmp ecx, [power_supply]
+    seta al
+    WARN_ONCE brownout_warned, msg_brownout, UI_WARN
+    xor eax, eax
+    mov ecx, [water_demand]
+    cmp ecx, 40
+    jl .w
+    cmp ecx, [water_supply]
+    seta al
 .w:
-    mov eax, [water_demand]
-    cmp eax, 40
-    jl .wok
-    cmp eax, [water_supply]
-    jle .wok
-    cmp dword [water_warned], 0
-    jne .out
-    mov dword [water_warned], 1
-    lea rdi, [msg_nowater]
-    mov esi, UI_WARN
-    mov edx, -1
-    mov ecx, -1
-    call notify
-    jmp .out
-.wok:
-    mov dword [water_warned], 0
-.out:
+    WARN_ONCE water_warned, msg_nowater, UI_WARN
+    xor eax, eax
+    mov ecx, [sewage_demand]
+    cmp ecx, 60
+    jl .s
+    cmp ecx, [sewage_cap]
+    seta al
+.s:
+    WARN_ONCE sewage_warned, msg_nosewage, UI_WARN
+    xor eax, eax
+    cmp dword [cnt_garbage], 8
+    setg al
+    WARN_ONCE garbage_warned, msg_garbage, UI_WARN
+    xor eax, eax
+    mov ecx, [landfill_cap]
+    test ecx, ecx
+    jz .lf
+    cmp dword [svc_count+BK_INCIN*4], 0
+    jne .lf
+    cmp [landfill_used], ecx
+    setae al
+.lf:
+    WARN_ONCE landfull_warned, msg_landfull, UI_BAD
     RETURN
 
-; ---------------------------------------------------------------------
-;  stamp(rdi map, edi.. ) radial falloff add
-;  stamp(rdi map, esi cx, edx cy, ecx radius, r8d strength)
-; ---------------------------------------------------------------------
+; =====================================================================
+;  map stamping
+; =====================================================================
+; stamp(rdi map, esi cx, edx cy, ecx radius, r8d strength)
 FUNC stamp, 32
     mov [rbp-56], rdi
     mov r12d, esi
@@ -1167,9 +2144,13 @@ FUNC stamp, 32
     mov r15d, r8d
     mov eax, ecx
     imul eax, eax
-    mov [rbp-48], eax               ; r^2
+    test eax, eax
+    jnz .r
+    inc eax
+.r:
+    mov [rbp-48], eax
     mov ebx, r14d
-    neg ebx                         ; dy
+    neg ebx
 .dy:
     cmp ebx, r14d
     jg .out
@@ -1177,7 +2158,7 @@ FUNC stamp, 32
     cmp eax, MAP_W
     jae .dyn
     mov ecx, r14d
-    neg ecx                         ; dx
+    neg ecx
 .dx:
     cmp ecx, r14d
     jg .dyn
@@ -1188,20 +2169,15 @@ FUNC stamp, 32
     imul eax, ecx
     mov edx, ebx
     imul edx, ebx
-    add eax, edx                    ; d^2
+    add eax, edx
     mov edx, [rbp-48]
     sub edx, eax
     jl .dxn
-    ; v = strength * (r^2 - d^2) / r^2
     mov eax, edx
     imul eax, r15d
     xor edx, edx
     push rcx
     mov ecx, [rbp-48]
-    test ecx, ecx
-    jnz .dv
-    inc ecx
-.dv:
     div ecx
     pop rcx
     lea edx, [r13+rbx]
@@ -1270,19 +2246,17 @@ FUNC stamp_sub, 32
 
 section .data
 align 8
-cov_maps dq 0, map_police, map_fire, map_health, map_edu, map_park
+cov_maps dq 0, map_police, map_fire, map_health, map_elem, map_high, map_uni, map_park, map_garb, 0
 section .text
 
 ; ---------------------------------------------------------------------
-;  coverage_update: services, pollution, traffic, crime, land value
+;  coverage_update: services, pollution, noise, traffic, crime, value
 ; ---------------------------------------------------------------------
-FUNC coverage_update, 32
+FUNC coverage_update, 48
+    ; clear map_pol .. map_traffic (13 consecutive maps)
     lea rdi, [map_pol]
     xor eax, eax
-    mov ecx, MAP_TILES*7/4          ; pol, crime, police, fire, health, edu, park
-    rep stosd
-    lea rdi, [map_traffic]
-    mov ecx, MAP_TILES/4
+    mov ecx, MAP_TILES*13/4
     rep stosd
 
     xor r13d, r13d
@@ -1300,6 +2274,34 @@ FUNC coverage_update, 32
     je .zb
     cmp eax, OBJ_TREE
     je .tree
+    cmp eax, OBJ_ROAD
+    je .road
+    jmp .next
+.road:
+    movzx r8d, byte [rbx+T_TRAFFIC]
+    shr r8d, 2
+    test r8d, r8d
+    jz .bus
+    lea rdi, [map_noise]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, 2
+    call stamp
+.bus:
+    test byte [rbx+T_FLAGS2], F2_BUSSTOP
+    jz .next
+    cmp dword [svc_count+BK_BUSDEPOT*4], 0
+    je .next
+    lea rdi, [map_transit]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, 5
+    mov r8d, 200
+    test dword [policies], P_FREEBUS
+    jz .bs
+    mov r8d, 255
+.bs:
+    call stamp
     jmp .next
 .svc:
     test byte [rbx+T_FLAGS], F_ANCHOR
@@ -1308,64 +2310,119 @@ FUNC coverage_update, 32
     mov r14d, edi
     call bld_rec
     mov r15, rax
-    ; pollution
+    movzx eax, byte [r15+BI_SIZE]
+    shr eax, 1
+    mov [rbp-48], eax
     movzx r8d, byte [r15+BI_POLL]
     test r8d, r8d
     jz .nopol
     lea rdi, [map_pol]
-    movzx eax, byte [r15+BI_SIZE]
-    shr eax, 1
-    lea esi, [r12+rax]
-    lea edx, [r13+rax]
+    mov esi, r12d
+    add esi, [rbp-48]
+    mov edx, r13d
+    add edx, [rbp-48]
     mov ecx, 9
     call stamp
 .nopol:
+    movzx r8d, byte [r15+BI_NOISE]
+    test r8d, r8d
+    jz .nonoise
+    lea rdi, [map_noise]
+    mov esi, r12d
+    add esi, [rbp-48]
+    mov edx, r13d
+    add edx, [rbp-48]
+    mov ecx, 4
+    call stamp
+.nonoise:
     movzx eax, byte [r15+BI_COV]
     test eax, eax
     jz .next
-    ; services need power (parks do not)
+    cmp eax, CV_TRANSIT
+    je .next
     cmp eax, CV_PARK
     je .cov
     test byte [rbx+T_FLAGS], F_POWER
     jz .next
 .cov:
+    mov [rbp-52], eax
     mov rdi, [cov_maps+rax*8]
     movzx r8d, byte [cov_strength+rax]
     movzx ecx, byte [bld_cov_boost+r14]
     add r8d, ecx
+    mov eax, [rbp-52]
+    cmp eax, CV_PARK
+    jne .pe
+    test dword [policies], P_PARKS
+    jz .pe
+    add r8d, 60
+.pe:
+    cmp eax, CV_ELEM
+    jb .pd
+    cmp eax, CV_UNIV
+    ja .pd
+    test dword [policies], P_EDUBOOST
+    jz .pd
+    add r8d, 60
+.pd:
     CLAMP r8d, 0, 255
-    movzx eax, byte [r15+BI_SIZE]
-    shr eax, 1
-    lea esi, [r12+rax]
-    lea edx, [r13+rax]
+    mov esi, r12d
+    add esi, [rbp-48]
+    mov edx, r13d
+    add edx, [rbp-48]
     movzx ecx, byte [r15+BI_RADIUS]
     call stamp
     jmp .next
 .zb:
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .next
     test byte [rbx+T_FLAGS], F_BUILD
     jnz .next
-    ; traffic from residents / jobs onto nearby roads
-    movzx eax, word [rbx+T_POP]
-    test eax, eax
-    jz .ind
-    mov edi, r12d
-    mov esi, r13d
-    mov edx, eax
-    call add_traffic
-.ind:
-    cmp byte [rbx+T_ZONE], ZONE_I
+    movzx eax, byte [rbx+T_ZONE]
+    cmp eax, ZONE_CH
+    jne .zi
+    lea rdi, [map_noise]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, 3
+    mov r8d, 50
+    call stamp
+    jmp .next
+.zi:
+    cmp eax, ZONE_I
     jne .next
     movzx eax, byte [rbx+T_LEVEL]
     CLAMP eax, 0, 5
     movzx r8d, byte [ind_poll+rax]
+    movzx ecx, byte [rbx+T_SUB]
+    test ecx, ecx
+    jz .gp
+    movzx r8d, byte [spec_poll+rcx]
+.gp:
+    test dword [policies], P_FILTERS
+    jz .nf
+    lea r8d, [r8*2+r8]
+    shr r8d, 3
+.nf:
     test r8d, r8d
     jz .next
+    mov [rbp-56], r8d
     lea rdi, [map_pol]
     mov esi, r12d
     mov edx, r13d
     movzx ecx, byte [rbx+T_LEVEL]
     shr ecx, 1
     add ecx, 3
+    cmp byte [rbx+T_SIZE], 2
+    jne .zs
+    add ecx, 2
+.zs:
+    call stamp
+    lea rdi, [map_noise]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, 3
+    mov r8d, [rbp-56]
     call stamp
     jmp .next
 .tree:
@@ -1375,6 +2432,12 @@ FUNC coverage_update, 32
     mov ecx, 1
     mov r8d, 4
     call stamp_sub
+    lea rdi, [map_noise]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, 1
+    mov r8d, 6
+    call stamp_sub
 .next:
     inc r12d
     cmp r12d, MAP_W
@@ -1383,28 +2446,33 @@ FUNC coverage_update, 32
     cmp r13d, MAP_W
     jl .y
 
-    ; traffic pollution + crime + land value per tile
+    ; per-tile: traffic fumes, land value, crime, education drift
     xor r15d, r15d
-    xor r12d, r12d                  ; total traffic
-    mov dword [rbp-48], 0           ; road count
+    xor r12d, r12d
+    mov dword [rbp-60], 0
 .lv:
     mov eax, r15d
     shl eax, TILE_SHIFT
     lea rbx, [tiles+rax]
-    ; roads: traffic noise pollution
     cmp byte [rbx+T_OBJ], OBJ_ROAD
     jne .nr
-    movzx eax, byte [map_traffic+r15]
+    movzx eax, word [rbx+T_FLOW]
+    shl eax, 1
+    CLAMP eax, 0, 255
+    movzx ecx, byte [rbx+T_TRAFFIC]
+    add eax, ecx
+    shr eax, 1
     mov [rbx+T_TRAFFIC], al
+    mov word [rbx+T_FLOW], 0
+    shr byte [rbx+T_JAM], 1
     add r12d, eax
-    inc dword [rbp-48]
+    inc dword [rbp-60]
     shr eax, 2
     movzx ecx, byte [map_pol+r15]
     add eax, ecx
     CLAMP eax, 0, 255
     mov [map_pol+r15], al
 .nr:
-    ; parks also soak up pollution
     movzx eax, byte [map_park+r15]
     shr eax, 3
     movzx ecx, byte [map_pol+r15]
@@ -1412,14 +2480,17 @@ FUNC coverage_update, 32
     CLAMP ecx, 0, 255
     mov [map_pol+r15], cl
     ; land value
-    mov eax, 50
+    mov eax, 48
     movzx ecx, byte [map_scenic+r15]
     add eax, ecx
     movzx ecx, byte [map_park+r15]
     shr ecx, 1
     add eax, ecx
-    movzx ecx, byte [map_edu+r15]
-    shr ecx, 3
+    movzx ecx, byte [map_elem+r15]
+    shr ecx, 4
+    add eax, ecx
+    movzx ecx, byte [map_high+r15]
+    shr ecx, 4
     add eax, ecx
     movzx ecx, byte [map_health+r15]
     shr ecx, 3
@@ -1427,18 +2498,25 @@ FUNC coverage_update, 32
     movzx ecx, byte [map_police+r15]
     shr ecx, 4
     add eax, ecx
+    movzx ecx, byte [map_transit+r15]
+    shr ecx, 3
+    add eax, ecx
     movzx ecx, byte [map_pol+r15]
     sub eax, ecx
-    ; neighbourhood quality: nearby big buildings raise value
+    movzx ecx, byte [map_noise+r15]
+    shr ecx, 1
+    sub eax, ecx
     cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
     jne .lvn
     movzx ecx, byte [rbx+T_LEVEL]
     shl ecx, 3
     add eax, ecx
+    test byte [rbx+T_FLAGS2], F2_GARBAGE
+    jz .lvn
+    sub eax, 25
 .lvn:
     CLAMP eax, 0, 255
     mov [map_lv+r15], al
-    ; crime: density and poverty, minus police
     xor eax, eax
     cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
     jne .cr
@@ -1450,17 +2528,42 @@ FUNC coverage_update, 32
     CLAMP edx, 0, 140
     shr edx, 1
     add eax, edx
+    movzx ecx, byte [rbx+T_EDU]
+    shr ecx, 3
+    sub eax, ecx
     movzx ecx, byte [map_police+r15]
     sub eax, ecx
     CLAMP eax, 0, 255
 .cr:
     mov [map_crime+r15], al
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .ne
+    movzx eax, byte [rbx+T_ZONE]
+    cmp byte [zone_class+rax], ZC_RES
+    jne .ne
+    movzx eax, byte [map_elem+r15]
+    shr eax, 1
+    movzx ecx, byte [map_high+r15]
+    imul ecx, 3
+    shr ecx, 3
+    add eax, ecx
+    movzx ecx, byte [map_uni+r15]
+    shr ecx, 2
+    add eax, ecx
+    CLAMP eax, 0, 255
+    movzx ecx, byte [rbx+T_EDU]
+    sub eax, ecx
+    sar eax, 3
+    add ecx, eax
+    CLAMP ecx, 0, 255
+    mov [rbx+T_EDU], cl
+.ne:
     inc r15d
     cmp r15d, MAP_TILES
     jl .lv
     mov eax, r12d
     xor edx, edx
-    mov ecx, [rbp-48]
+    mov ecx, [rbp-60]
     test ecx, ecx
     jz .nt
     div ecx
@@ -1468,91 +2571,33 @@ FUNC coverage_update, 32
     mov [avg_traffic], eax
     RETURN
 
-; add_traffic(edi x, esi y, edx amount): spread over roads within 3
-FUNC add_traffic, 16
-    mov r12d, edi
-    mov r13d, esi
-    shr edx, 1
-    add edx, 2
-    mov [rbp-48], edx
-    ; count roads
-    xor ebx, ebx
-    mov r14d, -3
-.cy:
-    mov r15d, -3
-.cx:
-    lea edi, [r12+r15]
-    lea esi, [r13+r14]
-    call tile_at
-    test rax, rax
-    jz .cn
-    cmp byte [rax+T_OBJ], OBJ_ROAD
-    jne .cn
-    inc ebx
-.cn:
-    inc r15d
-    cmp r15d, 3
-    jle .cx
-    inc r14d
-    cmp r14d, 3
-    jle .cy
-    test ebx, ebx
-    jz .out
-    mov eax, [rbp-48]
-    xor edx, edx
-    div ebx
-    inc eax
-    mov [rbp-48], eax
-    mov r14d, -3
-.ay:
-    mov r15d, -3
-.ax:
-    lea edi, [r12+r15]
-    lea esi, [r13+r14]
-    call tile_at
-    test rax, rax
-    jz .an
-    cmp byte [rax+T_OBJ], OBJ_ROAD
-    jne .an
-    sub rax, tiles
-    shr eax, TILE_SHIFT
-    movzx ecx, byte [map_traffic+rax]
-    add ecx, [rbp-48]
-    CLAMP ecx, 0, 255
-    mov [map_traffic+rax], cl
-.an:
-    inc r15d
-    cmp r15d, 3
-    jle .ax
-    inc r14d
-    cmp r14d, 3
-    jle .ay
-.out:
-    RETURN
-
-; ---------------------------------------------------------------------
-;  city-wide statistics and demand
-; ---------------------------------------------------------------------
-FUNC stats_update, 32
+; =====================================================================
+;  statistics, workforce and demand
+; =====================================================================
+FUNC stats_update, 48
+    lea rdi, [population]
     xor eax, eax
-    mov [population], eax
-    mov [jobs_c], eax
-    mov [jobs_i], eax
-    mov [cnt_r], eax
-    mov [cnt_c], eax
-    mov [cnt_i], eax
-    mov [cnt_abandon], eax
-    mov [cnt_fire], eax
-    mov [cnt_unpowered], eax
-    mov [cnt_nowater], eax
-    mov [cnt_noroad], eax
+    mov ecx, (cnt_nogoods - population)/4 + 1
+    rep stosd
     mov [road_tiles], eax
+    mov [road_cost], eax
+    mov [n_res], eax
+    mov [n_com], eax
+    mov [n_ind], eax
+    mov [n_off], eax
+    mov [n_svc], eax
+    mov [garbage_total], eax
+    mov [landfill_cap], eax
     lea rdi, [svc_count]
     mov ecx, BK_COUNT
     rep stosd
-    xor r12d, r12d                  ; happiness * pop
-    xor r13d, r13d                  ; pollution sum
-    xor r14d, r14d                  ; crime sum
+    xor r12d, r12d
+    xor r13d, r13d
+    xor r14d, r14d
+    mov dword [rbp-48], 0           ; education * pop
+    mov dword [rbp-52], 0           ; office jobs
+    mov dword [rbp-56], 0           ; hi-tech jobs
+    mov dword [rbp-60], 0           ; basic jobs
     xor r15d, r15d
 .l:
     mov eax, r15d
@@ -1562,6 +2607,9 @@ FUNC stats_update, 32
     cmp eax, OBJ_ROAD
     jne .nr
     inc dword [road_tiles]
+    movzx eax, byte [rbx+T_ROADTYPE]
+    inc eax
+    add [road_cost], eax
     jmp .n
 .nr:
     cmp eax, OBJ_SERVICE
@@ -1570,10 +2618,32 @@ FUNC stats_update, 32
     jz .n
     movzx eax, byte [rbx+T_SUB]
     inc dword [svc_count+rax*4]
+    ; services that need electricity show it
+    mov byte [rbx+T_PROBLEM], 0
+    test byte [rbx+T_FLAGS], F_FIRE
+    jz .sf
+    mov byte [rbx+T_PROBLEM], PR_FIRE
+.sf:
+    cmp byte [svc_needs_power+rax], 0
+    je .sp
+    test byte [rbx+T_FLAGS], F_POWER
+    jnz .sp
+    mov byte [rbx+T_PROBLEM], PR_POWER
+.sp:
+    mov ecx, [n_svc]
+    cmp ecx, 1024
+    jge .n
+    mov [list_svc+rcx*2], r15w
+    inc dword [n_svc]
+    cmp eax, BK_LANDFILL
+    jne .n
+    add dword [landfill_cap], 150000
     jmp .n
 .ns:
     cmp eax, OBJ_ZONEBLD
     jne .n
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .n
     test byte [rbx+T_FLAGS], F_FIRE
     jz .nf
     inc dword [cnt_fire]
@@ -1598,12 +2668,25 @@ FUNC stats_update, 32
     jnz .wt
     inc dword [cnt_nowater]
 .wt:
+    test byte [rbx+T_FLAGS2], F2_GARBAGE
+    jz .gb
+    inc dword [cnt_garbage]
+.gb:
+    movzx eax, byte [rbx+T_GARBAGE]
+    add [garbage_total], eax
     movzx ecx, word [rbx+T_POP]
     movzx eax, byte [rbx+T_ZONE]
-    cmp eax, ZONE_R
-    jne .zc
+    movzx eax, byte [zone_class+rax]
+    cmp eax, ZC_RES
+    jne .job
     add [population], ecx
     inc dword [cnt_r]
+    mov edx, [n_res]
+    cmp edx, MAX_LIST
+    jge .rl
+    mov [list_res+rdx*2], r15w
+    inc dword [n_res]
+.rl:
     movzx eax, byte [rbx+T_HAPPY]
     imul eax, ecx
     add r12d, eax
@@ -1613,22 +2696,63 @@ FUNC stats_update, 32
     movzx eax, byte [map_crime+r15]
     imul eax, ecx
     add r14d, eax
+    movzx eax, byte [rbx+T_EDU]
+    imul eax, ecx
+    add [rbp-48], eax
     jmp .n
-.zc:
-    cmp eax, ZONE_C
-    jne .zi
-    add [jobs_c], ecx
+.job:
+    add [jobs+rax*4], ecx
+    cmp eax, ZC_COM
+    jne .j2
     inc dword [cnt_c]
+    add [rbp-60], ecx
+    test byte [rbx+T_FLAGS2], F2_NOGOODS
+    jz .cgl
+    inc dword [cnt_nogoods]
+.cgl:
+    mov edx, [n_com]
+    cmp edx, MAX_LIST
+    jge .n
+    mov [list_com+rdx*2], r15w
+    inc dword [n_com]
     jmp .n
-.zi:
-    add [jobs_i], ecx
+.j2:
+    cmp eax, ZC_IND
+    jne .j3
     inc dword [cnt_i]
+    cmp byte [rbx+T_LEVEL], 5
+    jne .ib
+    cmp byte [rbx+T_SUB], 0
+    jne .ib
+    add [rbp-56], ecx
+    jmp .il
+.ib:
+    add [rbp-60], ecx
+.il:
+    mov edx, [n_ind]
+    cmp edx, MAX_LIST
+    jge .n
+    mov [list_ind+rdx*2], r15w
+    inc dword [n_ind]
+    jmp .n
+.j3:
+    inc dword [cnt_o]
+    add [rbp-52], ecx
+    mov edx, [n_off]
+    cmp edx, MAX_LIST
+    jge .n
+    mov [list_off+rdx*2], r15w
+    inc dword [n_off]
 .n:
     inc r15d
     cmp r15d, MAP_TILES
     jl .l
 
-    ; averages
+    mov eax, [jobs+ZC_COM*4]
+    mov [jobs_c], eax
+    mov eax, [jobs+ZC_IND*4]
+    mov [jobs_i], eax
+
     mov ecx, [population]
     test ecx, ecx
     jz .nopop
@@ -1644,25 +2768,97 @@ FUNC stats_update, 32
     xor edx, edx
     div ecx
     mov [avg_crime], eax
-    jmp .dem
+    mov eax, [rbp-48]
+    xor edx, edx
+    div ecx
+    mov [avg_edu], eax
+    jmp .wf
 .nopop:
     mov dword [happy_avg], 60
-.dem:
-    ; workers ~ 55% of residents
+.wf:
+    ; ---- workforce ----
     mov eax, [population]
     imul eax, 55
     xor edx, edx
     mov ecx, 100
     div ecx
     mov [workers], eax
+    mov ecx, [avg_edu]
+    imul eax, ecx
+    shr eax, 8
+    mov [edu_workers], eax
+    mov eax, [workers]
+    mov ecx, [avg_edu]
+    sub ecx, 120
+    jge .he
+    xor ecx, ecx
+.he:
+    imul eax, ecx
+    xor edx, edx
+    mov ebx, 135
+    div ebx
+    mov [hedu_workers], eax
+    ; fill hi-tech, then office, then basic jobs
+    mov r12d, [hedu_workers]
+    mov edi, r12d
+    mov esi, [rbp-56]
+    call fill_ratio
+    mov [staff_hedu], eax
+    mov eax, [rbp-56]
+    cmp eax, r12d
+    jle .h1
+    mov eax, r12d
+.h1:
+    mov r14d, eax                   ; skilled filled so far
+    mov r13d, [edu_workers]
+    sub r13d, eax
+    jge .h2
+    xor r13d, r13d
+.h2:
+    mov edi, r13d
+    mov esi, [rbp-52]
+    call fill_ratio
+    mov [staff_edu], eax
+    mov eax, [rbp-52]
+    cmp eax, r13d
+    jle .h3
+    mov eax, r13d
+.h3:
+    add r14d, eax
+    mov ebx, [workers]
+    sub ebx, r14d
+    jge .h4
+    xor ebx, ebx
+.h4:
+    ; commuters from the region help a young city
+    cmp dword [population], 1500
+    jg .nc
+    mov eax, [rbp-60]
+    shr eax, 1
+    add ebx, eax
+.nc:
+    mov edi, ebx
+    mov esi, [rbp-60]
+    call fill_ratio
+    mov [staff_basic], eax
+    mov eax, [rbp-60]
+    cmp eax, ebx
+    jle .h5
+    mov eax, ebx
+.h5:
+    add r14d, eax
+    mov eax, [workers]
+    sub eax, r14d
+    jge .h6
+    xor eax, eax
+.h6:
+    mov [unemployed], eax
+    call apply_staffing
 
     ; ---- demand ----
-    mov r12d, [tax_rate]
-    sub r12d, 9
-    imul r12d, 6                    ; tax penalty
-    ; R: jobs available pull people in; happiness matters
-    mov eax, [jobs_c]
-    add eax, [jobs_i]
+    mov eax, [rbp-60]
+    add eax, [rbp-52]
+    add eax, [rbp-56]
     sub eax, [workers]
     mov ecx, [population]
     shr ecx, 3
@@ -1674,41 +2870,34 @@ FUNC stats_update, 32
     mov ecx, [happy_avg]
     sub ecx, 55
     add eax, ecx
-    sub eax, r12d
-    ; commuters from the region when the city is young
+    mov ecx, [tax_rate+ZC_RES*4]
+    sub ecx, 9
+    imul ecx, 6
+    sub eax, ecx
     cmp dword [population], 400
     jg .rr
     add eax, 30
 .rr:
-    CLAMP eax, -100, 100
-    mov ecx, [demand_r]
-    lea ecx, [rcx*2+rcx]
-    add eax, ecx
-    sar eax, 2
-    mov [demand_r], eax
-    ; C: wants ~ 1 shop job per 3 residents
+    mov edi, ZC_RES
+    call smooth_demand
     mov eax, [population]
     xor edx, edx
     mov ecx, 3
     div ecx
-    sub eax, [jobs_c]
+    sub eax, [jobs+ZC_COM*4]
     mov ecx, [population]
     shr ecx, 3
     add ecx, 20
     imul eax, 100
     cdq
     idiv ecx
-    sub eax, r12d
-    CLAMP eax, -100, 100
-    mov ecx, [demand_c]
-    lea ecx, [rcx*2+rcx]
-    add eax, ecx
-    sar eax, 2
-    mov [demand_c], eax
-    ; I: external trade + unemployed workers
-    mov eax, [workers]
-    sub eax, [jobs_c]
-    sub eax, [jobs_i]
+    mov ecx, [tax_rate+ZC_COM*4]
+    sub ecx, 9
+    imul ecx, 6
+    sub eax, ecx
+    mov edi, ZC_COM
+    call smooth_demand
+    mov eax, [unemployed]
     mov ecx, [population]
     shr ecx, 3
     add ecx, 30
@@ -1716,48 +2905,157 @@ FUNC stats_update, 32
     cdq
     idiv ecx
     add eax, [ext_demand]
-    sub eax, r12d
-    ; industry dislikes heavy pollution totals a little
     mov ecx, [avg_pollution]
     shr ecx, 3
     sub eax, ecx
+    mov ecx, [cnt_nogoods]
+    shl ecx, 2
+    add eax, ecx
+    mov ecx, [tax_rate+ZC_IND*4]
+    sub ecx, 9
+    imul ecx, 6
+    sub eax, ecx
+    mov edi, ZC_IND
+    call smooth_demand
+    mov eax, [edu_workers]
+    sub eax, [rbp-52]
+    mov ecx, [population]
+    shr ecx, 3
+    add ecx, 30
+    imul eax, 100
+    cdq
+    idiv ecx
+    sub eax, 10
+    cmp dword [population], 300
+    jge .o1
+    sub eax, 40
+.o1:
+    mov ecx, [tax_rate+ZC_OFF*4]
+    sub ecx, 9
+    imul ecx, 6
+    sub eax, ecx
+    mov edi, ZC_OFF
+    call smooth_demand
+    RETURN
+
+; fill_ratio(edi available, esi needed) -> eax 0..256
+fill_ratio:
+    mov eax, 256
+    test esi, esi
+    jz .o
+    cmp edi, esi
+    jge .o
+    mov eax, edi
+    shl eax, 8
+    xor edx, edx
+    div esi
+.o: ret
+
+; smooth_demand(edi class, eax raw)
+smooth_demand:
     CLAMP eax, -100, 100
-    mov ecx, [demand_i]
+    mov ecx, [demand+rdi*4]
     lea ecx, [rcx*2+rcx]
     add eax, ecx
     sar eax, 2
-    mov [demand_i], eax
+    mov [demand+rdi*4], eax
+    ret
+
+; mark job buildings that lack staff
+FUNC apply_staffing
+    xor r15d, r15d
+.l:
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    and byte [rbx+T_FLAGS2], ~F2_NOWORKERS
+    movzx eax, byte [rbx+T_ZONE]
+    movzx eax, byte [zone_class+rax]
+    cmp eax, ZC_RES
+    je .n
+    mov ecx, [staff_basic]
+    cmp eax, ZC_OFF
+    jne .i
+    mov ecx, [staff_edu]
+    jmp .s
+.i:
+    cmp eax, ZC_IND
+    jne .s
+    cmp byte [rbx+T_LEVEL], 5
+    jne .s
+    cmp byte [rbx+T_SUB], 0
+    jne .s
+    mov ecx, [staff_hedu]
+.s:
+    CLAMP ecx, 0, 255
+    mov [rbx+T_WORKERS], cl
+    cmp ecx, 128
+    jae .n
+    or byte [rbx+T_FLAGS2], F2_NOWORKERS
+.n:
+    inc r15d
+    cmp r15d, MAP_TILES
+    jl .l
     RETURN
 
-; ---------------------------------------------------------------------
+; =====================================================================
 ;  month end: budget, history, milestones, events
-; ---------------------------------------------------------------------
+; =====================================================================
 FUNC month_end, 32
-    ; income: residents pay tax, businesses pay half-rate on jobs
     mov eax, [population]
-    imul eax, [tax_rate]
+    imul eax, [tax_rate+ZC_RES*4]
     xor edx, edx
     mov ecx, 12
     div ecx
-    mov [inc_res], eax
-    mov eax, [jobs_c]
-    imul eax, [tax_rate]
+    mov [inc_class], eax
+    mov eax, [jobs+ZC_COM*4]
+    imul eax, [tax_rate+ZC_COM*4]
+    xor edx, edx
+    mov ecx, 14
+    div ecx
+    mov [inc_class+4], eax
+    mov eax, [jobs+ZC_IND*4]
+    imul eax, [tax_rate+ZC_IND*4]
     xor edx, edx
     mov ecx, 16
     div ecx
-    mov [inc_com], eax
-    mov eax, [jobs_i]
-    imul eax, [tax_rate]
+    mov [inc_class+8], eax
+    mov eax, [jobs+ZC_OFF*4]
+    imul eax, [tax_rate+ZC_OFF*4]
     xor edx, edx
-    mov ecx, 16
+    mov ecx, 10
     div ecx
-    mov [inc_ind], eax
-    mov eax, [inc_res]
-    add eax, [inc_com]
-    add eax, [inc_ind]
+    mov [inc_class+12], eax
+    mov eax, [exports_month]
+    add eax, [fares_month]
+    cmp dword [svc_count+BK_LANDMARK*4], 0
+    je .nl
+    mov ecx, [population]
+    shr ecx, 3
+    add eax, ecx
+    add eax, 500
+.nl:
+    cmp dword [svc_count+BK_STADIUM*4], 0
+    je .ns
+    mov ecx, [population]
+    shr ecx, 5
+    add eax, ecx
+.ns:
+    mov [inc_other], eax
+    mov dword [exports_month], 0
+    mov ecx, [riders_month]
+    mov [bus_riders], ecx
+    mov dword [riders_month], 0
+    mov dword [fares_month], 0
+    mov eax, [inc_class]
+    add eax, [inc_class+4]
+    add eax, [inc_class+8]
+    add eax, [inc_class+12]
+    add eax, [inc_other]
     mov [income_last], eax
-    ; expenses
-    mov eax, [road_tiles]
+    mov eax, [road_cost]
     xor edx, edx
     mov ecx, 5
     div ecx
@@ -1774,10 +3072,28 @@ FUNC month_end, 32
     cmp ebx, BK_COUNT
     jl .svc
     mov [exp_services], r12d
+    xor ebx, ebx
+    xor r12d, r12d
+.pol:
+    bt dword [policies], ebx
+    jnc .pn
+    mov ecx, [policy_cost_div+rbx*4]
+    test ecx, ecx
+    jz .pn
+    mov eax, [population]
+    xor edx, edx
+    div ecx
+    add eax, 10
+    add r12d, eax
+.pn:
+    inc ebx
+    cmp ebx, POLICY_COUNT
+    jl .pol
+    mov [exp_policies], r12d
     mov eax, [exp_roads]
+    add eax, [exp_services]
     add eax, r12d
     mov [expense_last], eax
-    ; apply
     movsxd rax, dword [income_last]
     add [money], rax
     movsxd rax, dword [expense_last]
@@ -1794,7 +3110,6 @@ FUNC month_end, 32
     mov ecx, -1
     call notify
 .solvent:
-    ; history
     mov eax, [hist_count]
     and eax, 63
     mov ecx, [population]
@@ -1802,23 +3117,12 @@ FUNC month_end, 32
     mov rcx, [money]
     mov [hist_money+rax*4], ecx
     inc dword [hist_count]
-    ; external demand slowly rises
     cmp dword [ext_demand], 60
     jge .ed
     inc dword [ext_demand]
 .ed:
-    ; landmark tourism
-    cmp dword [svc_count+BK_LANDMARK*4], 0
-    je .nl
-    mov eax, [population]
-    shr eax, 3
-    add eax, 500
-    movsxd rax, eax
-    add [money], rax
-.nl:
     call check_milestone
     call random_event
-    ; calendar
     inc dword [month]
     cmp dword [month], 12
     jl .out
@@ -1872,17 +3176,21 @@ FUNC check_milestone
 ;  random events: fires, meteors, booms
 ; ---------------------------------------------------------------------
 FUNC random_event
-    ; spontaneous fires: more likely with many buildings, less with
-    ; fire coverage
     mov eax, [cnt_r]
     add eax, [cnt_c]
     add eax, [cnt_i]
+    add eax, [cnt_o]
     cmp eax, 20
     jl .nofire
     call rand
     and eax, 3
     jnz .nofire
-    ; pick random building tiles until one qualifies (a few tries)
+    test dword [policies], P_SMOKE
+    jz .try0
+    call rand
+    and eax, 1
+    jnz .nofire
+.try0:
     mov ebx, 40
 .try:
     call rand
@@ -1894,9 +3202,11 @@ FUNC random_event
     jne .tn
     test byte [r13+T_FLAGS], F_BUILD
     jnz .tn
+    test byte [r13+T_FLAGS], F_ANCHOR
+    jz .tn
     movzx eax, byte [map_fire+r12]
-    cmp eax, 120
-    jg .nofire                       ; well protected
+    cmp eax, 150
+    jg .nofire
     or byte [r13+T_FLAGS], F_FIRE
     mov byte [r13+T_TIMER], 0
     lea rdi, [msg_fire]
@@ -1913,7 +3223,6 @@ FUNC random_event
     dec ebx
     jnz .try
 .nofire:
-    ; industrial boom
     cmp dword [cnt_i], 10
     jl .nb
     call rand
@@ -1926,7 +3235,6 @@ FUNC random_event
     mov ecx, -1
     call notify
 .nb:
-    ; meteor (disasters on, big enough city)
     cmp dword [disasters_on], 0
     je .out
     cmp dword [population], 1500
@@ -1944,7 +3252,6 @@ FUNC random_event
 .out:
     RETURN
 
-; meteor_strike(edi x, esi y) - crater of rubble + fires
 FUNC meteor_strike
     mov r12d, edi
     mov r13d, esi
@@ -1969,7 +3276,6 @@ FUNC meteor_strike
     je .n
     test byte [rbx+T_FLAGS], F_HIGHWAY
     jnz .n
-    cmp eax, 2
     mov cl, [rbx+T_OBJ]
     cmp cl, OBJ_NONE
     je .dirt
@@ -1992,7 +3298,6 @@ FUNC meteor_strike
     inc r14d
     cmp r14d, 2
     jle .dy
-    ; set neighbours on fire
     mov ebx, 6
 .f:
     mov edi, 7
@@ -2025,8 +3330,6 @@ FUNC meteor_strike
     RETURN
 
 ; ---------------------------------------------------------------------
-;  date string into the text builder: "Mar 2026"
-; ---------------------------------------------------------------------
 tb_date:
     mov eax, [month]
     lea rdi, [month_names+rax*4]
@@ -2036,7 +3339,6 @@ tb_date:
     movsxd rdi, dword [year]
     jmp tb_num_plain
 
-; number without separators (years)
 tb_num_plain:
     lea r8, [numbuf+63]
     mov byte [r8], 0

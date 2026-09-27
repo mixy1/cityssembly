@@ -8,66 +8,99 @@ BK_SOLAR     equ 2
 BK_NUCLEAR   equ 3
 BK_PUMP      equ 4
 BK_WTOWER    equ 5
-BK_POLICE    equ 6
-BK_FIRE      equ 7
-BK_CLINIC    equ 8
-BK_HOSPITAL  equ 9
-BK_SCHOOL    equ 10
-BK_UNIV      equ 11
-BK_PARK      equ 12
-BK_PLAZA     equ 13
-BK_STADIUM   equ 14
-BK_CITYHALL  equ 15
-BK_LANDMARK  equ 16
-BK_COUNT     equ 17
+BK_SEWAGE    equ 6
+BK_LANDFILL  equ 7
+BK_INCIN     equ 8
+BK_POLICE    equ 9
+BK_FIRE      equ 10
+BK_CLINIC    equ 11
+BK_HOSPITAL  equ 12
+BK_ELEM      equ 13
+BK_HIGH      equ 14
+BK_UNIV      equ 15
+BK_BUSDEPOT  equ 16
+BK_PARK      equ 17
+BK_PLAZA     equ 18
+BK_STADIUM   equ 19
+BK_CITYHALL  equ 20
+BK_LANDMARK  equ 21
+BK_COUNT     equ 22
 
 ; coverage kinds
 CV_NONE      equ 0
 CV_POLICE    equ 1
 CV_FIRE      equ 2
 CV_HEALTH    equ 3
-CV_EDU       equ 4
-CV_PARK      equ 5
+CV_ELEM      equ 4
+CV_HIGH      equ 5
+CV_UNIV      equ 6
+CV_PARK      equ 7
+CV_GARBAGE   equ 8      ; truck service area
+CV_TRANSIT   equ 9      ; bus depot
+CV_COUNT     equ 10
 
-; record layout (32 bytes)
+; record layout (48 bytes)
 BI_SIZE      equ 0      ; footprint in tiles
 BI_COV       equ 1      ; coverage kind
-BI_RADIUS    equ 2      ; coverage radius in tiles
-BI_POLL      equ 3      ; pollution emitted
+BI_RADIUS    equ 2      ; coverage / service radius in tiles
+BI_POLL      equ 3      ; ground pollution emitted
 BI_COST      equ 4      ; dword build cost
 BI_UPKEEP    equ 8      ; dword monthly upkeep
-BI_POWER     equ 12     ; dword power produced (units)
-BI_WATER     equ 16     ; dword water produced
+BI_POWER     equ 12     ; dword power produced
+BI_WATER     equ 16     ; dword water pumped (or sewage treated for outlets)
 BI_UNLOCK    equ 20     ; dword population needed
 BI_NAME      equ 24     ; qword name string
+BI_VEHICLES  equ 32     ; byte: vehicles (fire trucks, garbage trucks, buses)
+BI_NOISE     equ 33     ; byte: noise emitted
+BI_NEEDWATER equ 34     ; byte: must touch water when placed
+BI_CATEGORY  equ 35     ; byte: CAT_*
+BI_CAPACITY  equ 36     ; dword: landfill capacity / patients
+BI_DESC      equ 40     ; qword one-line description
 
-%macro BINFO 10
+CAT_POWER    equ 0
+CAT_WATER    equ 1
+CAT_GARBAGE  equ 2
+CAT_SAFETY   equ 3
+CAT_HEALTH   equ 4
+CAT_EDU      equ 5
+CAT_TRANSIT  equ 6
+CAT_LEISURE  equ 7
+
+%macro BINFO 16
     db %1, %2, %3, %4
     dd %5, %6, %7, %8, %9
     dq %10
+    db %11, %12, %13, %14
+    dd %15
+    dq %16
 %endmacro
 
 section .data
 align 8
 bld_info:
-    ;       size cov        rad pol  cost   upk  power water unlock name
-    BINFO   3, CV_NONE,     0, 90,  3000,   60,  1400,   0,     0, nm_coal
-    BINFO   1, CV_NONE,     0,  0,   400,    8,    70,   0,     0, nm_wind
-    BINFO   2, CV_NONE,     0,  0,  1800,   20,   400,   0,   800, nm_solar
-    BINFO   3, CV_NONE,     0, 10, 12000,  180,  5000,   0,  3500, nm_nuclear
-    BINFO   1, CV_NONE,     0,  0,   500,   10,     0, 900,     0, nm_pump
-    BINFO   1, CV_NONE,     0,  0,   250,    5,     0, 250,     0, nm_wtower
-    BINFO   2, CV_POLICE,  14,  0,  1000,   40,     0,   0,     0, nm_police
-    BINFO   2, CV_FIRE,    14,  0,  1000,   40,     0,   0,     0, nm_fire
-    BINFO   1, CV_HEALTH,  10,  0,   800,   30,     0,   0,     0, nm_clinic
-    BINFO   2, CV_HEALTH,  20,  0,  3500,   90,     0,   0,  1500, nm_hospital
-    BINFO   2, CV_EDU,     16,  0,  1500,   50,     0,   0,   250, nm_school
-    BINFO   3, CV_EDU,     28,  0,  6000,  150,     0,   0,  2500, nm_univ
-    BINFO   1, CV_PARK,     6,  0,   150,    3,     0,   0,     0, nm_park
-    BINFO   2, CV_PARK,    10,  0,   700,   10,     0,   0,   600, nm_plaza
-    BINFO   3, CV_PARK,    24,  0,  8000,  100,     0,   0,  4000, nm_stadium
-    BINFO   2, CV_PARK,    16,  0,  5000,   40,     0,   0,  2000, nm_cityhall
-    BINFO   2, CV_PARK,    40,  0, 25000,   50,     0,   0,  8000, nm_landmark
+    ;      size cov         rad pol  cost   upk  power water unlock name      veh noise needw cat          cap   desc
+    BINFO  3, CV_NONE,       0, 90,  3000,   60,  1400,   0,    0, nm_coal,     0, 60, 0, CAT_POWER,       0, ds_coal
+    BINFO  1, CV_NONE,       0,  0,   400,    8,    70,   0,    0, nm_wind,     0, 20, 0, CAT_POWER,       0, ds_wind
+    BINFO  2, CV_NONE,       0,  0,  1800,   20,   400,   0,  800, nm_solar,    0,  0, 0, CAT_POWER,       0, ds_solar
+    BINFO  3, CV_NONE,       0, 10, 12000,  180,  5000,   0, 3500, nm_nuclear,  0, 30, 0, CAT_POWER,       0, ds_nuclear
+    BINFO  1, CV_NONE,       0,  0,   500,   10,     0, 900,    0, nm_pump,     0,  0, 1, CAT_WATER,       0, ds_pump
+    BINFO  1, CV_NONE,       0,  0,   250,    5,     0, 250,    0, nm_wtower,   0,  0, 0, CAT_WATER,       0, ds_wtower
+    BINFO  1, CV_NONE,       0,  0,   400,    8,     0, 1000,   0, nm_sewage,   0, 10, 1, CAT_WATER,       0, ds_sewage
+    BINFO  2, CV_GARBAGE,   40, 40,  1200,   30,     0,   0,  150, nm_landfill, 8, 30, 0, CAT_GARBAGE, 40000, ds_landfill
+    BINFO  2, CV_GARBAGE,   48, 70,  4500,   80,   150,   0, 1500, nm_incin,    10, 40, 0, CAT_GARBAGE,     0, ds_incin
+    BINFO  2, CV_POLICE,    14,  0,  1000,   40,     0,   0,    0, nm_police,   3, 20, 0, CAT_SAFETY,      0, ds_police
+    BINFO  2, CV_FIRE,      14,  0,  1000,   40,     0,   0,    0, nm_fire,     3, 20, 0, CAT_SAFETY,      0, ds_fire
+    BINFO  1, CV_HEALTH,    10,  0,   800,   30,     0,   0,    0, nm_clinic,   0,  0, 0, CAT_HEALTH,      0, ds_clinic
+    BINFO  2, CV_HEALTH,    20,  0,  3500,   90,     0,   0, 1500, nm_hospital, 0, 10, 0, CAT_HEALTH,      0, ds_hospital
+    BINFO  1, CV_ELEM,      12,  0,   700,   25,     0,   0,  100, nm_elem,     0,  8, 0, CAT_EDU,         0, ds_elem
+    BINFO  2, CV_HIGH,      18,  0,  2000,   60,     0,   0,  700, nm_high,     0, 10, 0, CAT_EDU,         0, ds_high
+    BINFO  3, CV_UNIV,      30,  0,  7000,  160,     0,   0, 2500, nm_univ,     0, 10, 0, CAT_EDU,         0, ds_univ
+    BINFO  2, CV_TRANSIT,    0,  0,  1500,   50,     0,   0,  300, nm_busdepot, 5, 20, 0, CAT_TRANSIT,     0, ds_busdepot
+    BINFO  1, CV_PARK,       6,  0,   150,    3,     0,   0,    0, nm_park,     0,  0, 0, CAT_LEISURE,     0, ds_park
+    BINFO  2, CV_PARK,      10,  0,   700,   10,     0,   0,  600, nm_plaza,    0,  5, 0, CAT_LEISURE,     0, ds_plaza
+    BINFO  3, CV_PARK,      24,  0,  8000,  100,     0,   0, 4000, nm_stadium,  0, 60, 0, CAT_LEISURE,     0, ds_stadium
+    BINFO  2, CV_PARK,      16,  0,  5000,   40,     0,   0, 2000, nm_cityhall, 0,  5, 0, CAT_LEISURE,     0, ds_cityhall
+    BINFO  2, CV_PARK,      40,  0, 25000,   50,     0,   0, 8000, nm_landmark, 0, 20, 0, CAT_LEISURE,     0, ds_landmark
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0
@@ -75,22 +108,50 @@ nm_solar     db "Solar Farm", 0
 nm_nuclear   db "Nuclear Plant", 0
 nm_pump      db "Water Pump", 0
 nm_wtower    db "Water Tower", 0
+nm_sewage    db "Sewage Outlet", 0
+nm_landfill  db "Landfill", 0
+nm_incin     db "Incinerator", 0
 nm_police    db "Police Station", 0
 nm_fire      db "Fire Station", 0
 nm_clinic    db "Clinic", 0
 nm_hospital  db "Hospital", 0
-nm_school    db "School", 0
+nm_elem      db "Elementary School", 0
+nm_high      db "High School", 0
 nm_univ      db "University", 0
+nm_busdepot  db "Bus Depot", 0
 nm_park      db "Park", 0
 nm_plaza     db "Plaza", 0
 nm_stadium   db "Stadium", 0
 nm_cityhall  db "City Hall", 0
 nm_landmark  db "Asm Tower", 0
 
+ds_coal      db "Cheap, strong power. Very polluting.", 0
+ds_wind      db "Clean but weak. Output varies by season.", 0
+ds_solar     db "Clean, steady power.", 0
+ds_nuclear   db "Huge clean output. Expensive.", 0
+ds_pump      db "Pumps water into pipes. Must touch water.", 0
+ds_wtower    db "Small water supply, anywhere.", 0
+ds_sewage    db "Drains pipes into water. Pollutes downstream!", 0
+ds_landfill  db "Garbage trucks collect waste. Fills up.", 0
+ds_incin     db "Burns garbage, makes power. Pollutes.", 0
+ds_police    db "Lowers crime. Patrol cars.", 0
+ds_fire      db "Fire trucks drive to fires.", 0
+ds_clinic    db "Small health coverage.", 0
+ds_hospital  db "Wide health coverage.", 0
+ds_elem      db "Basic education.", 0
+ds_high      db "Educated workers for offices.", 0
+ds_univ      db "Highly educated workers. Hi-tech jobs.", 0
+ds_busdepot  db "Buses run between all bus stops.", 0
+ds_park      db "Raises land value, cleans air.", 0
+ds_plaza     db "Bigger park with a fountain.", 0
+ds_stadium   db "City-wide happiness boost.", 0
+ds_cityhall  db "Civic pride. Land value boost.", 0
+ds_landmark  db "Tourists! Monthly income.", 0
+
 section .text
 ; bld_rec(edi kind) -> rax record pointer
 bld_rec:
     mov eax, edi
-    shl eax, 5
+    imul eax, eax, 48
     lea rax, [bld_info+rax]
     ret

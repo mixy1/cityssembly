@@ -398,11 +398,98 @@ FUNC world_generate, 32
     mov byte [rax+T_TERRAIN], TER_GRASS
     mov byte [rax+T_OBJ], OBJ_ROAD
     mov byte [rax+T_FLAGS], F_HIGHWAY
+    mov byte [rax+T_ROADTYPE], RT_HIGHWAY
     mov byte [rax+T_ZONE], 0
     inc r12d
     cmp r12d, 22
     jl .hw
+    ; second regional highway from the north edge
+    mov dword [hwy_col], 44
+    xor r12d, r12d
+.hn:
+    mov edi, 44
+    mov esi, r12d
+    call tile_at
+    mov byte [rax+T_OBJ], OBJ_ROAD
+    mov byte [rax+T_FLAGS], F_HIGHWAY
+    mov byte [rax+T_ROADTYPE], RT_HIGHWAY
+    mov byte [rax+T_ZONE], 0
+    inc r12d
+    cmp r12d, 18
+    jl .hn
     call roads_update_all
+    call resources_generate
+    RETURN
+
+; ---------------------------------------------------------------------
+;  natural resources: forests, fertile soil and ore deposits decide
+;  which industries appear where
+; ---------------------------------------------------------------------
+FUNC resources_generate
+    xor r13d, r13d
+.y:
+    xor r12d, r12d
+.x:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    mov rbx, rax
+    mov byte [rbx+T_RES], RES_NONE
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    je .n
+    ; forest: many trees nearby
+    xor r14d, r14d
+    mov r15d, -2
+.fy:
+    mov ecx, -2
+.fx:
+    push rcx
+    push rcx
+    lea edi, [r12+rcx]
+    lea esi, [r13+r15]
+    call tile_at
+    pop rcx
+    pop rcx
+    test rax, rax
+    jz .fn
+    cmp byte [rax+T_OBJ], OBJ_TREE
+    jne .fn
+    inc r14d
+.fn:
+    inc ecx
+    cmp ecx, 2
+    jle .fx
+    inc r15d
+    cmp r15d, 2
+    jle .fy
+    cmp r14d, 9
+    jl .ore
+    mov byte [rbx+T_RES], RES_FOREST
+    jmp .n
+.ore:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 83
+    call fbm
+    cmp eax, 168
+    jl .fert
+    mov byte [rbx+T_RES], RES_ORE
+    jmp .n
+.fert:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 71
+    call fbm
+    cmp eax, 142
+    jl .n
+    mov byte [rbx+T_RES], RES_FERTILE
+.n:
+    inc r12d
+    cmp r12d, MAP_W
+    jl .x
+    inc r13d
+    cmp r13d, MAP_W
+    jl .y
     RETURN
 
 ; count_water_near(edi x, esi y) -> eax count of water in 8-neighbourhood
@@ -474,19 +561,27 @@ FUNC road_mask
     call is_road
     shl eax, 3
     or ebx, eax
-    ; highway tiles on the map edge connect outwards
+    ; highways on the map edge connect outwards to the region
     mov edi, r12d
     mov esi, r13d
     call tile_at
-    test byte [rax+T_FLAGS], F_HIGHWAY
-    jz .done
+    cmp byte [rax+T_ROADTYPE], RT_HIGHWAY
+    jne .done
     test r12d, r12d
     jnz .n2
     or ebx, 8
 .n2:
     test r13d, r13d
-    jnz .done
+    jnz .n3
     or ebx, 1
+.n3:
+    cmp r12d, MAP_W-1
+    jne .n4
+    or ebx, 2
+.n4:
+    cmp r13d, MAP_W-1
+    jne .done
+    or ebx, 4
 .done:
     mov eax, ebx
     RETURN

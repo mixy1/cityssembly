@@ -69,6 +69,7 @@ emit_now        resd 1
 wind_x          resd 1
 
 section .data
+traffic_reps db 0, 1, 2, 6
 dir_rev     db 2, 3, 0, 1
 peep_cols   db RAMP(R_RED,4), RAMP(R_BLUE,4), RAMP(R_YELLOW,5), RAMP(R_ZONER,4)
             db RAMP(R_PURPLE,4), RAMP(R_WHITE,5), RAMP(R_ORANGE,4), RAMP(R_TEAL,4)
@@ -78,8 +79,9 @@ confetti_cols db RAMP(R_RED,5), RAMP(R_YELLOW,6), RAMP(R_BLUE,5), RAMP(R_ZONER,5
 section .text
 
 FUNC agents_init
-    lea rdi, [cars]
-    mov ecx, MAX_CARS*C_SIZE + MAX_PEEPS*C_SIZE
+    call traffic_init
+    lea rdi, [peeps]
+    mov ecx, MAX_PEEPS*C_SIZE
     mov al, 255
     rep stosb
     lea rdi, [parts]
@@ -148,106 +150,6 @@ FUNC choose_dir
     RETURN
 .fail:
     mov eax, -1
-    RETURN
-
-; ---------------------------------------------------------------------
-;  spawn a car on a random busy road tile
-; ---------------------------------------------------------------------
-FUNC car_spawn
-    ; free slot
-    xor ebx, ebx
-.slot:
-    cmp ebx, MAX_CARS
-    jge .out
-    mov eax, ebx
-    shl eax, 5
-    cmp byte [cars+rax+C_TYPE], 255
-    je .have
-    inc ebx
-    jmp .slot
-.have:
-    lea r15, [cars+rax]
-    ; choose a road tile: highway entry sometimes, else random busy road
-    call rand
-    and eax, 7
-    jnz .rnd
-    mov r12d, 0
-    mov r13d, [hwy_row]
-    mov r14d, 1                     ; heading +x
-    jmp .place
-.rnd:
-    mov ebx, 24
-.try:
-    call rand
-    and eax, MAP_TILES-1
-    mov ecx, eax
-    shl ecx, TILE_SHIFT
-    cmp byte [tiles+rcx+T_OBJ], OBJ_ROAD
-    jne .tn
-    movzx edx, byte [tiles+rcx+T_TRAFFIC]
-    add edx, 8
-    push rax
-    push rax
-    call rand
-    and eax, 255
-    mov ecx, eax
-    pop rax
-    pop rax
-    cmp ecx, edx
-    jae .tn
-    mov r12d, eax
-    and r12d, MAP_W-1
-    mov r13d, eax
-    shr r13d, MAP_SHIFT
-    call rand
-    and eax, 3
-    mov r14d, eax
-    jmp .place
-.tn:
-    dec ebx
-    jnz .try
-    jmp .out
-.place:
-    mov edi, r12d
-    mov esi, r13d
-    call road_sub
-    cmp eax, -1
-    je .out
-    test eax, eax
-    jz .out
-    ; make sure the heading is a connected direction
-    bt eax, r14d
-    jc .dok
-    bsf r14d, eax
-.dok:
-    mov [r15+C_TX], r12w
-    mov [r15+C_TY], r13w
-    mov [r15+C_DIR], r14b
-    mov dword [r15+C_PROG], 0
-    call rand
-    and eax, 15
-    add eax, 14
-    mov [r15+C_SPEED], eax
-    call rand
-    and eax, 1023
-    add eax, 900
-    mov [r15+C_LIFE], eax
-    ; type: trucks near industry, some buses
-    mov byte [r15+C_TYPE], 0
-    call rand
-    and eax, 15
-    cmp eax, 1
-    ja .col
-    mov byte [r15+C_TYPE], 1
-    test eax, eax
-    jnz .col
-    mov byte [r15+C_TYPE], 2
-.col:
-    call rand
-    and eax, 7
-    mov [r15+C_COLOR], al
-    inc dword [car_count]
-.out:
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -634,20 +536,16 @@ FUNC agents_tick
     sub eax, 2
     mov [wind_x], eax
 .w:
-    ; cars: target count scales with traffic and population
-    mov eax, [population]
-    shr eax, 3
-    add eax, [road_tiles]
-    shr eax, 1
-    CLAMP eax, 0, MAX_CARS-20
-    cmp dword [road_tiles], 30
-    jge .ct
-    shr eax, 1
-.ct:
-    cmp [car_count], eax
-    jge .nocar
-    call car_spawn
-.nocar:
+    ; traffic runs on simulation time: more steps at higher speeds
+    mov eax, [sim_speed]
+    movzx ebx, byte [traffic_reps+rax]
+.trep:
+    test ebx, ebx
+    jz .tdone
+    call traffic_tick
+    dec ebx
+    jmp .trep
+.tdone:
     mov eax, [population]
     shr eax, 4
     CLAMP eax, 0, MAX_PEEPS-10
@@ -655,11 +553,6 @@ FUNC agents_tick
     jge .nopeep
     call peep_spawn
 .nopeep:
-    lea rdi, [cars]
-    mov esi, MAX_CARS
-    mov edx, 3*16
-    xor ecx, ecx
-    call update_movers
     lea rdi, [peeps]
     mov esi, MAX_PEEPS
     mov edx, 13*8
@@ -710,56 +603,7 @@ zpixel:
 .o: ret
 
 FUNC draw_agents, 16
-    ; cars
-    xor ebx, ebx
-.c:
-    cmp ebx, MAX_CARS
-    jge .peeps
-    mov eax, ebx
-    shl eax, 5
-    lea r15, [cars+rax]
-    cmp byte [r15+C_TYPE], 255
-    je .cn
-    mov edi, [r15+C_WX]
-    sub edi, 8*16
-    mov esi, [r15+C_WY]
-    sub esi, 8*16
-    mov edx, 16
-    call world_proj
-    cmp eax, -20
-    jl .cn
-    mov r8d, [fb_w]
-    add r8d, 20
-    cmp eax, r8d
-    jg .cn
-    cmp edx, -20
-    jl .cn
-    mov r8d, [fb_h]
-    add r8d, 20
-    cmp edx, r8d
-    jg .cn
-    mov r12d, eax
-    mov r13d, edx
-    mov r14d, ecx
-    movzx eax, byte [r15+C_TYPE]
-    shl eax, 2
-    movzx ecx, byte [r15+C_DIR]
-    add eax, ecx
-    mov edi, [spr_car+rax*4]
-    movzx eax, byte [r15+C_COLOR]
-    shl eax, 8
-    lea r8, [remap_cars+rax]
-    cmp byte [r15+C_TYPE], 2
-    jne .rc
-    lea r8, [remap_identity]
-.rc:
-    mov esi, r12d
-    mov edx, r13d
-    mov ecx, r14d
-    call blit_sprite
-.cn:
-    inc ebx
-    jmp .c
+    call draw_vehicles
 .peeps:
     xor ebx, ebx
 .p:
@@ -1165,9 +1009,21 @@ FUNC emit_tile
     jnz .out
     test byte [rbx+T_FLAGS], F_POWER
     jz .out
+    test byte [rbx+T_FLAGS], F_ANCHOR
+    jz .out
+    lea rcx, [stack_big]
+    cmp byte [rbx+T_SIZE], 2
+    je .stacks
+    cmp byte [rbx+T_SUB], 0
+    jne .spec
     movzx eax, byte [rbx+T_LEVEL]
     CLAMP eax, 0, 5
     lea rcx, [stack_ind+rax*8]
+    jmp .stacks
+.spec:
+    cmp byte [rbx+T_SUB], RES_FOREST
+    jne .out
+    lea rcx, [stack_mill]
     jmp .stacks
 .s:
     test byte [rbx+T_FLAGS], F_ANCHOR
@@ -1178,6 +1034,11 @@ FUNC emit_tile
     lea rcx, [stack_coal]
     jmp .stacks
 .nuc:
+    cmp eax, BK_INCIN
+    jne .nnuc
+    lea rcx, [stack_incin]
+    jmp .stacks
+.nnuc:
     cmp eax, BK_NUCLEAR
     jne .out
     call rand
@@ -1233,6 +1094,12 @@ stack_ind:
     db 255,0,0, 255,0,0, 0,0
 stack_coal:
     db 37,23,77, 30,36,71
+stack_big:
+    db 5,26,64, 13,26,70
+stack_mill:
+    db 3,3,24, 255,0,0
+stack_incin:
+    db 27,7,77, 255,0,0
 section .bss
 cash_delta       resd 1
 cash_delta_timer resd 1

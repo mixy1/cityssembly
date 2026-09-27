@@ -75,14 +75,14 @@
 MAP_W        equ 128
 MAP_SHIFT    equ 7
 MAP_TILES    equ MAP_W*MAP_W
-TILE_BYTES   equ 16
-TILE_SHIFT   equ 4
+TILE_BYTES   equ 32
+TILE_SHIFT   equ 5
 
 ; tile record layout
 T_TERRAIN    equ 0     ; TER_*
 T_ZONE       equ 1     ; ZONE_*
 T_OBJ        equ 2     ; OBJ_*
-T_SUB        equ 3     ; road mask / building kind
+T_SUB        equ 3     ; road mask / service kind / tree kind / industry spec
 T_LEVEL      equ 4     ; zone building level 0..5
 T_FLAGS      equ 5     ; F_*
 T_ANCHOR     equ 6     ; dx | dy<<4 offset back to anchor tile
@@ -90,20 +90,43 @@ T_TIMER      equ 7     ; construction / burn timer
 T_POP        equ 8     ; word: residents or jobs
 T_AGE        equ 10
 T_SCORE      equ 11    ; last desirability 0..255
-T_TRAFFIC    equ 12
+T_TRAFFIC    equ 12    ; road: traffic volume 0..255
 T_VARIANT    equ 13
 T_HAPPY      equ 14
-T_MISC       equ 15
+T_MISC       equ 15    ; MISC_*
+T_FLAGS2     equ 16    ; F2_*
+T_ROADTYPE   equ 17    ; RT_*
+T_GARBAGE    equ 18    ; accumulated garbage 0..255
+T_GOODS      equ 19    ; commercial stock / industry output 0..255
+T_EDU        equ 20    ; residents: education 0..255
+T_RES        equ 21    ; natural resource RES_*
+T_WORKERS    equ 22    ; job buildings: staffing 0..255
+T_SIZE       equ 23    ; footprint of zone buildings (1 or 2)
+T_FLOW       equ 24    ; word: vehicles counted this period
+T_JAM        equ 26    ; road: congestion 0..255
+T_OCC        equ 27    ; 4 bytes: vehicles on the tile per heading
+T_PROBLEM    equ 31    ; PR_* shown as an icon above the building
 
 TER_GRASS    equ 0
 TER_WATER    equ 1
 TER_SAND     equ 2
 TER_DIRT     equ 3
 
+; zones (low / high density residential and commercial, industry, office)
 ZONE_NONE    equ 0
 ZONE_R       equ 1
 ZONE_C       equ 2
 ZONE_I       equ 3
+ZONE_O       equ 4
+ZONE_RH      equ 5
+ZONE_CH      equ 6
+ZONE_TYPES   equ 7
+
+; zone classes (demand, taxes)
+ZC_RES       equ 0
+ZC_COM       equ 1
+ZC_IND       equ 2
+ZC_OFF       equ 3
 
 OBJ_NONE     equ 0
 OBJ_TREE     equ 1
@@ -120,7 +143,38 @@ F_ABANDON    equ 8
 F_ANCHOR     equ 16
 F_ROADOK     equ 32
 F_BUILD      equ 64    ; under construction
-F_HIGHWAY    equ 128   ; road piece that is part of the regional highway
+F_HIGHWAY    equ 128   ; part of the regional highway
+
+F2_PIPE      equ 1     ; water / sewage pipe under this tile
+F2_SEWAGE    equ 2     ; sewage is handled
+F2_BUSSTOP   equ 4     ; road tile with a bus stop
+F2_NOGOODS   equ 8
+F2_NOWORKERS equ 16
+F2_GARBAGE   equ 32    ; garbage piling up
+F2_DIRTY     equ 64    ; supplied with polluted water
+F2_NOROUTE   equ 128   ; trips from here failed to find a route
+
+RT_STREET    equ 0
+RT_AVENUE    equ 1
+RT_HIGHWAY   equ 2
+
+RES_NONE     equ 0
+RES_FERTILE  equ 1
+RES_FOREST   equ 2
+RES_ORE      equ 3
+
+; problem icons
+PR_NONE      equ 0
+PR_POWER     equ 1
+PR_WATER     equ 2
+PR_SEWAGE    equ 3
+PR_GARBAGE   equ 4
+PR_GOODS     equ 5
+PR_WORKERS   equ 6
+PR_FIRE      equ 7
+PR_ROAD      equ 8
+PR_DIRTY     equ 9
+PR_ROUTE     equ 10
 
 ; ---------------------------------------------------------------------
 ;  Palette layout
