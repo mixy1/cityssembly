@@ -7,6 +7,10 @@ pt_fmt1 db "PLAYTEST pump=%d,%d outlet=%d,%d wires=%d", 10, 0
 pt_fmt2 db "PLAYTEST day %d pop=%d bld=%d powered=%d water=%d sewage=%d", 10, 0
 pt_fmt3 db "PLAYTEST problems:", 0
 pt_fmt4 db " %d", 0
+pt_fmt6 db "PLAYTEST money=%d income: res=%d com=%d ind=%d off=%d", 10, 0
+pt_fmt7 db "PLAYTEST          other=%d  expense: roads=%d services=%d", 10, 0
+pt_fmt8 db "PLAYTEST money after building=%d", 10, 0
+pt_fmt9 db "PLAYTEST south plot status=%d milestone=%d", 10, 0
 pt_fmt5 db 10, "PLAYTEST pump powered=%d pump problem=%d supply=%d demand=%d", 10, 0
 section .bss
 pt_px resd 1
@@ -64,6 +68,11 @@ FUNC pt_shore, 32
     jne .n
     cmp byte [rax+T_ZONE], 0
     jne .n
+    mov edi, r12d
+    mov esi, r13d
+    call tile_owned
+    test eax, eax
+    jz .n
     mov edi, r12d
     mov esi, r13d
     call count_water_near
@@ -187,69 +196,82 @@ FUNC pt_report
     mov r8d, [water_demand]
     xor eax, eax
     CALLC printf
+    lea rdi, [pt_fmt6]
+    mov rsi, [money]
+    mov edx, [inc_class]
+    mov ecx, [inc_class+4]
+    mov r8d, [inc_class+8]
+    mov r9d, [inc_class+12]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [pt_fmt7]
+    mov esi, [inc_other]
+    mov edx, [exp_roads]
+    mov ecx, [exp_services]
+    xor eax, eax
+    CALLC printf
     RETURN
 
 FUNC playtest_build
     mov dword [welcome], 0
-    mov r12d, [hwy_row]
-    ; road off the highway, and a cross street
+    ; main street off the highway, cross street
     mov dword [road_type], RT_STREET
     mov edi, T_ROAD
-    mov esi, 22
-    mov edx, r12d
-    mov ecx, 40
-    mov r8d, r12d
+    mov esi, 26
+    mov edx, 64
+    mov ecx, 45
+    mov r8d, 64
     call pt_drag
     mov edi, T_ROAD
-    mov esi, 30
-    lea edx, [r12-6]
-    mov ecx, 30
-    lea r8d, [r12+6]
+    mov esi, 36
+    mov edx, 54
+    mov ecx, 36
+    mov r8d, 74
     call pt_drag
     ; zones
     mov dword [zone_type], ZONE_R
     mov edi, T_ZONETOOL
-    mov esi, 23
-    lea edx, [r12-4]
-    mov ecx, 29
-    lea r8d, [r12-1]
+    mov esi, 27
+    mov edx, 59
+    mov ecx, 35
+    mov r8d, 63
     call pt_drag
     mov edi, T_ZONETOOL
-    mov esi, 31
-    lea edx, [r12+1]
-    mov ecx, 38
-    lea r8d, [r12+4]
+    mov esi, 37
+    mov edx, 59
+    mov ecx, 45
+    mov r8d, 63
     call pt_drag
     mov dword [zone_type], ZONE_C
     mov edi, T_ZONETOOL
-    mov esi, 31
-    lea edx, [r12-3]
-    mov ecx, 38
-    lea r8d, [r12-1]
+    mov esi, 37
+    mov edx, 65
+    mov ecx, 45
+    mov r8d, 68
     call pt_drag
     mov dword [zone_type], ZONE_I
     mov edi, T_ZONETOOL
-    mov esi, 23
-    lea edx, [r12+1]
-    mov ecx, 29
-    lea r8d, [r12+4]
+    mov esi, 27
+    mov edx, 65
+    mov ecx, 35
+    mov r8d, 70
     call pt_drag
-    ; coal plant out of town, power line into town
+    ; coal plant in the corner, a short line to the shops
     mov edi, BK_COAL
-    mov esi, 47
-    lea edx, [r12+9]
+    mov esi, 43
+    mov edx, 74
     call pt_place
     mov edi, T_POWERLN
-    mov esi, 46
-    lea edx, [r12+8]
-    mov ecx, 39
-    lea r8d, [r12+2]
+    mov esi, 42
+    mov edx, 73
+    mov ecx, 40
+    mov r8d, 70
     call pt_drag
-    ; pump on the nearest shore, pipes to the crossroads
+    ; pump upstream (north), outlet downstream (south)
     mov dword [pt_px], -1000
     mov dword [pt_py], -1000
-    mov edi, 30
-    mov esi, r12d
+    mov edi, 46
+    mov esi, 53
     xor edx, edx
     call pt_shore
     mov [pt_px], eax
@@ -260,31 +282,36 @@ FUNC playtest_build
     mov edi, T_PIPE
     mov esi, [pt_px]
     mov edx, [pt_py]
-    mov ecx, 30
-    mov r8d, r12d
-    call pt_drag
-    mov edi, T_PIPE
-    mov esi, 22
-    mov edx, r12d
-    mov ecx, 40
-    mov r8d, r12d
-    call pt_drag
-    mov edi, T_PIPE
-    mov esi, 30
-    lea edx, [r12-6]
-    mov ecx, 30
-    lea r8d, [r12+6]
-    call pt_drag
-    mov edi, T_POWERLN
-    mov esi, 39
-    lea edx, [r12+2]
-    mov ecx, [pt_px]
+    mov ecx, 36
     mov r8d, [pt_py]
     call pt_drag
-    ; sewage outlet well away from the pump
-    mov edi, 30
-    mov esi, r12d
-    mov edx, 12
+    mov edi, T_PIPE
+    mov esi, 36
+    mov edx, [pt_py]
+    mov ecx, 36
+    mov r8d, 64
+    call pt_drag
+    mov edi, T_PIPE
+    mov esi, 26
+    mov edx, 64
+    mov ecx, 45
+    mov r8d, 64
+    call pt_drag
+    mov edi, T_PIPE
+    mov esi, 36
+    mov edx, 54
+    mov ecx, 36
+    mov r8d, 74
+    call pt_drag
+    mov edi, T_POWERLN
+    mov esi, [pt_px]
+    mov edx, [pt_py]
+    mov ecx, 44
+    mov r8d, 61
+    call pt_drag
+    mov edi, 46
+    mov esi, 76
+    mov edx, 16
     call pt_shore
     mov [pt_ox], eax
     mov [pt_oy], edx
@@ -294,8 +321,14 @@ FUNC playtest_build
     mov edi, T_PIPE
     mov esi, [pt_ox]
     mov edx, [pt_oy]
-    mov ecx, 30
-    mov r8d, r12d
+    mov ecx, 36
+    mov r8d, [pt_oy]
+    call pt_drag
+    mov edi, T_PIPE
+    mov esi, 36
+    mov edx, [pt_oy]
+    mov ecx, 36
+    mov r8d, 64
     call pt_drag
     mov dword [tool], T_INSPECT
     mov dword [net_dirty], 1
@@ -308,8 +341,12 @@ FUNC playtest_build
     mov r9d, [n_wires]
     xor eax, eax
     CALLC printf
-    ; play a few months
-    mov r13d, 6
+    lea rdi, [pt_fmt8]
+    mov rsi, [money]
+    xor eax, eax
+    CALLC printf
+    ; play a few years, buying land when we can
+    mov r13d, 12
 .m:
     mov dword [sim_speed], 3
     mov ebx, 700
@@ -320,12 +357,35 @@ FUNC playtest_build
     dec ebx
     jnz .ff
     call pt_report
+    ; try the plot to the south
+    mov dword [hover_valid], 1
+    mov dword [hover_tx], 36
+    mov dword [hover_ty], 85
+    mov edi, START_PLOT+PLOTS
+    call plot_status
+    lea rdi, [pt_fmt9]
+    mov esi, eax
+    mov edx, [milestone]
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
+    test eax, eax
+    jnz .nb
+    call land_click
+.nb:
     dec r13d
     jnz .m
     mov dword [sim_speed], 1
     mov rax, [money]
     mov [money_shown], rax
-    mov edi, 34
-    mov esi, r12d
+    mov dword [ms_card], 0
+    mov dword [tool], T_LAND
+    mov edi, 1
+    call video_set_zoom
+    mov edi, 40
+    mov esi, 64
     call camera_center_tile
     RETURN

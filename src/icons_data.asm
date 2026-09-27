@@ -393,4 +393,21 @@ ICON_GARBAGE equ 22
     db "....kkkkkkkk...."
     db "................"
     db "................"
-ICON_COUNT equ 23
+ICON_LAND equ 23
+    db "..........k....."
+    db ".........krk...."
+    db ".........krrk..."
+    db ".........krk...."
+    db ".........kk....."
+    db ".........kn....."
+    db ".......kkknkk..."
+    db ".....kkllknllkk."
+    db "...kkllllknlllkk"
+    db ".kkllhllllllhllk"
+    db "kllllllhllllllk."
+    db ".kkllllllllhlk.."
+    db "...kkllhllllk..."
+    db ".....kkllllk...."
+    db ".......kkkk....."
+    db "................"
+ICON_COUNT equ 24

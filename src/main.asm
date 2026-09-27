@@ -22,6 +22,7 @@ frame_count     resd 1
 shot_frames     resd 1
 shot_file       resq 1
 demo_mode       resd 1
+sandbox         resd 1          ; demo / trailer: whole map is yours
 demo_view       resd 1
 demo_no_ff      resd 1
 trailer_mode    resd 1
@@ -160,12 +161,24 @@ FUNC main
     call audio_init
     call ui_init
     call settings_load
+    ; demo and trailer worlds skip land plots and the starter creek
+    mov eax, [trailer_mode]
+    or eax, [demo_mode]
+    cmp dword [demo_view], 'T'
+    jne .sbx
+    xor eax, eax
+.sbx:
+    mov [sandbox], eax
     call world_generate
     call sim_init
     call agents_init
     mov rax, [money]
     mov [money_shown], rax
+    mov edi, 38
+    cmp dword [sandbox], 0
+    je .cam
     mov edi, 30
+.cam:
     mov esi, [hwy_row]
     call camera_center_tile
     cmp dword [trailer_mode], 0

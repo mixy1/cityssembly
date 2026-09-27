@@ -347,6 +347,18 @@ FUNC render_world, 32
     mov esi, r13d
     call tile_at
     mov rbx, rax
+    ; land you don't own is drawn darker
+    mov qword [rbp-56], 0
+    cmp dword [sandbox], 0
+    jne .owned
+    mov edi, r12d
+    mov esi, r13d
+    call tile_owned
+    test eax, eax
+    jnz .owned
+    lea rax, [remap_dim]
+    mov [rbp-56], rax
+.owned:
     mov dword [blit_tint], 0
     cmp dword [eff_overlay], 0
     je .notint
@@ -368,7 +380,7 @@ FUNC render_world, 32
     mov esi, [draw_sx]
     mov edx, [draw_sy]
     mov ecx, r14d
-    xor r8d, r8d
+    mov r8, [rbp-56]
     call blit_sprite
 .objs:
     cmp dword [emit_now], 0
@@ -479,7 +491,7 @@ FUNC render_world, 32
     call blit_sprite
     jmp .fires
 .blitobj:
-    xor r8d, r8d
+    mov r8, [rbp-56]
 .blit2:
     mov esi, [draw_sx]
     mov edx, [draw_sy]
@@ -921,6 +933,29 @@ FUNC overlay_tint
     sub r12, tiles
     shr r12, TILE_SHIFT             ; map index
     mov eax, [eff_overlay]
+    cmp eax, OV_LAND
+    jne .p0
+    ; land view: yours vivid, buyable gold, the rest dimmed
+    mov edi, r12d
+    and edi, MAP_W-1
+    mov esi, r12d
+    shr esi, MAP_SHIFT
+    call plot_of
+    mov edi, eax
+    call plot_status
+    mov ecx, eax
+    mov eax, TINT_KEEP
+    cmp ecx, 1
+    je .ret
+    mov eax, TINT_YELLOW
+    test ecx, ecx
+    jz .ret
+    xor eax, eax
+    cmp ecx, 4
+    jne .ret
+    mov eax, TINT_BROWN
+    RETURN
+.p0:
     cmp eax, OV_POWER
     jne .w
     ; buildings: powered or not.  ground: where power reaches

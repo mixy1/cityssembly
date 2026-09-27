@@ -79,28 +79,28 @@ section .data
 align 8
 bld_info:
     ;      size cov         rad pol  cost   upk  power water unlock name      veh noise needw cat          cap   desc
-    BINFO  3, CV_NONE,       0, 90,  3000,   60,  1400,   0,    0, nm_coal,     0, 60, 0, CAT_POWER,       0, ds_coal
-    BINFO  1, CV_NONE,       0,  0,   400,    8,    70,   0,    0, nm_wind,     0, 20, 0, CAT_POWER,       0, ds_wind
-    BINFO  2, CV_NONE,       0,  0,  1800,   20,   400,   0,  800, nm_solar,    0,  0, 0, CAT_POWER,       0, ds_solar
-    BINFO  3, CV_NONE,       0, 10, 12000,  180,  5000,   0, 3500, nm_nuclear,  0, 30, 0, CAT_POWER,       0, ds_nuclear
-    BINFO  1, CV_NONE,       0,  0,   500,   10,     0, 900,    0, nm_pump,     0,  0, 1, CAT_WATER,       0, ds_pump
-    BINFO  1, CV_NONE,       0,  0,   250,    5,     0, 250,    0, nm_wtower,   0,  0, 0, CAT_WATER,       0, ds_wtower
-    BINFO  1, CV_NONE,       0,  0,   400,    8,     0, 1000,   0, nm_sewage,   0, 10, 1, CAT_WATER,       0, ds_sewage
-    BINFO  2, CV_GARBAGE,   40, 40,  1200,   30,     0,   0,  150, nm_landfill, 8, 30, 0, CAT_GARBAGE, 40000, ds_landfill
-    BINFO  2, CV_GARBAGE,   48, 70,  4500,   80,   150,   0, 1500, nm_incin,    10, 40, 0, CAT_GARBAGE,     0, ds_incin
-    BINFO  2, CV_POLICE,    14,  0,  1000,   40,     0,   0,    0, nm_police,   3, 20, 0, CAT_SAFETY,      0, ds_police
-    BINFO  2, CV_FIRE,      14,  0,  1000,   40,     0,   0,    0, nm_fire,     3, 20, 0, CAT_SAFETY,      0, ds_fire
-    BINFO  1, CV_HEALTH,    10,  0,   800,   30,     0,   0,    0, nm_clinic,   0,  0, 0, CAT_HEALTH,      0, ds_clinic
-    BINFO  2, CV_HEALTH,    20,  0,  3500,   90,     0,   0, 1500, nm_hospital, 0, 10, 0, CAT_HEALTH,      0, ds_hospital
-    BINFO  1, CV_ELEM,      12,  0,   700,   25,     0,   0,  100, nm_elem,     0,  8, 0, CAT_EDU,         0, ds_elem
-    BINFO  2, CV_HIGH,      18,  0,  2000,   60,     0,   0,  700, nm_high,     0, 10, 0, CAT_EDU,         0, ds_high
-    BINFO  3, CV_UNIV,      30,  0,  7000,  160,     0,   0, 2500, nm_univ,     0, 10, 0, CAT_EDU,         0, ds_univ
-    BINFO  2, CV_TRANSIT,    0,  0,  1500,   50,     0,   0,  300, nm_busdepot, 5, 20, 0, CAT_TRANSIT,     0, ds_busdepot
-    BINFO  1, CV_PARK,       6,  0,   150,    3,     0,   0,    0, nm_park,     0,  0, 0, CAT_LEISURE,     0, ds_park
-    BINFO  2, CV_PARK,      10,  0,   700,   10,     0,   0,  600, nm_plaza,    0,  5, 0, CAT_LEISURE,     0, ds_plaza
-    BINFO  3, CV_PARK,      24,  0,  8000,  100,     0,   0, 4000, nm_stadium,  0, 60, 0, CAT_LEISURE,     0, ds_stadium
-    BINFO  2, CV_PARK,      16,  0,  5000,   40,     0,   0, 2000, nm_cityhall, 0,  5, 0, CAT_LEISURE,     0, ds_cityhall
-    BINFO  2, CV_PARK,      40,  0, 25000,   50,     0,   0, 8000, nm_landmark, 0, 20, 0, CAT_LEISURE,     0, ds_landmark
+    BINFO  3, CV_NONE, 0, 90, 3000, 180, 1400, 0, 0, nm_coal, 0, 60, 0, CAT_POWER, 0, ds_coal
+    BINFO  1, CV_NONE, 0, 0, 400, 24, 70, 0, 0, nm_wind, 0, 20, 0, CAT_POWER, 0, ds_wind
+    BINFO  2, CV_NONE, 0, 0, 1800, 60, 400, 0, 1200, nm_solar, 0, 0, 0, CAT_POWER, 0, ds_solar
+    BINFO  3, CV_NONE, 0, 10, 12000, 540, 5000, 0, 9000, nm_nuclear, 0, 30, 0, CAT_POWER, 0, ds_nuclear
+    BINFO  1, CV_NONE, 0, 0, 500, 30, 0, 900, 0, nm_pump, 0, 0, 1, CAT_WATER, 0, ds_pump
+    BINFO  1, CV_NONE, 0, 0, 250, 15, 0, 250, 0, nm_wtower, 0, 0, 0, CAT_WATER, 0, ds_wtower
+    BINFO  1, CV_NONE, 0, 0, 400, 24, 0, 1000, 0, nm_sewage, 0, 10, 1, CAT_WATER, 0, ds_sewage
+    BINFO  2, CV_GARBAGE, 40, 40, 1200, 90, 0, 0, 60, nm_landfill, 8, 30, 0, CAT_GARBAGE, 40000, ds_landfill
+    BINFO  2, CV_GARBAGE, 48, 70, 4500, 240, 150, 0, 2500, nm_incin, 10, 40, 0, CAT_GARBAGE, 0, ds_incin
+    BINFO  2, CV_POLICE, 14, 0, 1000, 120, 0, 0, 250, nm_police, 3, 20, 0, CAT_SAFETY, 0, ds_police
+    BINFO  2, CV_FIRE, 14, 0, 1000, 120, 0, 0, 250, nm_fire, 3, 20, 0, CAT_SAFETY, 0, ds_fire
+    BINFO  1, CV_HEALTH, 10, 0, 800, 90, 0, 0, 60, nm_clinic, 0, 0, 0, CAT_HEALTH, 0, ds_clinic
+    BINFO  2, CV_HEALTH, 20, 0, 3500, 270, 0, 0, 1200, nm_hospital, 0, 10, 0, CAT_HEALTH, 0, ds_hospital
+    BINFO  1, CV_ELEM, 12, 0, 700, 75, 0, 0, 60, nm_elem, 0, 8, 0, CAT_EDU, 0, ds_elem
+    BINFO  2, CV_HIGH, 18, 0, 2000, 180, 0, 0, 600, nm_high, 0, 10, 0, CAT_EDU, 0, ds_high
+    BINFO  3, CV_UNIV, 30, 0, 7000, 480, 0, 0, 2500, nm_univ, 0, 10, 0, CAT_EDU, 0, ds_univ
+    BINFO  2, CV_TRANSIT, 0, 0, 1500, 150, 0, 0, 600, nm_busdepot, 5, 20, 0, CAT_TRANSIT, 0, ds_busdepot
+    BINFO  1, CV_PARK, 6, 0, 150, 9, 0, 0, 0, nm_park, 0, 0, 0, CAT_LEISURE, 0, ds_park
+    BINFO  2, CV_PARK, 10, 0, 700, 30, 0, 0, 600, nm_plaza, 0, 5, 0, CAT_LEISURE, 0, ds_plaza
+    BINFO  3, CV_PARK, 24, 0, 8000, 300, 0, 0, 5000, nm_stadium, 0, 60, 0, CAT_LEISURE, 0, ds_stadium
+    BINFO  2, CV_PARK, 16, 0, 5000, 120, 0, 0, 2500, nm_cityhall, 0, 5, 0, CAT_LEISURE, 0, ds_cityhall
+    BINFO  2, CV_PARK, 40, 0, 25000, 150, 0, 0, 16000, nm_landmark, 0, 20, 0, CAT_LEISURE, 0, ds_landmark
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

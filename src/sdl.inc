@@ -79,6 +79,7 @@ SC_S equ 22
 SC_T equ 23
 SC_U equ 24
 SC_V equ 25
+SC_K equ 14
 SC_W equ 26
 SC_X equ 27
 SC_Z equ 29

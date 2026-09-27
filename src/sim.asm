@@ -31,6 +31,7 @@ OV_DESIRE_R equ 16      ; tool context overlays (zone desirability)
 OV_DESIRE_C equ 17
 OV_DESIRE_I equ 18
 OV_DESIRE_O equ 19
+OV_LAND     equ 20
 OV_COUNT    equ 16      ; user-cyclable overlays
 
 MISC_NET    equ 1       ; road reaches the outside
@@ -181,6 +182,10 @@ riders_month    resd 1
 n_wires         resd 1
 wire_a          resw MAX_WIRES
 wire_b          resw MAX_WIRES
+plot_owned      resb PLOTS*PLOTS+7      ; land you can build on
+exp_loans       resd 1
+loan_left       resd 3                  ; months still to pay per loan
+ms_card         resd 1                  ; milestone card to show (0 none)
 sim_state_end:
 
 demand_r equ demand
@@ -212,6 +217,11 @@ svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
 milestone_cash  dd 0, 1000, 2000, 3500, 5000, 8000, 12000, 16000, 25000, 50000, 0
+; loans: amount, monthly payment, months, milestone needed
+loan_amount     dd 10000, 30000, 80000
+loan_payment    dd 460, 720, 1050
+loan_months     dd 24, 48, 96
+loan_ms         dd 0, 2, 4
 milestone_names dq ms0, ms1, ms2, ms3, ms4, ms5, ms6, ms7, ms8, ms9, ms9
 ms0 db "Empty Land", 0
 ms1 db "Hamlet", 0
@@ -264,7 +274,17 @@ section .text
 
 ; ---------------------------------------------------------------------
 FUNC sim_init
-    mov qword [money], 25000
+    mov qword [money], 30000
+    ; the starting plot (or everything in the sandbox modes)
+    lea rdi, [plot_owned]
+    xor eax, eax
+    cmp dword [sandbox], 0
+    je .po
+    mov eax, 0x01010101
+.po:
+    mov ecx, (PLOTS*PLOTS+7)/4
+    rep stosd
+    mov byte [plot_owned+START_PLOT], 1
     mov dword [sim_speed], 1
     mov dword [tax_rate], 9
     mov dword [tax_rate+4], 9
@@ -3283,7 +3303,7 @@ FUNC month_end, 32
     mov [income_last], eax
     mov eax, [road_cost]
     xor edx, edx
-    mov ecx, 5
+    mov ecx, 3
     div ecx
     mov [exp_roads], eax
     xor ebx, ebx
@@ -3316,9 +3336,23 @@ FUNC month_end, 32
     cmp ebx, POLICY_COUNT
     jl .pol
     mov [exp_policies], r12d
+    ; loan repayments
+    xor ecx, ecx
+    xor edx, edx
+.ln:
+    cmp dword [loan_left+rcx*4], 0
+    je .lnn
+    dec dword [loan_left+rcx*4]
+    add edx, [loan_payment+rcx*4]
+.lnn:
+    inc ecx
+    cmp ecx, 3
+    jl .ln
+    mov [exp_loans], edx
     mov eax, [exp_roads]
     add eax, [exp_services]
     add eax, r12d
+    add eax, edx
     mov [expense_last], eax
     movsxd rax, dword [income_last]
     add [money], rax
@@ -3378,6 +3412,7 @@ FUNC check_milestone
     jl .out
     inc dword [milestone]
     mov ebx, [milestone]
+    mov [ms_card], ebx
     movsxd rax, dword [milestone_cash+rbx*4]
     add [money], rax
     call tb_reset
@@ -3397,6 +3432,124 @@ FUNC check_milestone
     call fx_milestone
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  land plots (a 5x5 grid) and unlocks
+; ---------------------------------------------------------------------
+; plot_of(edi x, esi y) -> eax plot index
+plot_of:
+    lea eax, [rsi*4+rsi]
+    shr eax, MAP_SHIFT
+    imul eax, PLOTS
+    lea ecx, [rdi*4+rdi]
+    shr ecx, MAP_SHIFT
+    add eax, ecx
+    ret
+
+; tile_owned(edi x, esi y) -> eax 1 if the player may build here
+tile_owned:
+    xor eax, eax
+    cmp edi, MAP_W
+    jae .o
+    cmp esi, MAP_W
+    jae .o
+    call plot_of
+    movzx eax, byte [plot_owned+rax]
+.o: ret
+
+; plots owned -> eax
+plots_owned:
+    xor eax, eax
+    xor ecx, ecx
+.l: movzx edx, byte [plot_owned+rcx]
+    add eax, edx
+    inc ecx
+    cmp ecx, PLOTS*PLOTS
+    jl .l
+    ret
+
+; plots the milestones allow -> eax
+plots_allowed:
+    mov eax, [milestone]
+    add eax, 1
+    ret
+
+; price of the next plot -> eax
+plot_price:
+    call plots_owned
+    mov ecx, eax
+    imul eax, eax, 5000
+    imul ecx, ecx
+    imul ecx, ecx, 1500
+    add eax, ecx
+    ret
+
+; can plot edi be bought? -> eax 0 ok, 1 owned, 2 not next to your land,
+; 3 needs a milestone, 4 no money
+plot_status:
+    push rbx
+    mov ebx, edi
+    mov eax, 1
+    cmp byte [plot_owned+rbx], 0
+    jne .o
+    ; a neighbour must be owned
+    mov eax, ebx
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx                         ; eax row, edx col
+    mov r8d, eax
+    mov r9d, edx
+    xor r10d, r10d
+    test r9d, r9d
+    jz .a
+    movzx ecx, byte [plot_owned+rbx-1]
+    or r10d, ecx
+.a: cmp r9d, PLOTS-1
+    je .b
+    movzx ecx, byte [plot_owned+rbx+1]
+    or r10d, ecx
+.b: test r8d, r8d
+    jz .c
+    movzx ecx, byte [plot_owned+rbx-PLOTS]
+    or r10d, ecx
+.c: cmp r8d, PLOTS-1
+    je .d
+    movzx ecx, byte [plot_owned+rbx+PLOTS]
+    or r10d, ecx
+.d: mov eax, 2
+    test r10d, r10d
+    jz .o
+    call plots_owned
+    mov ecx, eax
+    call plots_allowed
+    cmp ecx, eax
+    mov eax, 3
+    jge .o
+    call plot_price
+    movsxd rax, eax
+    cmp rax, [money]
+    mov eax, 4
+    jg .o
+    xor eax, eax
+.o: pop rbx
+    ret
+
+; population whose milestone has been reached (unlocks) -> eax
+unlocked_pop:
+    mov eax, [milestone]
+    mov eax, [milestone_pop+rax*4]
+    ret
+
+; milestone index for an unlock population (edi) -> eax
+milestone_for:
+    xor eax, eax
+.l: cmp eax, 9
+    jge .o
+    cmp [milestone_pop+rax*4], edi
+    jge .o
+    inc eax
+    jmp .l
+.o: ret
 
 ; ---------------------------------------------------------------------
 ;  random events: fires, meteors, booms

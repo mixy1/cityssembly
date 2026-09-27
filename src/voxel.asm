@@ -1317,6 +1317,7 @@ remap_red       resb 256
 remap_dark      resb 256
 remap_fire      resb 256
 remap_bright    resb 256
+remap_dim       resb 256
 remap_cars      resb 256*8
 remap_heat      resb 256*16
 
@@ -1333,6 +1334,7 @@ FUNC remaps_init
     mov [remap_dark+rcx], cl
     mov [remap_fire+rcx], cl
     mov [remap_bright+rcx], cl
+    mov [remap_dim+rcx], cl
     inc ecx
     cmp ecx, 256
     jl .id
@@ -1372,6 +1374,16 @@ FUNC remaps_init
     and r9d, ~7
     lea r9d, [r9+r8+RAMP_BASE]
     mov [remap_bright+rcx], r9b
+    ; dim (land you don't own): two shades down, same colour
+    mov r8d, edx
+    sub r8d, 2
+    jns .dm
+    xor r8d, r8d
+.dm:
+    mov r9d, eax
+    and r9d, ~7
+    lea r9d, [r9+r8+RAMP_BASE]
+    mov [remap_dim+rcx], r9b
     inc ecx
     cmp ecx, PAL_WATER
     jl .r

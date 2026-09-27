@@ -53,6 +53,23 @@ one press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
 
+### Progression (Cities: Skylines style)
+
+- **Land.** The map is a 5×5 grid of plots. You start with one plot, which
+  has a creek for your pump and sewage outlet. The land tool (`K`) shows your
+  land, what's for sale, and prices. Each milestone lets you own one more plot,
+  and every plot costs more than the last. Reaching the second highway in the
+  north means buying your way there.
+- **Milestones** (Hamlet 60, Village 250, Town 600, Large Town 1,200,
+  City 2,500, Large City 5,000, Capital 9,000, Metropolis 16,000,
+  Megalopolis 30,000) pay a reward and unlock things. Services, dense zones,
+  offices, avenues, highways, buses and landmarks all start locked. A card
+  shows what's new, locked items in the build menus name the milestone they
+  need, and the bar under the city name tracks your progress.
+- **Money is tight.** Services cost real upkeep, and so do roads. Take a loan
+  from the budget panel (F2) to bridge a gap: $10k, then $30k from Village and
+  $80k from Large Town, repaid monthly. With no money you can't build.
+
 | Input | Action |
 |---|---|
 | Left drag | build with the current tool (roads/pipes draw L-shapes, power lines run straight, zones draw rectangles) |
@@ -64,6 +81,7 @@ Then chase the advisor goals shown in the top-left.
 | `1` - `6` | zones: residential, commercial, industry, office, dense residential, dense commercial |
 | `X` | de-zone empty lots |
 | `Space`, `[` `]` | pause, game speed |
+| `K` | buy land |
 | `O` | cycle info views |
 | `V` | show/hide the current tool's info view (remembered) |
 | `F2` `F3` `F4` | budget & taxes, policies, city statistics |

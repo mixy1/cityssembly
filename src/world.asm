@@ -388,6 +388,35 @@ FUNC world_generate, 32
     cmp r13d, 90
     jl .cy
 
+    ; --- a creek through the starting plot (pumps upstream, outlets down) ---
+    cmp dword [sandbox], 0
+    jne .nocreek
+    mov r12d, 48
+    xor r13d, r13d
+.ck:
+    mov ebx, 0
+.ckw:
+    lea edi, [r12+rbx]
+    mov esi, r13d
+    call tile_at
+    mov byte [rax+T_TERRAIN], TER_WATER
+    mov byte [rax+T_OBJ], OBJ_NONE
+    inc ebx
+    cmp ebx, 2
+    jl .ckw
+    call rand
+    and eax, 7
+    jnz .ckn
+    call rand
+    and eax, 2
+    dec eax
+    add r12d, eax
+    CLAMP r12d, 47, 49
+.ckn:
+    inc r13d
+    cmp r13d, MAP_W
+    jl .ck
+.nocreek:
     ; --- highway from the west edge ---
     mov dword [hwy_row], 64
     xor r12d, r12d
@@ -401,7 +430,12 @@ FUNC world_generate, 32
     mov byte [rax+T_ROADTYPE], RT_HIGHWAY
     mov byte [rax+T_ZONE], 0
     inc r12d
-    cmp r12d, 22
+    mov eax, 22
+    cmp dword [sandbox], 0
+    jne .hwl
+    mov eax, 26                     ; reach into the starting plot
+.hwl:
+    cmp r12d, eax
     jl .hw
     ; second regional highway from the north edge
     mov dword [hwy_col], 44

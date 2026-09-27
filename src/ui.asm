@@ -12,6 +12,7 @@ T_BUSSTOP   equ 6
 T_DEZONE    equ 7
 T_BUILD     equ 8
 T_TREE      equ 9
+T_LAND      equ 10
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -89,11 +90,12 @@ dock_items:
     dd ICON_POWER, 102,    ICON_WATER, 103,   ICON_GARBAGE, 104, ICON_SAFETY, 105
     dd ICON_HEALTH, 106,   ICON_EDU, 107,     ICON_BUS, 108,    ICON_LEISURE, 109
     dd ICON_TREE, 9,       ICON_OVERLAY, 110, ICON_POLICY, 204, ICON_BUDGET, 201
-    dd ICON_STATS, 205,    ICON_MENU, 202
-DOCK_COUNT equ 18
+    dd ICON_LAND, T_LAND,  ICON_STATS, 205,    ICON_MENU, 202
+DOCK_COUNT equ 19
 dock_tips:
     dq tip0, tip1, tip2, tip3, tip4, tip5, tip6, tip7, tip8, tip9
-    dq tip10, tip11, tip12, tip13, tip14, tip15, tip16, tip17
+    dq tip10, tip11, tip12, tip13, tip14, tip15, tip_land, tip16, tip17
+tip_land db "Buy land (K)", 0
 tip0  db "Inspect (Q)", 0
 tip1  db "Bulldoze (B)", 0
 tip2  db "Roads & bus stops (R)", 0
@@ -135,7 +137,8 @@ submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
-    dq ov16, ov17, ov18, ov19
+    dq ov16, ov17, ov18, ov19, ov20
+ov20 db "Land", 0
 ov0  db "No info view", 0
 ov1  db "Electricity", 0
 ov2  db "Water & pipes", 0
@@ -158,7 +161,8 @@ ov18 db "Industrial desirability", 0
 ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
-    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0
+    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20
+oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
 oh2  db 7, "served area  ", 3, "no water  ", 6, "dead pipe  ", 4, "polluted", 0
 oh7  db 2, "flowing  ", 4, "busy  ", 3, "jammed", 0
@@ -198,9 +202,11 @@ ti_pipe    db "Water pipe", 0
 ti_tile    db "/tile", 0
 
 s_welcome1  db "Welcome, Mayor!", 0
-s_welcome2  db "This valley needs a city. Extend the highway with a road,", 10
-            db "zone homes and industry, then add power, water pipes and", 10
-            db "a sewage outlet. Picking a tool shows its info view.", 10, 10
+s_welcome2  db "This valley needs a city. You own one plot of land by the", 10
+            db "creek. Link a road to the highway, zone homes and industry,", 10
+            db "then bring power, water pipes and a sewage outlet.", 10
+            db "Grow to reach ", 5, "milestones", 1, ": each unlocks new buildings", 10
+            db "and lets you buy more land (", 7, "K", 1, "). Watch your budget!", 10, 10
             db 7, "Drag", 1, " to build.  ", 7, "Right-drag", 1, " / WASD to pan.  ", 7, "Wheel", 1, " to zoom.", 10
             db 7, "Space", 1, " pause   ", 7, "O", 1, " info views   ", 7, "F1", 1, " help", 10, 10
             db 5, "Click anywhere to begin.", 0
@@ -222,7 +228,38 @@ s_goal      db "GOAL ", 0
 s_reward    db "  reward ", 0
 s_goaldone  db "Goal complete! +", 0
 s_nomoney   db "Not enough money!", 0
-s_locked    db "Unlocks at population ", 0
+s_locked    db "Unlocks at ", 0
+s_lockpeop  db " people)", 0
+s_notowned  db "You don't own this land yet - buy it with the Land tool (K).", 0
+ht_land     db "Buy land", 0
+s_lh1       db "Your city can only grow on land", 10
+            db "you own. Click a ", 5, "gold plot", 1, " next to", 10
+            db "your land to buy it.", 10
+            db "Each milestone lets you own", 10
+            db "one more plot.", 10, 10, 0
+s_lh2       db "Plots owned: ", 0
+s_lh3       db " of ", 0
+s_lh4       db 10, "Next plot: ", 0
+s_lh5       db 10, 3, "Grow to the next milestone", 0
+s_bought    db "New land! Your city can grow here now.", 0
+s_lnown     db "You already own this plot.", 0
+s_lnext     db "You can only buy land next to your own.", 0
+s_lms       db "Reach the next milestone to buy more land.", 0
+s_lcash     db "Not enough money for this plot.", 0
+s_mscard    db "MILESTONE", 0
+s_msrew     db "Reward: ", 0
+s_msland    db "+1 plot of land to buy (K)", 0
+s_msunl     db "Now available:", 0
+s_msok      db "Great!", 0
+s_msnext    db "Next milestone: ", 0
+s_msat      db " at ", 0
+s_loans     db "Loans", 0
+s_borrow    db "Borrow ", 0
+s_moleft    db " mo left", 0
+s_lnlock    db "at ", 0
+s_lntaken   db "Loan received: ", 0
+zone_unlock dd 0, 0, 0, 0, 600, 1200, 1200
+road_unlock dd 0, 250, 1200, 600
 s_needwater db "This must be placed touching water.", 0
 s_budget    db "BUDGET", 0
 s_taxes     db "Taxes", 0
@@ -403,7 +440,7 @@ s_sec       db " s", 0
 
 goal_text:
     dq g0, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19
-goal_reward dd 500, 300, 800, 1000, 1000, 800, 1500, 2000, 1200, 1200, 1500, 2000, 2500, 3000, 3000, 5000, 5000, 20000, 50000, 0
+goal_reward dd 500, 300, 500, 500, 500, 500, 800, 1000, 800, 800, 1000, 1200, 1500, 2000, 2000, 3000, 3000, 10000, 25000, 0
 g0  db "Build a road connected to the highway", 0
 g1  db "Zone 6 residential lots", 0
 g2  db "Build a power plant and light up a home", 0
@@ -1478,12 +1515,12 @@ FUNC draw_welcome
     sub r12d, 330
     shr r12d, 1
     mov r13d, [ui_h]
-    sub r13d, 150
+    sub r13d, 170
     shr r13d, 1
     mov edi, r12d
     mov esi, r13d
     mov edx, 330
-    mov ecx, 130
+    mov ecx, 150
     call draw_panel
     mov dword [font_scale], 2
     lea edi, [r12+165]
@@ -1723,11 +1760,12 @@ FUNC load_city, 16
 .out:
     RETURN
 section .data
-save_magic db "CSAVv003"
+save_magic db "CSAVv004"
 section .text
 
 
 FUNC new_city
+    mov dword [sandbox], 0
     CALLC SDL_GetPerformanceCounter
     mov [world_seed], eax
     call world_generate
@@ -1742,7 +1780,7 @@ FUNC new_city
     mov [money_shown], rax
     mov dword [sel_x], -1
     mov dword [welcome], 1
-    mov edi, 30
+    mov edi, 38
     mov esi, [hwy_row]
     call camera_center_tile
     RETURN
@@ -1791,6 +1829,15 @@ FUNC compute_eff_overlay
     jne .have
     mov eax, OV_FIRE
 .have:
+    cmp dword [tool], T_LAND
+    jne .have2
+    cmp dword [welcome], 0
+    jne .have2
+    mov dword [auto_view], 0
+    mov eax, OV_LAND
+    cmp dword [overlay_mode], 0
+    je .set
+.have2:
     mov [auto_view], eax
     ; an info view picked by hand always wins
     mov ecx, [overlay_mode]
@@ -2036,6 +2083,8 @@ tool_is_click:
     mov eax, [tool]
     cmp eax, T_INSPECT
     je .y
+    cmp eax, T_LAND
+    je .y
     cmp eax, T_BUILD
     je .y
     cmp eax, T_BUSSTOP
@@ -2082,6 +2131,14 @@ FUNC tool_evaluate, 32
     test rax, rax
     jz .n
     mov r12, rax
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call tile_owned
+    test eax, eax
+    jnz .own
+    mov dword [last_tool_err], 3
+    jmp .n
+.own:
     xor r13d, r13d
     movzx ecx, byte [r12+T_OBJ]
     movzx edx, byte [r12+T_TERRAIN]
@@ -2239,8 +2296,9 @@ FUNC tool_evaluate, 32
     movzx r14d, byte [r15+BI_SIZE]
     mov eax, [r15+BI_COST]
     mov [tl_cost], eax
-    mov eax, [r15+BI_UNLOCK]
-    cmp [population], eax
+    mov ecx, [r15+BI_UNLOCK]
+    call unlocked_pop
+    cmp eax, ecx
     jge .unl
     mov dword [last_tool_err], 1
     jmp .out
@@ -2253,6 +2311,15 @@ FUNC tool_evaluate, 32
     xor ecx, ecx
 .fx:
     mov [rbp-52], ecx
+    lea edi, [r12+rcx]
+    lea esi, [r13+rbx]
+    call tile_owned
+    test eax, eax
+    jnz .fown
+    mov dword [last_tool_err], 3
+    jmp .out
+.fown:
+    mov ecx, [rbp-52]
     lea edi, [r12+rcx]
     lea esi, [r13+rbx]
     call tile_at
@@ -2541,15 +2608,21 @@ FUNC tool_apply
     mov ecx, -1
     call notify
 .err:
+    cmp dword [last_tool_err], 3
+    jne .e1
+    lea rdi, [s_notowned]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp .e3
+.e1:
     cmp dword [last_tool_err], 1
     jne .e2
-    call tb_reset
-    lea rdi, [s_locked]
-    call tb_str
     mov edi, [build_kind]
     call bld_rec
-    movsxd rdi, dword [rax+BI_UNLOCK]
-    call tb_num
+    mov edi, [rax+BI_UNLOCK]
+    call tb_unlock_msg
     lea rdi, [textbuf]
     mov esi, UI_WARN
     mov edx, -1
@@ -2573,6 +2646,13 @@ FUNC tool_apply
 ; ---------------------------------------------------------------------
 FUNC draw_tool_preview, 16
     call set_target_world
+    cmp dword [tool], T_LAND
+    jne .nland
+    cmp dword [welcome], 0
+    jne .out
+    call land_preview
+    jmp .sel
+.nland:
     cmp dword [ui_captured], 0
     jne .sel
     cmp dword [welcome], 0
@@ -2588,6 +2668,11 @@ FUNC draw_tool_preview, 16
     call draw_diamond
     jmp .sel
 .tools:
+    cmp dword [tool], T_LAND
+    jne .tools2
+    call land_preview
+    jmp .sel
+.tools2:
     call tool_collect
     call tool_evaluate
     cmp dword [tool], T_BUILD
@@ -2830,6 +2915,11 @@ FUNC world_input
     call sfx_play
     jmp .out
 .click:
+    cmp dword [tool], T_LAND
+    jne .click2
+    call land_click
+    jmp .out
+.click2:
     call tool_collect
     call tool_apply
     jmp .out
@@ -2864,6 +2954,7 @@ FUNC draw_topbar, 16
     mov ecx, UI_GOLD
     call tb_draw
     lea r12d, [rax+8]
+    call ms_progress_bar
     call tb_reset
     call tb_date
     mov edi, r12d
@@ -3125,7 +3216,7 @@ FUNC draw_dock, 32
     mov [rbp-48], r15d
     mov eax, [dock_items+rbx*8+4]
     xor r8d, r8d
-    cmp eax, 10
+    cmp eax, 100
     jge .sm
     cmp eax, [tool]
     sete r8b
@@ -3165,7 +3256,7 @@ FUNC draw_dock, 32
     cmp dword [rbp-52], 0
     je .bn
     mov eax, [dock_items+rbx*8+4]
-    cmp eax, 10
+    cmp eax, 100
     jge .c1
     mov [tool], eax
     mov dword [submenu], -1
@@ -3238,6 +3329,7 @@ FUNC submenu_item_info
     cmp ebx, SI_BUSSTOP
     jg .z
     lea eax, [rbx-SI_STREET]
+    mov ecx, [road_unlock+rax*4]
     mov edx, 60
     cmp ebx, SI_BUSSTOP
     je .ts
@@ -3252,6 +3344,7 @@ FUNC submenu_item_info
     lea rax, [ti_dezone]
     je .zz
     lea eax, [rbx-SI_ZONE]
+    mov ecx, [zone_unlock+rax*4]
     mov rax, [zone_names+rax*8]
 .zz:
     RETURN
@@ -3276,7 +3369,23 @@ FUNC submenu_select
     mov ebx, edi
     mov dword [drag_active], 0
     cmp ebx, SI_OVERLAY
-    jl .t
+    jge .ov
+    mov edi, ebx
+    call submenu_item_info
+    call unlocked_pop
+    cmp eax, ecx
+    jge .t
+    mov edi, ecx
+    call tb_unlock_msg
+    lea rdi, [textbuf]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ERROR
+    call sfx_play
+    RETURN
+.ov:
     lea eax, [rbx-SI_OVERLAY]
     mov [overlay_mode], eax
     jmp .close
@@ -3445,8 +3554,9 @@ FUNC draw_submenu, 48
     add esi, 4
     mov rdx, [rbp-64]
     mov ecx, UI_TEXT
-    mov eax, [rbp-72]
-    cmp [population], eax
+    call unlocked_pop
+    cmp eax, [rbp-72]
+    mov ecx, UI_TEXT
     jge .nm
     mov ecx, UI_DIM
 .nm:
@@ -3454,13 +3564,13 @@ FUNC draw_submenu, 48
     cmp r14d, SI_OVERLAY
     jge .in
     call tb_reset
-    mov eax, [rbp-72]
-    cmp [population], eax
+    call unlocked_pop
+    cmp eax, [rbp-72]
     jge .cost
-    mov edi, 132
-    call tb_char
-    movsxd rdi, dword [rbp-72]
-    call tb_num
+    mov edi, [rbp-72]
+    call milestone_for
+    mov rdi, [milestone_names+rax*8]
+    call tb_str
     lea edi, [r12+196]
     mov esi, [rbp-56]
     add esi, 4
@@ -3967,6 +4077,8 @@ FUNC draw_inspect, 32
     RETURN
 section .bss
 fight_request resd 1
+rect_col      resd 1
+ms_tipbuf     resb 96
 insp_h        resd 1
 section .text
 
@@ -4094,12 +4206,12 @@ FUNC draw_budget, 32
     mov edi, r12d
     mov esi, r13d
     mov edx, 350
-    mov ecx, 226
+    mov ecx, 256
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 350
-    mov ecx, 226
+    mov ecx, 256
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+10]
@@ -4184,6 +4296,7 @@ FUNC draw_budget, 32
     BROW s_roads, exp_roads, UI_BAD
     BROW s_services, exp_services, UI_BAD
     BROW s_policiesx, exp_policies, UI_BAD
+    BROW s_loans, exp_loans, UI_BAD
     mov eax, [income_last]
     sub eax, [expense_last]
     mov [budget_net], eax
@@ -4229,6 +4342,77 @@ FUNC draw_budget, 32
     lea rdx, [hist_money]
     mov ecx, UI_GOLD
     call draw_chart
+    ; loans
+    mov r13d, [rbp-48]
+    add r13d, 224
+    lea edi, [r12+10]
+    mov esi, r13d
+    lea rdx, [s_loans]
+    mov ecx, UI_TEXT
+    call draw_text
+    xor ebx, ebx
+.lo:
+    imul eax, ebx, 104
+    lea r14d, [r12+rax+40]
+    call tb_reset
+    cmp dword [loan_left+rbx*4], 0
+    je .lfree
+    movsxd rdi, dword [loan_left+rbx*4]
+    call tb_num
+    lea rdi, [s_moleft]
+    call tb_str
+    mov edi, r14d
+    lea esi, [r13+1]
+    lea rdx, [textbuf]
+    mov ecx, UI_DIM
+    call draw_text
+    jmp .lnext
+.lfree:
+    mov eax, [milestone]
+    cmp eax, [loan_ms+rbx*4]
+    jge .lopen
+    mov eax, [loan_ms+rbx*4]
+    mov rdi, [milestone_names+rax*8]
+    call tb_str
+    mov edi, r14d
+    lea esi, [r13+1]
+    lea rdx, [textbuf]
+    mov ecx, UI_DIM
+    call draw_text
+    jmp .lnext
+.lopen:
+    lea rdi, [s_borrow]
+    call tb_str
+    movsxd rdi, dword [loan_amount+rbx*4]
+    call tb_money
+    mov edi, r14d
+    lea esi, [r13-2]
+    mov edx, 100
+    lea rcx, [textbuf]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .lnext
+    mov eax, [loan_months+rbx*4]
+    mov [loan_left+rbx*4], eax
+    movsxd rax, dword [loan_amount+rbx*4]
+    add [money], rax
+    call tb_reset
+    lea rdi, [s_lntaken]
+    call tb_str
+    movsxd rdi, dword [loan_amount+rbx*4]
+    call tb_money
+    lea rdi, [textbuf]
+    mov esi, UI_GOLD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_COIN
+    call sfx_play
+.lnext:
+    inc ebx
+    cmp ebx, 3
+    jl .lo
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -4515,6 +4699,8 @@ FUNC draw_tool_hint, 16
     xor r14, r14                    ; extra text
     cmp eax, T_BUILD
     je .bld
+    cmp eax, T_LAND
+    je .land
     cmp eax, T_ZONETOOL
     jne .t
     lea r14, [hz_zone]
@@ -4523,6 +4709,11 @@ FUNC draw_tool_hint, 16
     mov r13, [hint_text+rax*8]
     test r13, r13
     jz .out
+    jmp .draw
+.land:
+    call land_hint_text
+    lea r12, [ht_land]
+    lea r13, [textbuf]
     jmp .draw
 .bld:
     mov edi, [build_kind]
@@ -4614,6 +4805,24 @@ FUNC draw_problem_icons, 16
     sub r13d, eax
     sub r13d, 10
     movzx r14d, byte [prob_t+rbx]
+    ; zoomed right out: a small coloured pip instead of a bubble
+    cmp dword [zoom], 1
+    jg .big
+    lea edi, [r12-2]
+    lea esi, [r13+6]
+    mov edx, 5
+    mov ecx, 5
+    mov r8d, UI_BLACK
+    call fill_rect
+    lea edi, [r12-1]
+    lea esi, [r13+7]
+    mov edx, 3
+    mov ecx, 3
+    movzx r8d, byte [prob_col+r14]
+    call fill_rect
+    inc ebx
+    jmp .l
+.big:
     ; hover: name the problem, click (inspect tool) to open the building
     mov dword [rbp-52], UI_BG2
     lea edi, [r12-5]
@@ -4710,6 +4919,551 @@ section .text
 ; =====================================================================
 ;  render_ui: everything on the ui layer, in order
 ; =====================================================================
+; =====================================================================
+;  progression: land plots, milestone card, unlock messages
+; =====================================================================
+; "Unlocks at Village (250 people)" into textbuf (edi = population)
+FUNC tb_unlock_msg
+    mov ebx, edi
+    call tb_reset
+    lea rdi, [s_locked]
+    call tb_str
+    mov edi, ebx
+    call milestone_for
+    mov rdi, [milestone_names+rax*8]
+    call tb_str
+    mov edi, ' '
+    call tb_char
+    mov edi, '('
+    call tb_char
+    movsxd rdi, ebx
+    call tb_num
+    lea rdi, [s_lockpeop]
+    call tb_str
+    RETURN
+
+; plot bounds (edi plot) -> r8d x0, r9d y0, r10d x1, r11d y1 (exclusive)
+plot_bounds:
+    mov eax, edi
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx                         ; eax row, edx col
+    mov ecx, edx
+    ; x0 = (col*128 + 4) / 5
+    shl ecx, MAP_SHIFT
+    add ecx, PLOTS-1
+    push rax
+    mov eax, ecx
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx
+    mov r8d, eax
+    lea eax, [rax]
+    pop rax
+    push r8
+    ; x1 from col+1
+    mov ecx, edi
+    push rax
+    mov eax, ecx
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx
+    lea eax, [rdx+1]
+    shl eax, MAP_SHIFT
+    add eax, PLOTS-1
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx
+    mov r10d, eax
+    pop rax
+    ; rows
+    mov ecx, eax
+    shl ecx, MAP_SHIFT
+    add ecx, PLOTS-1
+    push rax
+    mov eax, ecx
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx
+    mov r9d, eax
+    pop rax
+    inc eax
+    shl eax, MAP_SHIFT
+    add eax, PLOTS-1
+    xor edx, edx
+    mov ecx, PLOTS
+    div ecx
+    mov r11d, eax
+    pop r8
+    ret
+
+; screen line in the current target (edi x0, esi y0, edx x1, ecx y1, r8d colour)
+FUNC screen_line, 16
+    mov r12d, edi
+    mov r13d, esi
+    mov r14d, edx
+    mov r15d, ecx
+    mov [rbp-48], r8d
+    mov eax, r14d
+    sub eax, r12d
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ebx, eax
+    mov eax, r15d
+    sub eax, r13d
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp ebx, eax
+    cmovl ebx, eax
+    test ebx, ebx
+    jz .out
+    xor ecx, ecx
+.l:
+    cmp ecx, ebx
+    jg .out
+    mov [rbp-52], ecx
+    mov eax, r14d
+    sub eax, r12d
+    imul eax, ecx
+    cdq
+    idiv ebx
+    lea edi, [r12+rax]
+    mov ecx, [rbp-52]
+    mov eax, r15d
+    sub eax, r13d
+    imul eax, ecx
+    cdq
+    idiv ebx
+    lea esi, [r13+rax]
+    mov edx, [rbp-48]
+    push rdi
+    push rsi
+    call put_pixel
+    pop rsi
+    pop rdi
+    inc esi
+    mov edx, [rbp-48]
+    call put_pixel
+    mov ecx, [rbp-52]
+    inc ecx
+    jmp .l
+.out:
+    RETURN
+
+; outline tiles [x0,x1) x [y0,y1) on the ground (r8d..r11d as plot_bounds, [rect_col])
+FUNC tile_rect_outline, 48
+    mov [rbp-48], r8d
+    mov [rbp-52], r9d
+    mov [rbp-56], r10d
+    mov [rbp-60], r11d
+    ; corners: (x0,y0) (x1,y0) (x1,y1) (x0,y1)
+    mov edi, r8d
+    mov esi, r9d
+    call tile_screen
+    mov [rbp-64], eax
+    mov [rbp-68], edx
+    mov edi, [rbp-56]
+    mov esi, [rbp-52]
+    call tile_screen
+    mov [rbp-72], eax
+    mov [rbp-76], edx
+    mov edi, [rbp-56]
+    mov esi, [rbp-60]
+    call tile_screen
+    mov [rbp-80], eax
+    mov [rbp-84], edx
+    mov edi, [rbp-48]
+    mov esi, [rbp-60]
+    call tile_screen
+    mov [rbp-88], eax
+    mov [rbp-92], edx
+    mov edi, [rbp-64]
+    mov esi, [rbp-68]
+    mov edx, [rbp-72]
+    mov ecx, [rbp-76]
+    mov r8d, [rect_col]
+    call screen_line
+    mov edi, [rbp-72]
+    mov esi, [rbp-76]
+    mov edx, [rbp-80]
+    mov ecx, [rbp-84]
+    mov r8d, [rect_col]
+    call screen_line
+    mov edi, [rbp-80]
+    mov esi, [rbp-84]
+    mov edx, [rbp-88]
+    mov ecx, [rbp-92]
+    mov r8d, [rect_col]
+    call screen_line
+    mov edi, [rbp-88]
+    mov esi, [rbp-92]
+    mov edx, [rbp-64]
+    mov ecx, [rbp-68]
+    mov r8d, [rect_col]
+    call screen_line
+    RETURN
+
+; land tool: outline every plot you could buy, price in the middle
+FUNC land_preview, 32
+    mov dword [blit_tint], TINT_KEEP
+    ; hovered plot
+    mov dword [rbp-52], -1
+    cmp dword [hover_valid], 0
+    je .h
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    call plot_of
+    mov [rbp-52], eax
+.h:
+    xor ebx, ebx
+.l:
+    cmp ebx, PLOTS*PLOTS
+    jge .out
+    mov edi, ebx
+    call plot_status
+    mov [rbp-48], eax
+    cmp eax, 1
+    je .n                           ; owned
+    cmp eax, 2
+    je .n                           ; not reachable yet
+    mov dword [rect_col], RAMP(R_YELLOW, 7)
+    cmp eax, 0
+    je .c
+    mov dword [rect_col], RAMP(R_GREY, 5)
+.c:
+    cmp ebx, [rbp-52]
+    jne .d
+    mov dword [rect_col], RAMP(R_WHITE, 7)
+.d:
+    mov edi, ebx
+    call plot_bounds
+    push r8
+    push r9
+    push r10
+    push r11
+    call tile_rect_outline
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    ; price label in the middle
+    lea edi, [r8+r10]
+    shr edi, 1
+    lea esi, [r9+r11]
+    shr esi, 1
+    call tile_screen
+    mov r12d, eax
+    lea r13d, [rdx+4]
+    call tb_reset
+    call plot_price
+    movsxd rdi, eax
+    call tb_money
+    mov edi, r12d
+    mov esi, r13d
+    lea rdx, [textbuf]
+    mov ecx, RAMP(R_YELLOW, 7)
+    cmp dword [rbp-48], 0
+    je .pc
+    mov ecx, RAMP(R_GREY, 6)
+.pc:
+    call draw_text_centered
+.n:
+    inc ebx
+    jmp .l
+.out:
+    RETURN
+
+; land tool click: buy the plot under the cursor
+FUNC land_click
+    cmp dword [hover_valid], 0
+    je .out
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    call plot_of
+    mov ebx, eax
+    mov edi, ebx
+    call plot_status
+    test eax, eax
+    jz .buy
+    lea rdi, [s_lnown]
+    cmp eax, 1
+    je .msg
+    lea rdi, [s_lnext]
+    cmp eax, 2
+    je .msg
+    lea rdi, [s_lms]
+    cmp eax, 3
+    je .msg
+    lea rdi, [s_lcash]
+.msg:
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ERROR
+    call sfx_play
+    jmp .out
+.buy:
+    call plot_price
+    movsxd rax, eax
+    sub [money], rax
+    mov byte [plot_owned+rbx], 1
+    lea rdi, [s_bought]
+    mov esi, UI_GOOD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_COIN
+    call sfx_play
+    ; confetti over the new land
+    mov edi, ebx
+    call plot_bounds
+    lea edi, [r8+r10]
+    shr edi, 1
+    lea esi, [r9+r11]
+    shr esi, 1
+    mov edx, 8
+    mov ecx, PK_DUST
+    mov r8d, 3
+    call fx_burst
+.out:
+    RETURN
+
+; land tool hint text into textbuf
+FUNC land_hint_text
+    call tb_reset
+    lea rdi, [s_lh1]
+    call tb_str
+    lea rdi, [s_lh2]
+    call tb_str
+    call plots_owned
+    movsxd rdi, eax
+    call tb_num
+    lea rdi, [s_lh3]
+    call tb_str
+    call plots_allowed
+    movsxd rdi, eax
+    call tb_num
+    call plots_owned
+    mov ebx, eax
+    call plots_allowed
+    cmp ebx, eax
+    jl .price
+    lea rdi, [s_lh5]
+    call tb_str
+    RETURN
+.price:
+    lea rdi, [s_lh4]
+    call tb_str
+    call plot_price
+    movsxd rdi, eax
+    call tb_money
+    RETURN
+
+; progress toward the next milestone, under its name (edi.. from topbar)
+FUNC ms_progress_bar
+    mov eax, [milestone]
+    cmp eax, 9
+    jge .out
+    mov r12d, [milestone_pop+rax*4]
+    mov r13d, [milestone_pop+rax*4+4]
+    mov eax, [population]
+    sub eax, r12d
+    CLAMP eax, 0, 0x7fffff
+    imul eax, 60
+    mov ecx, r13d
+    sub ecx, r12d
+    xor edx, edx
+    div ecx
+    CLAMP eax, 0, 60
+    mov ebx, eax
+    mov edi, 6
+    mov esi, 14
+    mov edx, 60
+    mov ecx, 2
+    mov r8d, UI_BG2
+    call fill_rect
+    mov edi, 6
+    mov esi, 14
+    mov edx, ebx
+    mov ecx, 2
+    mov r8d, UI_GOLD
+    call fill_rect
+    ; hover: what's next
+    mov edi, 0
+    mov esi, 0
+    mov edx, 70
+    mov ecx, 18
+    call ui_over
+    test eax, eax
+    jz .out
+    call tb_reset
+    lea rdi, [s_msnext]
+    call tb_str
+    mov eax, [milestone]
+    mov rdi, [milestone_names+rax*8+8]
+    call tb_str
+    lea rdi, [s_msat]
+    call tb_str
+    movsxd rdi, r13d
+    call tb_num
+    lea rdi, [s_lockpeop+1]
+    call tb_str
+    lea rax, [ms_tipbuf]
+    lea rsi, [textbuf]
+.cp:
+    mov cl, [rsi]
+    mov [rax], cl
+    inc rsi
+    inc rax
+    test cl, cl
+    jnz .cp
+    lea rax, [ms_tipbuf]
+    mov [tooltip], rax
+.out:
+    RETURN
+
+; the milestone card: what you just unlocked
+FUNC draw_ms_card, 32
+    mov eax, [ms_card]
+    test eax, eax
+    jz .out
+    cmp dword [welcome], 0
+    jne .out
+    cmp dword [sandbox], 0
+    jne .out
+    cmp dword [panel], PANEL_NONE
+    jne .out
+    mov [rbp-48], eax
+    mov edi, [milestone_pop+rax*4]
+    mov [rbp-52], edi
+    mov r12d, [ui_w]
+    sub r12d, 240
+    shr r12d, 1
+    mov r13d, 60
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 240
+    mov ecx, 200
+    call draw_panel
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 240
+    mov ecx, 200
+    call ui_over
+    lea edi, [r12+120]
+    lea esi, [r13+8]
+    lea rdx, [s_mscard]
+    mov ecx, UI_DIM
+    call draw_text_centered
+    mov dword [font_scale], 2
+    mov eax, [rbp-48]
+    mov rdx, [milestone_names+rax*8]
+    lea edi, [r12+120]
+    lea esi, [r13+20]
+    mov ecx, UI_GOLD
+    call draw_text_centered
+    mov dword [font_scale], 1
+    call tb_reset
+    lea rdi, [s_msrew]
+    call tb_str
+    mov eax, [rbp-48]
+    movsxd rdi, dword [milestone_cash+rax*4]
+    call tb_money
+    lea edi, [r12+120]
+    lea esi, [r13+44]
+    lea rdx, [textbuf]
+    mov ecx, UI_GOOD
+    call draw_text_centered
+    lea edi, [r12+120]
+    lea esi, [r13+56]
+    lea rdx, [s_msland]
+    mov ecx, UI_TEXT
+    call draw_text_centered
+    lea edi, [r12+12]
+    lea esi, [r13+74]
+    lea rdx, [s_msunl]
+    mov ecx, UI_ACCENT
+    call draw_text
+    ; list everything that unlocks at this population, two columns
+    mov dword [rbp-56], 0           ; row counter
+    xor ebx, ebx
+.b:
+    cmp ebx, BK_COUNT
+    jge .zones
+    mov edi, ebx
+    call bld_rec
+    mov ecx, [rax+BI_UNLOCK]
+    cmp ecx, [rbp-52]
+    jne .bn
+    mov rdx, [rax+BI_NAME]
+    call .item
+.bn:
+    inc ebx
+    jmp .b
+.zones:
+    xor ebx, ebx
+.z:
+    cmp ebx, 7
+    jge .roads
+    mov ecx, [zone_unlock+rbx*4]
+    cmp ecx, [rbp-52]
+    jne .zn
+    test ecx, ecx
+    jz .zn
+    mov rdx, [zone_names+rbx*8]
+    call .item
+.zn:
+    inc ebx
+    jmp .z
+.roads:
+    xor ebx, ebx
+.r:
+    cmp ebx, 4
+    jge .btn
+    mov ecx, [road_unlock+rbx*4]
+    cmp ecx, [rbp-52]
+    jne .rn
+    test ecx, ecx
+    jz .rn
+    mov rdx, [tool_item_names+rbx*8]
+    call .item
+.rn:
+    inc ebx
+    jmp .r
+.btn:
+    ; loans that open up
+    lea edi, [r12+85]
+    lea esi, [r13+178]
+    mov edx, 70
+    lea rcx, [s_msok]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .out
+    mov dword [ms_card], 0
+.out:
+    RETURN
+.item:                              ; rdx name
+    mov eax, [rbp-56]
+    mov ecx, eax
+    and ecx, 1
+    imul ecx, ecx, 112
+    lea edi, [r12+rcx+16]
+    shr eax, 1
+    imul eax, eax, 11
+    lea esi, [r13+rax+88]
+    mov ecx, UI_TEXT
+    push rbx
+    push rbx
+    call draw_text
+    pop rbx
+    pop rbx
+    inc dword [rbp-56]
+    ret
+
 FUNC render_ui
     call set_target_ui
     xor edi, edi
@@ -4774,6 +5528,7 @@ FUNC render_ui
 .noinsp:
     call draw_tool_hint
     call draw_minimap
+    call draw_ms_card
     call draw_overlay_legend
     mov rdx, [tooltip]
     test rdx, rdx
@@ -4888,9 +5643,9 @@ FUNC ui_key
     jg .nz
     sub eax, SC_1
     movzx eax, byte [key_zone+rax]
-    mov [zone_type], eax
-    mov ecx, T_ZONETOOL
-    jmp .settool
+    lea edi, [rax+SI_ZONE]
+    call submenu_select
+    jmp .out
 .nz:
     mov ecx, T_INSPECT
     cmp eax, SC_Q
@@ -4912,6 +5667,9 @@ FUNC ui_key
     je .settool
     mov ecx, T_TREE
     cmp eax, SC_T
+    je .settool
+    mov ecx, T_LAND
+    cmp eax, SC_K
     je .settool
     cmp eax, SC_SPACE
     jne .k2

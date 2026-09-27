@@ -165,6 +165,8 @@ RES_ORE      equ 3
 
 ; problem icons
 MAX_WIRES    equ 2048
+PLOTS        equ 5
+START_PLOT   equ 2*PLOTS+1
 PYLON_COST   equ 20
 WIRE_COST    equ 2
 
