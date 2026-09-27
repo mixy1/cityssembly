@@ -319,8 +319,10 @@ buildings, trees and pylons near the view go into a height map, and one sweep
 toward the sun turns it into a shadow map. Buildings shade the ground, the
 streets and each other's walls. Shadows are short and cool at noon and
 stretch out at dawn and dusk, when sunlit walls turn warm. On top of that
-there's contact shading where buildings meet the ground, drifting cloud
-shadows, and sun glints on the water. At night, lit windows, street lamps and
+there's contact shading where buildings meet the ground, and drifting cloud
+shadows. Water is shaded per pixel: turquoise shallows fade to deep blue with
+distance from the shore, two ripple layers drift across each other with
+bright crests, foam laps at the water's edge, and the sun glints on it. At night, lit windows, street lamps and
 neon glow and spill light onto the streets. Settings → Lighting turns it all
 off for slow machines.
 

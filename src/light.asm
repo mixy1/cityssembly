@@ -37,6 +37,11 @@ cloudtex    resb CLOUD_W*CLOUD_W
 alignb 16
 litbuf      resd MAX_FB_W*MAX_FB_H
 lit_dst     resq 1              ; where the lit frame goes (litbuf or the texture)
+wavetex     resb 128*128        ; tiling ripple heights (1 texel = 1 voxel)
+sin8        resb 256            ; sin, one period in 256 steps, -127..127
+wdepth      resb MAP_TILES      ; water: distance to the shore, 32 per tile
+wv_ph1      resd 1
+wv_ph2      resd 1
 hbuf        resb MAX_FB_W*MAX_FB_H
 alignb 16
 bl_a        resd (MAX_FB_W/4)*(MAX_FB_H/4)*3 + 16    ; bloom cells (b, g, r)
@@ -69,6 +74,10 @@ lc_age      resd 1              ; frames since the last sweep
 
 section .data
 ; shadow colour at full strength: cool blue shade (b, g, r)
+; water: shallow and deep colours (b, g, r), foam
+wt_shallow  dd 186, 184, 70
+wt_deep     dd 150, 82, 24
+wt_foam     dd 250, 248, 238
 sh_base     dd 206, 166, 150
 sh_gold     dd 10, 36, 44           ; extra shade depth at golden hour
 lit_noon    dd 2, 8, 10             ; sunlight boost (b, g, r) at noon
@@ -80,6 +89,54 @@ section .text
 ;  light_init: bake the cloud cover texture
 ; ---------------------------------------------------------------------
 FUNC light_init
+    ; sine table
+    xor ebx, ebx
+.s:
+    cvtsi2ss xmm0, ebx
+    mulss xmm0, [f_twopi]
+    mulss xmm0, [f_inv256]
+    call fast_sin
+    mulss xmm0, [f_127]
+    cvtss2si eax, xmm0
+    mov [sin8+rbx], al
+    inc ebx
+    cmp ebx, 256
+    jl .s
+    ; ripples: three wave trains that tile every 128 texels
+    xor r13d, r13d
+.wy:
+    xor r12d, r12d
+.wx:
+%macro WAVE 3                       ; kx, ky, amplitude/128
+    mov eax, r12d
+    imul eax, %1
+    mov ecx, r13d
+    imul ecx, %2
+    add eax, ecx
+    add eax, eax
+    and eax, 255
+    movsx eax, byte [sin8+rax]
+    imul eax, %3
+    sar eax, 7
+    add ebx, eax
+%endmacro
+    mov ebx, 128
+    WAVE 3, 1, 46
+    WAVE -1, 4, 38
+    WAVE 5, -3, 22
+    WAVE 11, 6, 16
+    WAVE -7, 13, 12
+    CLAMP ebx, 0, 255
+    mov eax, r13d
+    shl eax, 7
+    add eax, r12d
+    mov [wavetex+rax], bl
+    inc r12d
+    cmp r12d, 128
+    jl .wx
+    inc r13d
+    cmp r13d, 128
+    jl .wy
     xor r13d, r13d
 .y:
     xor r12d, r12d
@@ -97,6 +154,80 @@ FUNC light_init
     inc r13d
     cmp r13d, CLOUD_W
     jl .y
+    RETURN
+
+section .data
+f_inv256    dd 0.00390625
+f_127       dd 127.0
+section .text
+
+; water depth: chamfer distance (in 1/32 tiles, capped) from every water
+; tile to the nearest land
+FUNC water_depth
+    xor ecx, ecx
+.init:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    mov dl, 0
+    cmp byte [tiles+rax+T_TERRAIN], TER_WATER
+    jne .i
+    mov dl, 255
+.i:
+    mov [wdepth+rcx], dl
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .init
+    ; forward pass (from up/left), then backward (from down/right)
+    xor ecx, ecx
+.f:
+    movzx eax, byte [wdepth+rcx]
+    test eax, eax
+    jz .fn
+    mov edx, ecx
+    and edx, MAP_W-1
+    jz .fu
+    movzx ebx, byte [wdepth+rcx-1]
+    add ebx, 32
+    cmp ebx, eax
+    cmovb eax, ebx
+.fu:
+    cmp ecx, MAP_W
+    jb .fs
+    movzx ebx, byte [wdepth+rcx-MAP_W]
+    add ebx, 32
+    cmp ebx, eax
+    cmovb eax, ebx
+.fs:
+    mov [wdepth+rcx], al
+.fn:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .f
+    mov ecx, MAP_TILES-1
+.b:
+    movzx eax, byte [wdepth+rcx]
+    test eax, eax
+    jz .bn
+    mov edx, ecx
+    and edx, MAP_W-1
+    cmp edx, MAP_W-1
+    je .bd
+    movzx ebx, byte [wdepth+rcx+1]
+    add ebx, 32
+    cmp ebx, eax
+    cmovb eax, ebx
+.bd:
+    cmp ecx, MAP_TILES-MAP_W
+    jae .bs
+    movzx ebx, byte [wdepth+rcx+MAP_W]
+    add ebx, 32
+    cmp ebx, eax
+    cmovb eax, ebx
+.bs:
+    mov [wdepth+rcx], al
+.bn:
+    dec ecx
+    jns .b
     RETURN
 
 ; tileable value noise for the cloud texture (edi x, esi y) -> eax 0..255
@@ -751,6 +882,14 @@ FUNC light_prepare, 48
 ;  light_compose: fb (palette indices) -> litbuf (argb) with lighting
 ; ---------------------------------------------------------------------
 FUNC light_compose
+    call water_depth
+    mov eax, [anim_tick]
+    mov ecx, eax
+    shr eax, 2
+    mov [wv_ph1], eax
+    imul ecx, 3
+    shr ecx, 4
+    mov [wv_ph2], ecx
     call light_prepare
     cmp dword [sun_on], 0
     je .nolut
@@ -819,7 +958,7 @@ FUNC light_lut, 16
     RETURN
 
 ; the light pass for rows [edi, esi) (runs on worker threads)
-FUNC light_rows, 80
+FUNC light_rows, 96
     mov r13d, edi                   ; y
     mov [rbp-72], esi               ; end
     ; this band's row cache: bands start at different rows; pick a slot
@@ -874,6 +1013,12 @@ FUNC light_rows, 80
 .odd:
     movzx eax, byte [r12]
     mov ebx, [lut_world+rax*4]
+    mov dword [rbp-96], 0           ; not water
+    mov ecx, eax
+    sub ecx, PAL_WATER
+    cmp ecx, 8
+    jb .water
+.wback:
     cmp dword [sun_on], 0
     je .st
     cmp eax, RAMP_BASE
@@ -924,7 +1069,7 @@ FUNC light_rows, 80
     add r11d, 384                   ; bias: 1.5 voxels
     sub edx, r11d
     jle .ao
-    shr edx, 1
+    shl edx, 1                      ; a short soft edge
     CLAMP edx, 0, 256
     mov r10d, edx
 .ao:
@@ -980,11 +1125,14 @@ FUNC light_rows, 80
     ; the palette pre-shaded at 33 levels (built once per frame)
     movzx eax, byte [r12]
     mov [rbp-64], eax
+    cmp dword [rbp-96], 0
+    jne .wshade
     lea ecx, [r10+4]
     shr ecx, 3                      ; level 0..32
     shl ecx, 8
     add ecx, eax
     mov ebx, [lut_shade+rcx*4]
+.glint:
     ; sun glints on open water
     mov eax, [rbp-64]
     sub eax, PAL_WATER
@@ -1002,18 +1150,244 @@ FUNC light_rows, 80
     shr ecx, 3
     imul ecx, 83492791
     xor eax, ecx
+    ; mix, or the glints line up in rows
+    mov ecx, eax
+    shr ecx, 13
+    xor eax, ecx
+    imul eax, eax, 0x5bd1e995
+    mov ecx, eax
+    shr ecx, 15
+    xor eax, ecx
     shr eax, 22
     cmp eax, [glint_n]
     jae .st
     mov ebx, 0xFFFFF4DC
     jmp .st
 .lookup:
+    cmp dword [rbp-96], 0
+    jne .wshade2
     movzx eax, byte [r12]
     lea ecx, [r10+4]
     shr ecx, 3
     shl ecx, 8
     add ecx, eax
     mov ebx, [lut_shade+rcx*4]
+    jmp .st
+.wshade2:
+    call .wmul
+    jmp .st
+.wshade:
+    call .wmul
+    jmp .glint
+    ; water colour [rbp-100] * lerp(sunlight, shade, r10) -> ebx
+.wmul:
+    mov ebx, [rbp-100]
+    xor edi, edi
+%macro WSH 2
+    mov ecx, [sh_mul+%2*4]
+    sub ecx, [lit_mul+%2*4]
+    imul ecx, r10d
+    sar ecx, 8
+    add ecx, [lit_mul+%2*4]
+    mov eax, ebx
+    shr eax, %1
+    and eax, 255
+    imul eax, ecx
+    shr eax, 8
+    cmp eax, 255
+    jbe %%ok
+    mov eax, 255
+%%ok:
+    shl eax, %1
+    or edi, eax
+%endmacro
+    WSH 0, 0
+    WSH 8, 1
+    WSH 16, 2
+    or edi, 0xFF000000
+    mov ebx, edi
+    ret
+
+    ; ---- water: depth colour, moving ripples, shore foam ----
+.water:
+    movzx esi, byte [r12+(hbuf-fb)]
+    mov ecx, [rbp-48]
+    add ecx, esi
+    add ecx, ecx                    ; X + Y (voxels)
+    mov edx, [rbp-52]
+    add edx, r14d                   ; X - Y
+    lea edi, [rcx+rdx]              ; 2X
+    sub ecx, edx                    ; 2Y
+    sar edi, 1                      ; X
+    sar ecx, 1                      ; Y
+    mov [rbp-104], edi
+    mov [rbp-108], ecx
+    ; depth: bilinear between tile centres (tile = 16 voxels)
+    sub edi, 8
+    sub ecx, 8
+    mov eax, edi
+    sar eax, 4
+    mov edx, ecx
+    sar edx, 4
+    CLAMP eax, 0, MAP_W-2
+    CLAMP edx, 0, MAP_W-2
+    shl edx, MAP_SHIFT
+    add edx, eax
+    movzx eax, byte [wdepth+rdx]
+    movzx r8d, byte [wdepth+rdx+1]
+    movzx r9d, byte [wdepth+rdx+MAP_W]
+    movzx r11d, byte [wdepth+rdx+MAP_W+1]
+    and edi, 15
+    and ecx, 15
+    sub r8d, eax
+    imul r8d, edi
+    sar r8d, 4
+    add eax, r8d                    ; top
+    sub r11d, r9d
+    imul r11d, edi
+    sar r11d, 4
+    add r9d, r11d                   ; bottom
+    sub r9d, eax
+    imul r9d, ecx
+    sar r9d, 4
+    add eax, r9d                    ; depth, 32 per tile
+    mov [rbp-112], eax
+    ; ripples: two layers drifting across each other
+    mov edi, [rbp-104]
+    mov ecx, [rbp-108]
+    mov eax, edi
+    add eax, [wv_ph1]
+    and eax, 127
+    mov edx, ecx
+    add edx, [wv_ph1]
+    shr edx, 0
+    and edx, 127
+    shl edx, 7
+    movzx r8d, byte [wavetex+rdx+rax]      ; layer 1
+    mov eax, ecx
+    sub eax, [wv_ph2]
+    and eax, 127
+    mov edx, edi
+    shl edx, 1
+    sub edx, [wv_ph2]
+    and edx, 127
+    shl eax, 7
+    movzx r9d, byte [wavetex+rax+rdx]      ; layer 2
+    lea r11d, [r8+r9]
+    shr r11d, 1                     ; 0..255, 128 calm
+    ; ripple light in four steps (pixel art bands)
+    mov esi, r11d
+    shr esi, 6                      ; 0..3
+    imul esi, 26
+    add esi, 218                    ; 0.85 .. 1.16
+    ; depth mix 0 (shore) .. 256 (four tiles out), in eight bands
+    mov ecx, [rbp-112]
+    shl ecx, 1
+    ; the ripples wobble the band edges into natural contours
+    lea eax, [r8-128]
+    sar eax, 2
+    add ecx, eax
+    CLAMP ecx, 0, 256
+    and ecx, ~31
+    xor edi, edi
+%macro WCOL 2
+    mov eax, [wt_deep+%2*4]
+    sub eax, [wt_shallow+%2*4]
+    imul eax, ecx
+    sar eax, 8
+    add eax, [wt_shallow+%2*4]
+    ; ripple light 0.84 .. 1.16
+    imul eax, esi
+    shr eax, 8
+    ; time of day
+    imul eax, [tint_r+(2-%2)*4]
+    shr eax, 8
+    CLAMP eax, 0, 255
+    shl eax, %1
+    or edi, eax
+%endmacro
+    WCOL 0, 0
+    WCOL 8, 1
+    WCOL 16, 2
+    ; the crests catch the light
+    cmp r11d, 184
+    jb .wnc
+    mov edx, r11d
+    sub edx, 184
+    imul edx, 3                     ; up to ~210
+    CLAMP edx, 0, 150
+%macro WLIFT 1
+    mov eax, edi
+    shr eax, %1
+    and eax, 255
+    mov ecx, 255
+    sub ecx, eax
+    imul ecx, edx
+    shr ecx, 8
+    add eax, ecx
+    mov ecx, 255
+    shl ecx, %1
+    not ecx
+    and edi, ecx
+    shl eax, %1
+    or edi, eax
+%endmacro
+    WLIFT 0
+    WLIFT 8
+    WLIFT 16
+.wnc:
+    ; foam in the shallows, riding the ripple crests
+    mov eax, [rbp-112]
+    cmp eax, 26
+    jge .wnf
+    ; a steady line at the water's edge, then crests lapping in
+    mov edx, 10
+    sub edx, eax
+    imul edx, 26                    ; edge foam
+    CLAMP edx, 0, 230
+    mov ecx, r8d
+    sub ecx, 120
+    jle .wf1
+    mov eax, 26
+    sub eax, [rbp-112]
+    imul ecx, eax
+    shr ecx, 3                      ; lapping foam
+    cmp ecx, edx
+    jbe .wf1
+    mov edx, ecx
+.wf1:
+    CLAMP edx, 0, 230
+    test edx, edx
+    jz .wnf
+    ; mix toward foam (tinted)
+%macro WFOAM 2
+    mov eax, edi
+    shr eax, %1
+    and eax, 255
+    mov ecx, [wt_foam+%2*4]
+    imul ecx, [tint_r+(2-%2)*4]
+    shr ecx, 8
+    sub ecx, eax
+    imul ecx, edx
+    sar ecx, 8
+    add eax, ecx
+    CLAMP eax, 0, 255
+    mov ecx, 255
+    shl ecx, %1
+    not ecx
+    and edi, ecx
+    shl eax, %1
+    or edi, eax
+%endmacro
+    WFOAM 0, 0
+    WFOAM 8, 1
+    WFOAM 16, 2
+.wnf:
+    or edi, 0xFF000000
+    mov [rbp-100], edi
+    mov ebx, edi
+    mov dword [rbp-96], 1
+    jmp .wback
 .st:
     ; info views colour the picture here too (on the worker threads)
     cmp dword [eff_overlay], 0
