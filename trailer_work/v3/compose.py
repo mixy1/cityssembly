@@ -173,8 +173,9 @@ class Reader:
         if take != self.take or f < self.cur or f > self.cur + 40:
             if self.proc:
                 self.proc.kill()
+                self.proc.wait()
             self.proc = subprocess.Popen(
-                ["ffmpeg", "-loglevel", "error", "-ss", f"{f / FPS:.4f}", "-i", os.path.join(CAP, f"{take}.mkv"),
+                ["ffmpeg", "-loglevel", "error", "-threads", "2", "-ss", f"{f / FPS:.4f}", "-i", os.path.join(CAP, f"{take}.mkv"),
                  "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
             self.take = take
             self.cur = f - 1
@@ -602,16 +603,33 @@ def render_cold_open(f, reader):
 
 
 # ------------------------------------------------------------------ workers
+def seg_done(out, frames):
+    """a finished segment from an earlier (interrupted) run"""
+    if not os.path.exists(out) or os.path.getsize(out) == 0:
+        return False
+    r = subprocess.run(["ffprobe", "-v", "error", "-count_packets", "-select_streams", "v:0",
+                        "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", out],
+                       capture_output=True, text=True)
+    return r.stdout.strip() == str(frames)
+
+
 def worker(job):
     a, b, out = job
+    if seg_done(out, b - a):
+        return out
     reader = Reader()
     enc = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
-                            "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "slow",
+                            "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-threads", "4", "-preset", "slow",
                             "-crf", "14", "-pix_fmt", "yuv420p", out], stdin=subprocess.PIPE)
     for f in range(a, b):
         enc.stdin.write(render(f, reader).tobytes())
     enc.stdin.close()
     enc.wait()
+    # close the decoder too: pool workers are reused, and every job's
+    # leftover decoder (~800 MB each) used to pile up
+    if reader.proc:
+        reader.proc.kill()
+        reader.proc.wait()
     return out
 
 
@@ -623,8 +641,16 @@ def main():
             f = int((float(x) - 1 + PRE) * BAR_FRAMES)       # story bars; negative = cold open
             Image.fromarray(render(f, r)).save(os.path.join(HERE, "stills", f"b{float(x):05.2f}.png"))
         return
+    # one render at a time: overlapping runs (a render left going in the
+    # background, then started again) ran the machine out of memory
+    import fcntl
+    lock = open(os.path.join(HERE, ".render.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit("another render is already running (trailer_work/v3/.render.lock)")
     seg = os.path.join(HERE, "seg")
-    os.makedirs(seg, exist_ok=True)
+    os.makedirs(seg, exist_ok=True)     # kept: finished segments are reused
     # cut at shot boundaries so readers stream sequentially
     cuts = sorted({0, BAR_FRAMES, PRE * BAR_FRAMES, TOTAL} |
                   {int((e[0] - 1 + PRE) * BAR_FRAMES) for e in EDIT})
@@ -633,7 +659,9 @@ def main():
         step = 40
         for s in range(a, b, step):
             jobs.append((s, min(b, s + step), os.path.join(seg, f"{s:05d}.mp4")))
-    with Pool(min(20, os.cpu_count())) as p:
+    # each worker holds full frames plus a decoder and an encoder (~2 GB):
+    # keep the pool small or the machine runs out of memory
+    with Pool(int(os.environ.get("TRAILER_JOBS", "4")), maxtasksperchild=1) as p:
         outs = p.map(worker, jobs, chunksize=1)
     with open(os.path.join(seg, "list.txt"), "w") as fl:
         for o in outs:
