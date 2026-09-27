@@ -1617,8 +1617,10 @@ FUNC draw_minimap
     call ui_over
     test eax, eax
     jz .blit
-    cmp dword [lmb_down], 0
-    je .blit
+    ; a quick click (pressed and released within one frame) or a held drag
+    mov eax, [lmb_down]
+    or eax, [click_pending]
+    jz .blit
     mov dword [click_pending], 0
     ; inverse iso
     mov eax, [umx]

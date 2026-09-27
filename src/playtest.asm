@@ -598,3 +598,40 @@ FUNC pt_dock_test, 16
 .out:
     mov dword [panel], PANEL_NONE
     RETURN
+
+; --demo 1 out.bmp M : click the minimap, print the camera
+section .data
+mm_fmt db "MINIMAP click at ui %d,%d: cam %d,%d -> %d,%d", 10, 0
+section .text
+FUNC pt_minimap_test, 16
+    mov dword [welcome], 0
+    mov dword [minimap_on], 1
+    call render_ui
+    mov r12d, [ui_w]
+    sub r12d, 136-20
+    mov r13d, [ui_h]
+    sub r13d, DOCK_BTN+86-20
+    mov eax, r12d
+    imul eax, [ui_scale]
+    mov [mouse_x], eax
+    mov eax, r13d
+    imul eax, [ui_scale]
+    mov [mouse_y], eax
+    mov r14d, [cam_x]
+    mov r15d, [cam_y]
+    mov dword [lmb_down], 0          ; released within the frame
+    mov dword [click_pending], 1
+    call render_ui
+    call world_input
+    lea rdi, [mm_fmt]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, r14d
+    mov r8d, r15d
+    mov r9d, [cam_x]
+    push qword [cam_y]
+    push qword [cam_y]
+    xor eax, eax
+    call printf
+    add rsp, 16
+    RETURN
