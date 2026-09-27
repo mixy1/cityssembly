@@ -1,0 +1,9 @@
+{
+  // cityssembly.mixy.one: the browser build (make web -> site/) served as
+  // static assets by a Worker. Deploy: npx wrangler deploy
+  "name": "cityssembly",
+  "account_id": "c451d85188a8a743d9bfb2456e12fd4e",
+  "compatibility_date": "2026-09-26",
+  "assets": { "directory": "./site" },
+  "routes": [{ "pattern": "cityssembly.mixy.one", "custom_domain": true }]
+}

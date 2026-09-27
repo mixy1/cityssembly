@@ -55,10 +55,10 @@ real binary and runs at about 85% of its speed. Saves go to IndexedDB. Add
 make web        # -> site/  (needs nasm, emcc, pip install capstone pyelftools)
 ```
 
-GitHub Actions builds Windows, Linux and web on every push. With the
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets set, it deploys the
-site to Cloudflare Pages (project `cityssembly`). By hand:
-`npx wrangler pages deploy site --project-name cityssembly`.
+GitHub Actions builds Windows, Linux and web on every push. A Cloudflare
+Worker serves the site from `site/` (see `wrangler.jsonc`). Deploy with
+`make web && npx wrangler deploy`, or let CI do it once the
+`CLOUDFLARE_API_TOKEN` secret is set.
 
 ## Playing
 
