@@ -635,3 +635,519 @@ FUNC pt_minimap_test, 16
     call printf
     add rsp, 16
     RETURN
+
+; --demo 1 out.bmp R : load city.sav, simulate, report traffic
+section .data
+tr_f1 db "TRAFFIC pop=%d flow=%d%% trips ok=%d failed=%d commute=%d links=%d", 10, 0
+tr_f2 db "TRAFFIC roads: street=%d avenue=%d highway=%d  vehicles=%d waiting=%d", 10, 0
+tr_f3 db "TRAFFIC purpose %d: %d vehicles", 10, 0
+tr_f4 db "TRAFFIC hot %d,%d type=%d jam=%d traffic=%d queued=%d mask=%d", 10, 0
+tr_f5 db "TRAFFIC link %d,%d", 10, 0
+tr_cam db "CAM %d %d %d", 10, 0
+tr_f6 db "TRAFFIC buildings with no route: %d  zone bld=%d", 10, 0
+tr_f7 db "TRAFFIC vehicles on the north link: %d  mask(44,18)=%d mask(44,17)=%d", 10, 0
+section .bss
+tr_q    resw MAP_TILES
+tr_pur  resd 16
+tr_best resd 16
+section .text
+FUNC pt_traffic, 32
+    mov dword [sim_speed], 3
+    mov dword [trips_ok], 0
+    mov dword [trips_failed], 0
+    mov ebx, 700
+.ff:
+    call sim_tick
+    call agents_tick
+    inc dword [anim_tick]
+    dec ebx
+    jnz .ff
+    ; queues right now
+    lea rdi, [tr_q]
+    xor eax, eax
+    mov ecx, MAP_TILES/2
+    rep stosd
+    lea rdi, [tr_pur]
+    mov ecx, 16
+    rep stosd
+    xor ebx, ebx
+    xor r12d, r12d                  ; active
+    xor r13d, r13d                  ; waiting
+.v:
+    mov eax, ebx
+    shl eax, 7
+    lea rdi, [vehicles+rax]
+    cmp byte [rdi+V_TYPE], 255
+    je .vn
+    inc r12d
+    movzx eax, byte [rdi+V_PURP]
+    and eax, 15
+    inc dword [tr_pur+rax*4]
+    cmp word [rdi+V_WAIT], 30
+    jb .vn
+    inc r13d
+    movzx eax, word [rdi+V_TY]
+    shl eax, MAP_SHIFT
+    movzx ecx, word [rdi+V_TX]
+    add eax, ecx
+    inc word [tr_q+rax*2]
+.vn:
+    inc ebx
+    cmp ebx, MAX_VEH
+    jl .v
+    mov [rbp-48], r12d
+    mov [rbp-52], r13d
+    ; anyone on column 44 north of the town?
+    xor ebx, ebx
+    xor r14d, r14d
+.nk:
+    mov eax, ebx
+    shl eax, 7
+    lea rdi, [vehicles+rax]
+    cmp byte [rdi+V_TYPE], 255
+    je .nkn
+    cmp word [rdi+V_TX], 44
+    jne .nkn
+    cmp word [rdi+V_TY], 48
+    jae .nkn
+    inc r14d
+.nkn:
+    inc ebx
+    cmp ebx, MAX_VEH
+    jl .nk
+    mov edi, 44
+    mov esi, 18
+    call tile_at
+    movzx edx, byte [rax+T_SUB]
+    push rdx
+    mov edi, 44
+    mov esi, 17
+    call tile_at
+    movzx ecx, byte [rax+T_SUB]
+    pop rdx
+    lea rdi, [tr_f7]
+    mov esi, r14d
+    xor eax, eax
+    call printf
+    lea rdi, [tr_f1]
+    mov esi, [population]
+    mov edx, [flow_pct]
+    mov ecx, [trips_ok]
+    mov r8d, [trips_failed]
+    mov r9d, [avg_commute]
+    push qword [n_links]
+    push qword [n_links]
+    xor eax, eax
+    call printf
+    add rsp, 16
+    ; road counts
+    xor ebx, ebx
+    xor r12d, r12d
+    xor r13d, r13d
+    xor r14d, r14d
+    xor r15d, r15d                  ; no-route buildings
+    mov dword [rbp-56], 0
+.r:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    lea rdi, [tiles+rax]
+    cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
+    jne .rr
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .rn
+    inc dword [rbp-56]
+    cmp byte [rdi+T_PROBLEM], PR_ROUTE
+    jne .rn
+    inc r15d
+    jmp .rn
+.rr:
+    cmp byte [rdi+T_OBJ], OBJ_ROAD
+    jne .rn
+    movzx eax, byte [rdi+T_ROADTYPE]
+    cmp eax, 1
+    je .ra
+    ja .rh
+    inc r12d
+    jmp .rn
+.ra: inc r13d
+    jmp .rn
+.rh: inc r14d
+.rn:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .r
+    lea rdi, [tr_f2]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, r14d
+    mov r8d, [rbp-48]
+    mov r9d, [rbp-52]
+    xor eax, eax
+    call printf
+    lea rdi, [tr_f6]
+    mov esi, r15d
+    mov edx, [rbp-56]
+    xor eax, eax
+    call printf
+    xor ebx, ebx
+.p:
+    cmp dword [tr_pur+rbx*4], 0
+    je .pn
+    lea rdi, [tr_f3]
+    mov esi, ebx
+    mov edx, [tr_pur+rbx*4]
+    xor eax, eax
+    call printf
+.pn:
+    inc ebx
+    cmp ebx, 11
+    jl .p
+    xor ebx, ebx
+.lk:
+    cmp ebx, [n_links]
+    jge .hot
+    movzx eax, word [links+rbx*2]
+    mov esi, eax
+    and esi, MAP_W-1
+    mov edx, eax
+    shr edx, MAP_SHIFT
+    lea rdi, [tr_f5]
+    xor eax, eax
+    call printf
+    inc ebx
+    jmp .lk
+.hot:
+    call pt_ascii
+    ; 14 worst tiles by queued cars, then jam
+    mov dword [rbp-60], 0
+.pick:
+    cmp dword [rbp-60], 14
+    jge .out
+    mov r12d, -1                    ; best score
+    mov r13d, -1                    ; best tile
+    xor ebx, ebx
+.t:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .tn
+    movzx ecx, word [tr_q+rbx*2]
+    shl ecx, 8
+    movzx edx, byte [tiles+rax+T_JAM]
+    add ecx, edx
+    test ecx, ecx
+    jz .tn
+    cmp ecx, r12d
+    jle .tn
+    mov r12d, ecx
+    mov r13d, ebx
+.tn:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .t
+    cmp r13d, 0
+    jl .out
+    mov eax, [rbp-60]
+    mov [tr_best+rax*4], r13d
+    mov eax, r13d
+    shl eax, TILE_SHIFT
+    lea rdi, [tr_f4]
+    mov esi, r13d
+    and esi, MAP_W-1
+    mov edx, r13d
+    shr edx, MAP_SHIFT
+    movzx ecx, byte [tiles+rax+T_ROADTYPE]
+    movzx r8d, byte [tiles+rax+T_JAM]
+    movzx r9d, byte [tiles+rax+T_TRAFFIC]
+    movzx r10d, byte [tiles+rax+T_SUB]
+    movzx r11d, word [tr_q+r13*2]
+    mov byte [tiles+rax+T_JAM], 0   ; exclude from the next pick
+    mov word [tr_q+r13*2], 0
+    push r10
+    push r11
+    xor eax, eax
+    call printf
+    add rsp, 16
+    inc dword [rbp-60]
+    jmp .pick
+.out:
+    ; show the worst spot in the traffic view
+    mov dword [overlay_mode], OV_TRAFFIC
+    mov edi, 1
+    call video_set_zoom
+    mov edi, 30
+    mov esi, 62
+    call camera_center_tile
+    mov dword [mouse_x], 1275
+    mov dword [mouse_y], 400
+    lea rdi, [tr_cam]
+    mov esi, [cam_x]
+    mov edx, [cam_y]
+    mov ecx, [zoom]
+    xor eax, eax
+    call printf
+    RETURN
+
+; ascii map of x 8..71, y 36..91 (after pt_traffic)
+section .data
+am_row db "%2d ", 0
+am_ch  db "%c", 0
+am_nl  db 10, 0
+am_hdr db "   x=8 -> 71", 10, 0
+section .text
+FUNC pt_ascii
+    lea rdi, [am_hdr]
+    xor eax, eax
+    call printf
+    mov r13d, 36
+.y:
+    lea rdi, [am_row]
+    mov esi, r13d
+    xor eax, eax
+    call printf
+    mov r12d, 8
+.x:
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    mov rbx, rax
+    movzx eax, byte [rbx+T_OBJ]
+    mov esi, '.'
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    jne .a
+    mov esi, '~'
+.a: cmp eax, OBJ_ROAD
+    jne .b
+    movzx ecx, byte [rbx+T_ROADTYPE]
+    mov esi, '+'
+    cmp ecx, 1
+    jne .a2
+    mov esi, '='
+.a2:
+    cmp ecx, 2
+    jne .a3
+    mov esi, 'H'
+.a3:
+    ; queued cars show as digits
+    mov eax, r13d
+    shl eax, MAP_SHIFT
+    add eax, r12d
+    movzx ecx, word [tr_q+rax*2]
+    test ecx, ecx
+    jz .p
+    CLAMP ecx, 1, 9
+    lea esi, [rcx+'0']
+    jmp .p
+.b: cmp eax, OBJ_ZONEBLD
+    jne .c
+    movzx ecx, byte [rbx+T_ZONE]
+    movzx esi, byte [am_zone+rcx]
+    jmp .p
+.c: cmp eax, OBJ_SERVICE
+    jne .d
+    mov esi, 'S'
+    jmp .p
+.d: cmp eax, OBJ_POWER
+    jne .e
+    mov esi, 'p'
+    jmp .p
+.e: cmp eax, OBJ_TREE
+    jne .p
+    mov esi, 't'
+.p:
+    lea rdi, [am_ch]
+    xor eax, eax
+    call printf
+    inc r12d
+    cmp r12d, 72
+    jl .x
+    lea rdi, [am_nl]
+    xor eax, eax
+    call printf
+    inc r13d
+    cmp r13d, 92
+    jl .y
+    RETURN
+section .data
+am_zone db ".rciorc"
+section .text
+
+section .data
+po_fmt db "PLOTS row %d: %d %d %d %d %d", 10, 0
+sv_fmt db "SVC kind %d x%d", 10, 0
+section .text
+FUNC pt_plots
+    xor ebx, ebx
+.r:
+    imul eax, ebx, PLOTS
+    lea rdi, [po_fmt]
+    mov esi, ebx
+    movzx edx, byte [plot_owned+rax]
+    movzx ecx, byte [plot_owned+rax+1]
+    movzx r8d, byte [plot_owned+rax+2]
+    movzx r9d, byte [plot_owned+rax+3]
+    movzx eax, byte [plot_owned+rax+4]
+    push rax
+    push rax
+    xor eax, eax
+    call printf
+    add rsp, 16
+    inc ebx
+    cmp ebx, PLOTS
+    jl .r
+    xor ebx, ebx
+.s:
+    cmp dword [svc_count+rbx*4], 0
+    je .sn
+    lea rdi, [sv_fmt]
+    mov esi, ebx
+    mov edx, [svc_count+rbx*4]
+    xor eax, eax
+    call printf
+.sn:
+    inc ebx
+    cmp ebx, BK_COUNT
+    jl .s
+    RETURN
+
+; experiments on a loaded city before simulating
+section .data
+up_fmt  db "UPGRADE %s %d: %d..%d (%d tiles)", 10, 0
+up_row  db "row", 0
+up_col  db "col", 0
+up_tot  db "UPGRADE total %d tiles, about $%d", 10, 0
+section .bss
+up_count resd 1
+plan_mark resd 1                    ; 1: only mark the runs, don't build
+plan_map resb MAP_TILES
+section .text
+; upgrade straight street runs of at least edi tiles to avenues
+FUNC pt_upgrade_runs, 16
+    mov [rbp-48], edi
+    mov dword [up_count], 0
+    xor r15d, r15d                  ; 0 rows, 1 cols
+.dir:
+    xor r13d, r13d                  ; line
+.line:
+    xor r12d, r12d                  ; position
+.pos:
+    cmp r12d, MAP_W
+    jge .ln
+    call .tile
+    test eax, eax
+    jz .pn
+    ; run start
+    mov r14d, r12d
+.run:
+    inc r12d
+    cmp r12d, MAP_W
+    jge .rend
+    call .tile
+    test eax, eax
+    jnz .run
+.rend:
+    mov eax, r12d
+    sub eax, r14d
+    cmp eax, [rbp-48]
+    jl .pos
+    ; upgrade r14..r12-1
+    mov [rbp-52], eax
+    mov ebx, r14d
+.up:
+    cmp ebx, r12d
+    jge .upd
+    mov edi, ebx
+    mov esi, r13d
+    test r15d, r15d
+    jz .u1
+    mov edi, r13d
+    mov esi, ebx
+.u1:
+    call tile_at
+    cmp dword [plan_mark], 0
+    je .ubuild
+    sub rax, tiles
+    shr eax, TILE_SHIFT
+    mov byte [plan_map+rax], 1
+    inc dword [up_count]
+    jmp .u2
+.ubuild:
+    cmp byte [rax+T_ROADTYPE], RT_AVENUE
+    je .u2
+    mov byte [rax+T_ROADTYPE], RT_AVENUE
+    inc dword [up_count]
+.u2:
+    inc ebx
+    jmp .up
+.upd:
+    lea rdi, [up_fmt]
+    lea rsi, [up_row]
+    test r15d, r15d
+    jz .u3
+    lea rsi, [up_col]
+.u3:
+    mov edx, r13d
+    mov ecx, r14d
+    lea r8d, [r12-1]
+    mov r9d, [rbp-52]
+    xor eax, eax
+    call printf
+    jmp .pos
+.pn:
+    inc r12d
+    jmp .pos
+.ln:
+    inc r13d
+    cmp r13d, MAP_W
+    jl .line
+    inc r15d
+    cmp r15d, 2
+    jl .dir
+    call roads_update_all
+    lea rdi, [up_tot]
+    mov esi, [up_count]
+    imul edx, esi, 25
+    xor eax, eax
+    call printf
+    RETURN
+.tile:                              ; street (not highway) at the scan point?
+    mov edi, r12d
+    mov esi, r13d
+    test r15d, r15d
+    jz .t1
+    mov edi, r13d
+    mov esi, r12d
+.t1:
+    call tile_at
+    xor ecx, ecx
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .t2
+    test byte [rax+T_FLAGS], F_HIGHWAY
+    jnz .t2
+    cmp byte [rax+T_ROADTYPE], RT_HIGHWAY
+    je .t2
+    mov ecx, 1
+.t2:
+    mov eax, ecx
+    ret
+
+; avenue from the end of the north highway down into the town
+FUNC pt_north_link
+    mov ebx, 18
+.l:
+    mov edi, 44
+    mov esi, ebx
+    call tile_at
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    je .n
+    mov byte [rax+T_OBJ], OBJ_ROAD
+    mov byte [rax+T_ROADTYPE], RT_AVENUE
+    mov byte [rax+T_ZONE], 0
+    mov byte [rax+T_FLAGS], 0
+.n:
+    inc ebx
+    cmp ebx, 48
+    jl .l
+    call roads_update_all
+    mov dword [net_dirty], 1
+    RETURN

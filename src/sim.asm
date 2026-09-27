@@ -76,6 +76,7 @@ wire_next       resd MAX_WIRES*2
 wire_to         resd MAX_WIRES*2
 alignb 16
 comp_map        resw MAP_TILES
+road_comp       resw MAP_TILES      ; which region-linked road network
 cons_comp       resw MAP_TILES
 bfs_queue       resw MAP_TILES+16
 MAX_COMPS equ 4096
@@ -2285,30 +2286,47 @@ is_border_highway:
     ret
 
 ; road connectivity to the outside (MISC_NET)
-FUNC road_connectivity
+FUNC road_connectivity, 16
+    ; which roads reach the region, and through which highway network
+    lea rdi, [road_comp]
+    xor eax, eax
+    mov ecx, MAP_TILES/2
+    rep stosd
     xor r15d, r15d
-    xor r13d, r13d
 .clr:
     mov eax, r15d
     shl eax, TILE_SHIFT
     and byte [tiles+rax+T_MISC], ~MISC_NET
-    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
-    jne .cn
-    mov ecx, r15d
-    call is_border_highway
-    test ecx, ecx
-    jz .cn
-    or byte [tiles+rax+T_MISC], MISC_NET
-    mov [bfs_queue+r13*2], r15w
-    inc r13d
-.cn:
     inc r15d
     cmp r15d, MAP_TILES
     jl .clr
+    mov dword [rbp-48], 0           ; component id
+    xor r15d, r15d
+.seed:
+    cmp r15d, MAP_TILES
+    jge .out
+    cmp word [road_comp+r15*2], 0
+    jne .sn
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .sn
+    mov ecx, r15d
+    call is_border_highway
+    test ecx, ecx
+    jz .sn
+    inc dword [rbp-48]
+    mov ecx, [rbp-48]
+    mov [road_comp+r15*2], cx
+    mov eax, r15d
+    shl eax, TILE_SHIFT
+    or byte [tiles+rax+T_MISC], MISC_NET
+    mov [bfs_queue], r15w
     xor r12d, r12d
+    mov r13d, 1
 .bfs:
     cmp r12d, r13d
-    jge .out
+    jge .sn
     movzx r14d, word [bfs_queue+r12*2]
     inc r12d
     xor ebx, ebx
@@ -2329,6 +2347,8 @@ FUNC road_connectivity
     or byte [rax+T_MISC], MISC_NET
     sub rax, tiles
     shr eax, TILE_SHIFT
+    mov ecx, [rbp-48]
+    mov [road_comp+rax*2], cx
     mov [bfs_queue+r13*2], ax
     inc r13d
 .nn:
@@ -2336,6 +2356,9 @@ FUNC road_connectivity
     cmp ebx, 4
     jl .nb
     jmp .bfs
+.sn:
+    inc r15d
+    jmp .seed
 .out:
     RETURN
 

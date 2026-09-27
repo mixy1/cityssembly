@@ -378,20 +378,98 @@ FUNC access_road, 16
 
 ; nearest link to the region for a trip touching tile edi
 ; (edi road tile index) -> eax border highway tile
-FUNC outside_tile
+FUNC outside_tile, 16
+    ; trips to the region use any highway exit on the same road network
+    ; that isn't much farther than the nearest (traffic spreads out)
     mov r12d, edi
     and r12d, MAP_W-1
     mov r13d, edi
     shr r13d, MAP_SHIFT
-    mov r14d, 0x7FFFFFFF
+    movzx eax, word [road_comp+rdi*2]
+    mov [rbp-48], eax               ; origin network (0: any)
     mov eax, [hwy_row]
     shl eax, MAP_SHIFT
-    mov r15d, eax                   ; default: the west highway
+    mov r15d, eax                   ; fallback: the west highway
+    ; pass 1: nearest distance
+    mov r14d, 0x7FFFFFFF
     xor ebx, ebx
 .l:
     cmp ebx, [n_links]
+    jge .p2
+    call .dist
+    cmp eax, -1
+    je .n
+    cmp eax, r14d
+    jge .n
+    mov r14d, eax
+    movzx r15d, word [links+rbx*2]
+.n:
+    inc ebx
+    jmp .l
+.p2:
+    cmp r14d, 0x7FFFFFFF
+    je .out
+    ; pass 2: pick one of the exits within reach at random
+    mov eax, r14d
+    shr eax, 1
+    lea eax, [r14+rax+16]
+    mov [rbp-52], eax               ; limit
+    xor ebx, ebx
+    xor ecx, ecx
+.c:
+    cmp ebx, [n_links]
+    jge .pick
+    push rcx
+    push rcx
+    call .dist
+    pop rcx
+    pop rcx
+    cmp eax, -1
+    je .cn
+    cmp eax, [rbp-52]
+    jg .cn
+    inc ecx
+.cn:
+    inc ebx
+    jmp .c
+.pick:
+    cmp ecx, 1
+    jle .out
+    mov [rbp-56], ecx
+    call rand
+    xor edx, edx
+    div dword [rbp-56]
+    mov [rbp-56], edx               ; the k-th candidate
+    xor ebx, ebx
+.f:
+    cmp ebx, [n_links]
     jge .out
+    call .dist
+    cmp eax, -1
+    je .fn
+    cmp eax, [rbp-52]
+    jg .fn
+    cmp dword [rbp-56], 0
+    je .take
+    dec dword [rbp-56]
+.fn:
+    inc ebx
+    jmp .f
+.take:
+    movzx r15d, word [links+rbx*2]
+.out:
+    mov eax, r15d
+    RETURN
+.dist:                              ; link ebx -> eax distance, -1 unreachable
     movzx eax, word [links+rbx*2]
+    cmp dword [rbp-48], 0
+    je .d0
+    movzx ecx, word [road_comp+rax*2]
+    cmp ecx, [rbp-48]
+    je .d0
+    mov eax, -1
+    ret
+.d0:
     mov ecx, eax
     and ecx, MAP_W-1
     sub ecx, r12d
@@ -399,24 +477,14 @@ FUNC outside_tile
     sar edx, 31
     xor ecx, edx
     sub ecx, edx
+    shr eax, MAP_SHIFT
+    sub eax, r13d
     mov edx, eax
-    shr edx, MAP_SHIFT
-    sub edx, r13d
-    mov r8d, edx
-    sar r8d, 31
-    xor edx, r8d
-    sub edx, r8d
-    add ecx, edx
-    cmp ecx, r14d
-    jge .n
-    mov r14d, ecx
-    mov r15d, eax
-.n:
-    inc ebx
-    jmp .l
-.out:
-    mov eax, r15d
-    RETURN
+    sar edx, 31
+    xor eax, edx
+    sub eax, edx
+    add eax, ecx
+    ret
 
 ; collect the region links (border highways) - daily
 FUNC collect_links
@@ -749,6 +817,11 @@ FUNC vehicles_update, 32
     jne .cap
     add edx, 3
 .cap:
+    ; a car stuck for a while squeezes in (breaks gridlock loops)
+    cmp word [r15+V_WAIT], 90
+    jb .cap2
+    add edx, 2
+.cap2:
     cmp ecx, edx
     jb .enter
     ; blocked: queue, and after a while look for a way around

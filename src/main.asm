@@ -167,6 +167,14 @@ FUNC main
     cmp dword [demo_view], 'T'
     je .sbx0
     cmp dword [demo_view], 'L'
+    je .sbx0
+    cmp dword [demo_view], 'R'
+    je .sbx0
+    cmp dword [demo_view], 'U'
+    je .sbx0
+    cmp dword [demo_view], 'N'
+    je .sbx0
+    cmp dword [demo_view], 'G'
     jne .sbx
 .sbx0:
     xor eax, eax
@@ -201,6 +209,50 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    mov eax, [demo_view]
+    cmp eax, 'R'
+    je .ex
+    cmp eax, 'U'
+    je .ex
+    cmp eax, 'N'
+    je .ex
+    cmp eax, 'G'
+    jne .ld0
+.ex:
+    call load_city
+    mov dword [welcome], 0
+    call pt_plots
+    mov eax, [demo_view]
+    cmp eax, 'R'
+    jne .exu
+    ; paint the plan: avenue runs cyan, north link pink
+    mov dword [plan_mark], 1
+    mov edi, 12
+    call pt_upgrade_runs
+    mov ecx, 18
+.pl:
+    mov eax, ecx
+    shl eax, MAP_SHIFT
+    add eax, 44
+    mov byte [plan_map+rax], 2
+    inc ecx
+    cmp ecx, 48
+    jl .pl
+    jmp .exr
+.exu:
+    mov edi, 12
+    call pt_upgrade_runs
+    cmp dword [demo_view], 'N'
+    jne .exg
+    call pt_north_link
+.exg:
+    cmp dword [demo_view], 'G'
+    jne .exr
+    or dword [policies], P_RECYCLE
+.exr:
+    call pt_traffic
+    jmp .nodemo
+.ld0:
     cmp dword [demo_view], 'M'
     jne .ld1
     call pt_minimap_test

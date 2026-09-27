@@ -365,6 +365,17 @@ FUNC render_world, 32
     mov rdi, rbx
     call overlay_tint
     mov [blit_tint], eax
+    ; test modes can paint a plan over the map
+    mov eax, r13d
+    shl eax, MAP_SHIFT
+    add eax, r12d
+    movzx eax, byte [plan_map+rax]
+    test eax, eax
+    jz .notint
+    mov dword [blit_tint], TINT_CYAN
+    cmp eax, 1
+    je .notint
+    mov dword [blit_tint], TINT_PINK
 .notint:
     lea r14d, [r12+r13]
     shl r14d, 4                     ; depth base
