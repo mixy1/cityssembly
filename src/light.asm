@@ -29,9 +29,14 @@ lsmap       resw LS_W*LS_W      ; shadow height per cell (8.8 voxels)
 alignb 16
 laomap      resb LS_W*LS_W      ; contact shade per cell (0..240)
 alignb 16
+; the two above, rotated 45 degrees so a row of pixels reads them in
+; order: [(cx + cy) * 2048 + (cx - cy + 1023)] = shadow | contact << 16
+luvmap      resd 2*LS_W*2*LS_W
+alignb 16
 cloudtex    resb CLOUD_W*CLOUD_W
 alignb 16
 litbuf      resd MAX_FB_W*MAX_FB_H
+lit_dst     resq 1              ; where the lit frame goes (litbuf or the texture)
 hbuf        resb MAX_FB_W*MAX_FB_H
 alignb 16
 bl_a        resd (MAX_FB_W/4)*(MAX_FB_H/4)*3 + 16    ; bloom cells (b, g, r)
@@ -46,6 +51,9 @@ sun_f       resd 1              ; x shift per row step (8.8 cells, signed)
 sun_str     resd 1              ; 0..256
 sh_mul      resd 3              ; shadow colour multipliers (b, g, r) 0..256
 lit_mul     resd 3              ; sunlight multipliers (b, g, r), 256 = 1
+alignb 16
+lut_shade   resd 33*256         ; lut_world shaded from full sun (0) to full shade (32)
+lcache      resd MAX_FB_W/2*(TH_MAX+1)+16   ; per band: shade of each pixel pair on the row above
 glint_n     resd 1              ; water glints per 1024 pixels
 cloud_str   resd 1
 cloud_ox    resd 1
@@ -670,7 +678,7 @@ FUNC light_prepare, 48
     mov eax, [lb_y1]
     dec eax
     cmp r13d, eax
-    jge .out
+    jge .rot
     mov ebx, [lb_x0]
     inc ebx
 .axx:
@@ -708,6 +716,34 @@ FUNC light_prepare, 48
 .ayn:
     inc r13d
     jmp .ay
+.rot:
+    ; ---- rotate into the pixel-friendly layout ----
+    mov r13d, [lb_y0]
+.ry:
+    cmp r13d, [lb_y1]
+    jg .out
+    mov ebx, [lb_x0]
+.rx:
+    cmp ebx, [lb_x1]
+    jg .ryn
+    mov ecx, r13d
+    shl ecx, LS_SHIFT
+    add ecx, ebx
+    movzx eax, word [lsmap+rcx*2]
+    movzx edx, byte [laomap+rcx]
+    shl edx, 16
+    or eax, edx
+    lea edx, [rbx+r13]
+    shl edx, 11
+    add edx, ebx
+    sub edx, r13d
+    add edx, LS_W-1
+    mov [luvmap+rdx*4], eax
+    inc ebx
+    jmp .rx
+.ryn:
+    inc r13d
+    jmp .ry
 .out:
     RETURN
 
@@ -716,21 +752,92 @@ FUNC light_prepare, 48
 ; ---------------------------------------------------------------------
 FUNC light_compose
     call light_prepare
+    cmp dword [sun_on], 0
+    je .nolut
+    call light_lut
+.nolut:
     lea rdi, [light_rows]
     mov esi, [fb_h]
-    mov edx, 1
+    mov edx, 2                      ; bands start on even rows (2x2 blocks)
     call par_rows
     call light_bloom
     RETURN
 
+; lut_shade[k][i] = lut_world[i] * lerp(sunlight, shade, k/32)
+FUNC light_lut, 16
+    xor r12d, r12d                  ; level
+.k:
+    ; per-channel multipliers for this level
+    xor ebx, ebx
+.m:
+    mov eax, [sh_mul+rbx*4]
+    sub eax, [lit_mul+rbx*4]
+    imul eax, r12d
+    sar eax, 5
+    add eax, [lit_mul+rbx*4]
+    mov [rbp-48+rbx*4-8], eax       ; rbp-56, -52, -48
+    inc ebx
+    cmp ebx, 3
+    jl .m
+    xor r13d, r13d                  ; palette index
+.i:
+    mov ebx, [lut_world+r13*4]
+    cmp r13d, RAMP_BASE
+    jb .put
+    cmp r13d, PAL_GLOW
+    jae .put
+    xor edi, edi
+%macro LCH 2
+    mov eax, ebx
+    shr eax, %1
+    and eax, 255
+    imul eax, [rbp-56+%2*4]
+    shr eax, 8
+    cmp eax, 255
+    jbe %%ok
+    mov eax, 255
+%%ok:
+    shl eax, %1
+    or edi, eax
+%endmacro
+    LCH 0, 0
+    LCH 8, 1
+    LCH 16, 2
+    or edi, 0xFF000000
+    mov ebx, edi
+.put:
+    mov eax, r12d
+    shl eax, 8
+    add eax, r13d
+    mov [lut_shade+rax*4], ebx
+    inc r13d
+    cmp r13d, 256
+    jl .i
+    inc r12d
+    cmp r12d, 33
+    jl .k
+    RETURN
+
 ; the light pass for rows [edi, esi) (runs on worker threads)
-FUNC light_rows, 48
+FUNC light_rows, 80
     mov r13d, edi                   ; y
     mov [rbp-72], esi               ; end
+    ; this band's row cache: bands start at different rows; pick a slot
+    ; by the band's start (y0 * workers / rows), clamped
+    mov eax, edi
+    xor edx, edx
+    mov ecx, [th_band]
+    CLAMP ecx, 1, 100000
+    div ecx
+    CLAMP eax, 0, TH_MAX            ; workers + the calling thread
+    imul eax, eax, MAX_FB_W/2*4
+    lea rcx, [lcache+rax]
+    mov [rbp-88], rcx
     mov eax, edi
     imul eax, [fb_w]
     lea r12, [fb+rax]
-    lea r15, [litbuf+rax*4]
+    mov r15, [lit_dst]
+    lea r15, [r15+rax*4]
 .y:
     cmp r13d, [rbp-72]
     jge .out
@@ -744,6 +851,27 @@ FUNC light_rows, 48
 .x:
     cmp r14d, [fb_w]
     jge .yn
+    test r14d, 1
+    jnz .odd
+    mov dword [rbp-80], -1          ; nothing to share yet
+    ; odd rows: the pair above may share its shade too
+    test r13d, 1
+    jnz .above
+    mov eax, r14d
+    shr eax, 1
+    mov rcx, [rbp-88]
+    mov dword [rcx+rax*4], 0xFF     ; until this pair works one out
+    jmp .odd
+.above:
+    mov eax, r14d
+    shr eax, 1
+    mov rcx, [rbp-88]
+    mov eax, [rcx+rax*4]
+    movzx ecx, al
+    mov [rbp-80], ecx               ; Z above
+    shr eax, 8
+    mov [rbp-76], eax               ; its shade
+.odd:
     movzx eax, byte [r12]
     mov ebx, [lut_world+rax*4]
     cmp dword [sun_on], 0
@@ -752,8 +880,17 @@ FUNC light_rows, 48
     jb .st
     cmp eax, PAL_GLOW
     jae .st
-    ; world position of the pixel (in half voxels)
     movzx esi, byte [r12+(hbuf-fb)]         ; Z
+    ; pixels of a 2x2 block at the same height share one shade (they're
+    ; at most a pixel apart in the world); the block's first pixel works
+    ; it out
+    cmp esi, [rbp-80]
+    jne .full
+    mov r10d, [rbp-76]
+    jmp .lookup
+.full:
+    mov [rbp-80], esi
+    ; world position of the pixel (in half voxels)
     mov ecx, [rbp-48]
     add ecx, esi
     add ecx, ecx                    ; X + Y
@@ -774,9 +911,14 @@ FUNC light_rows, 48
     jl .cloud
     cmp ecx, [lb_y1]
     jge .cloud
-    shl ecx, LS_SHIFT
-    add ecx, edi
-    movzx edx, word [lsmap+rcx*2]
+    lea eax, [rdi+rcx]
+    shl eax, 11
+    add eax, edi
+    sub eax, ecx
+    add eax, LS_W-1
+    mov eax, [luvmap+rax*4]
+    mov [rbp-92], eax
+    movzx edx, ax
     mov r11d, esi
     shl r11d, 8
     add r11d, 384                   ; bias: 1.5 voxels
@@ -789,7 +931,7 @@ FUNC light_rows, 48
     ; contact shade (ground only; walls keep their own shading)
     cmp esi, 3
     ja .cloud
-    movzx edx, byte [laomap+rcx]
+    movzx edx, byte [rbp-90]
     cmp edx, r10d
     jbe .cloud
     mov r10d, edx
@@ -823,33 +965,26 @@ FUNC light_rows, 48
     jbe .apply
     mov r10d, edx
 .apply:
-    ; channel = c * lerp(lit, shade, s) / 256
-%macro LSHADE 2
-    mov ecx, [sh_mul+%2*4]
-    sub ecx, [lit_mul+%2*4]
-    imul ecx, r10d
-    sar ecx, 8
-    add ecx, [lit_mul+%2*4]
-    mov eax, ebx
-    shr eax, %1
-    and eax, 255
-    imul eax, ecx
-    shr eax, 8
-    cmp eax, 255
-    jbe %%ok
-    mov eax, 255
-%%ok:
-    shl eax, %1
-    or edi, eax
-%endmacro
+    mov [rbp-76], r10d
+    ; remember it for the row below
+    test r13d, 1
+    jnz .nc
+    mov eax, r14d
+    shr eax, 1
+    mov rcx, [rbp-88]
+    mov edx, r10d
+    shl edx, 8
+    or edx, [rbp-80]
+    mov [rcx+rax*4], edx
+.nc:
+    ; the palette pre-shaded at 33 levels (built once per frame)
     movzx eax, byte [r12]
     mov [rbp-64], eax
-    xor edi, edi
-    LSHADE 0, 0
-    LSHADE 8, 1
-    LSHADE 16, 2
-    or edi, 0xFF000000
-    mov ebx, edi
+    lea ecx, [r10+4]
+    shr ecx, 3                      ; level 0..32
+    shl ecx, 8
+    add ecx, eax
+    mov ebx, [lut_shade+rcx*4]
     ; sun glints on open water
     mov eax, [rbp-64]
     sub eax, PAL_WATER
@@ -871,7 +1006,21 @@ FUNC light_rows, 48
     cmp eax, [glint_n]
     jae .st
     mov ebx, 0xFFFFF4DC
+    jmp .st
+.lookup:
+    movzx eax, byte [r12]
+    lea ecx, [r10+4]
+    shr ecx, 3
+    shl ecx, 8
+    add ecx, eax
+    mov ebx, [lut_shade+rcx*4]
 .st:
+    ; info views colour the picture here too (on the worker threads)
+    cmp dword [eff_overlay], 0
+    je .w
+    movzx ecx, byte [r12+(tintbuf-fb)]
+    call tint_px
+.w:
     mov [r15], ebx
     inc r12
     add r15, 4
@@ -1104,7 +1253,8 @@ FUNC bloom_gather_rows, 16
     mov eax, edi
     imul eax, [fb_w]
     lea r12, [fb+rax]
-    lea r15, [litbuf+rax*4]
+    mov r15, [lit_dst]
+    lea r15, [r15+rax*4]
 .gy:
     cmp r13d, [rbp-52]
     jge .out
@@ -1145,12 +1295,13 @@ FUNC bloom_gather_rows, 16
     RETURN
 
 ; bloom: add the blurred glow to rows [edi, esi)
-FUNC bloom_add_rows, 48
+FUNC bloom_add_rows, 64
     mov r13d, edi
     mov [rbp-60], esi
     mov eax, edi
     imul eax, [fb_w]
-    lea r15, [litbuf+rax*4]
+    mov r15, [lit_dst]
+    lea r15, [r15+rax*4]
 .ay:
     cmp r13d, [rbp-60]
     jge .out
@@ -1174,6 +1325,10 @@ FUNC bloom_add_rows, 48
 .ax:
     cmp r14d, [fb_w]
     jge .ayn
+    ; the glow is worked out once per pixel pair
+    test r14d, 1
+    jnz .apply
+    mov dword [rbp-76], 0           ; nothing to add
     mov eax, r14d
     shl eax, 6
     sub eax, 96
@@ -1195,9 +1350,7 @@ FUNC bloom_add_rows, 48
     mov edx, [bl_w]
     lea rdx, [rdx+rdx*2]
     lea rdi, [rsi+rdx*4]            ; c01
-    mov ebx, [r15]
-    xor r9d, r9d                    ; result
-%macro BLCH 2
+%macro BLCH 1
     mov eax, [rsi+%1*4+12]
     sub eax, [rsi+%1*4]
     imul eax, r12d
@@ -1214,10 +1367,23 @@ FUNC bloom_add_rows, 48
     add eax, r10d
     imul eax, [bl_gain]
     shr eax, 12
-    mov r10d, ebx
-    shr r10d, %2
-    and r10d, 255
-    add eax, r10d
+    CLAMP eax, 0, 255
+    mov [rbp-64-%1*4], eax
+    or [rbp-76], eax
+%endmacro
+    BLCH 0
+    BLCH 1
+    BLCH 2
+.apply:
+    cmp dword [rbp-76], 0
+    je .askip
+    mov ebx, [r15]
+    xor r9d, r9d
+%macro BLADD 2
+    mov eax, ebx
+    shr eax, %2
+    and eax, 255
+    add eax, [rbp-64-%1*4]
     cmp eax, 255
     jbe %%ok
     mov eax, 255
@@ -1225,9 +1391,9 @@ FUNC bloom_add_rows, 48
     shl eax, %2
     or r9d, eax
 %endmacro
-    BLCH 0, 0
-    BLCH 1, 8
-    BLCH 2, 16
+    BLADD 0, 0
+    BLADD 1, 8
+    BLADD 2, 16
     or r9d, 0xFF000000
     mov [r15], r9d
 .askip:

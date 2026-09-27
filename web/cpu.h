@@ -17,7 +17,8 @@ typedef struct {
     uint64_t fa, fb, fr;
 } cpu_t;
 
-extern cpu_t R;
+// one register file per thread (the light passes run on worker threads)
+extern _Thread_local cpu_t R;
 void cpu_trap(const char *why);
 
 // memory: the translated program uses real (host / wasm) addresses

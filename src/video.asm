@@ -363,70 +363,44 @@ tint_px:
     pop rdx
 .o: ret
 
-; expand the world layer through the tint buffer (info view on)
-; rdi = src 8bpp, esi = w, edx = h, rcx = lut
-expand8_tint:
-    push rbx
-    push r12
-    push r13
-    push r14
-    push r15
-    mov r8, [tex_pixels]
-    movsxd r15, dword [tex_pitch]
-    mov r14, rcx
-    mov r13d, esi
-    mov r12d, edx
-.row:
-    mov r11, r8
-    xor r10d, r10d
-.px:
-    lea rax, [fb]
-    mov rbx, rdi
-    sub rbx, rax
-    mov ebx, [litbuf+rbx*4]
-    movzx ecx, byte [rdi+(tintbuf-fb)]
-    call tint_px
-    mov [r11], ebx
-    inc rdi
-    add r11, 4
-    inc r10d
-    cmp r10d, r13d
-    jl .px
-    add r8, r15
-    dec r12d
-    jnz .row
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop rbx
-    ret
-
 ; ---------------------------------------------------------------------
 FUNC video_present
-    call light_compose
-    ; world layer
+    ; world layer: lit straight into the texture when its rows are packed
     mov rdi, [tex_world]
     xor esi, esi
     lea rdx, [tex_pixels]
     lea rcx, [tex_pitch]
     CALLC SDL_LockTexture
     test eax, eax
-    jnz .skip_w
+    jnz .nolock
+    mov eax, [fb_w]
+    shl eax, 2
+    cmp eax, [tex_pitch]
+    jne .copy
+    mov rax, [tex_pixels]
+    mov [lit_dst], rax
+    call light_compose
+    PERF_MARK 5
+    jmp .unlock
+.copy:
+    lea rax, [litbuf]
+    mov [lit_dst], rax
+    call light_compose
+    PERF_MARK 5
     lea rdi, [fb]
     mov esi, [fb_w]
     mov edx, [fb_h]
-    lea rcx, [lut_world]
-    cmp dword [eff_overlay], 0
-    je .plain
-    call expand8_tint
-    jmp .expd
-.plain:
     call copy_lit
-.expd:
+.unlock:
     mov rdi, [tex_world]
     CALLC SDL_UnlockTexture
+    jmp .skip_w
+.nolock:
+    lea rax, [litbuf]
+    mov [lit_dst], rax
+    call light_compose
 .skip_w:
+    PERF_MARK 8
     ; ui layer
     mov rdi, [tex_ui]
     xor esi, esi
@@ -443,6 +417,7 @@ FUNC video_present
     mov rdi, [tex_ui]
     CALLC SDL_UnlockTexture
 .skip_u:
+    PERF_MARK 9
     mov dword [dst_rect], 0
     mov dword [dst_rect+4], 0
     mov eax, [fb_w]
@@ -484,6 +459,8 @@ FUNC video_screenshot
 
 ; compose both layers at window resolution into shotbuf
 FUNC compose_frame
+    lea rax, [litbuf]
+    mov [lit_dst], rax
     call light_compose
     lea rdi, [shotbuf]
     xor r12d, r12d                 ; y
@@ -514,10 +491,6 @@ FUNC compose_frame
     sub rbx, rdx
     add rbx, rax
     mov ebx, [litbuf+rbx*4]
-    cmp dword [eff_overlay], 0
-    je .nt
-    call tint_px
-.nt:
     mov eax, r15d
     xor edx, edx
     div dword [ui_scale]

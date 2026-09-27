@@ -249,3 +249,17 @@ UI_BTN_HI    equ PAL_UI+12
 UI_BTN_SEL   equ PAL_UI+13
 UI_GOLD      equ PAL_UI+14
 UI_BLACK     equ PAL_UI+15
+
+; frame profiler: time since the last mark goes to bucket %1 (-1: none)
+%macro PERF_MARK 1
+    cmp dword [perf_on], 0
+    je %%skip
+    CALLC SDL_GetPerformanceCounter
+    mov rcx, rax
+    sub rax, [perf_t]
+    mov [perf_t], rcx
+%if %1 >= 0
+    add [perf_acc+%1*8], rax
+%endif
+%%skip:
+%endmacro

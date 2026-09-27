@@ -48,8 +48,19 @@ relocations) and translates it statically into C:
 
 Emscripten compiles that C and a small SDL/libc shim (`web/runtime.c`) to
 WebAssembly. The native build of the translated code is pixel-identical to the
-real binary and runs at about 85% of its speed. Saves go to IndexedDB. Add
-`?debug` to the URL to see the log and frame timings.
+real binary and runs at about 85% of its speed. Saves go to IndexedDB.
+
+The browser build uses threads too. The page is cross-origin isolated
+(`web/_headers`), so the translated worker pool runs on Web Workers over shared
+memory. Each worker gets its own register file and stack. Drawing the world
+and the lighting are split into bands across them. At 1440p fully zoomed out, a
+frame takes about 13 ms of work (it was 53 ms on one thread).
+
+URL options:
+
+- `?load=URL` opens a city file, so you can share a city by link.
+- `?debug` shows the log and frame timings.
+- `?bench` prints a per-stage frame profile.
 
 ```sh
 make web        # -> site/  (needs nasm, emcc, pip install capstone pyelftools)

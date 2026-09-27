@@ -57,13 +57,22 @@
     boot.classList.remove('gone');
     statusEl.innerHTML = 'The mayor has left the building. <a href="">Play again</a>';
   };
-  window.cityPerf = function (f, ms) { logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame'); };
+  window.cityPerf = function (f, ms) {
+    logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame');
+    // ?bench: report to the local test server
+    if (/[?&]bench/.test(location.search))
+      fetch('/bench', { method: 'POST', body: innerWidth + 'x' + innerHeight + ' frame ' + f + ' ' + ms.toFixed(2) });
+  };
   window.addEventListener('error', function (e) { logLine('error: ' + e.message); });
   window.addEventListener('unhandledrejection', function (e) { logLine('rejection: ' + (e.reason && (e.reason.stack || e.reason))); });
   var Module = {
     canvas: document.getElementById('canvas'),
     webglContextAttributes: { preserveDrawingBuffer: /[?&]shot/.test(location.search) },
-    print: function (t) { console.log(t); logLine(t); },
+    print: function (t) {
+      console.log(t); logLine(t);
+      if (/^PERF/.test(t) && /[?&]bench/.test(location.search))
+        fetch('/bench', { method: 'POST', body: innerWidth + 'x' + innerHeight + ' ' + t });
+    },
     printErr: function (t) { console.warn(t); logLine('! ' + t); },
     setStatus: function (t) {
       var m = t && t.match(/\((\d+(\.\d+)?)\/(\d+)\)/);

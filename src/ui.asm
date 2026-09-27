@@ -2540,9 +2540,27 @@ FUNC compute_eff_overlay
     jmp .have
 .t4:
     cmp ecx, T_BUSSTOP
-    jne .t6
+    jne .t5
     mov eax, OV_TRANSIT
     jmp .have
+.t5:
+    ; zoning shows where that kind of building wants to be
+    cmp ecx, T_ZONETOOL
+    jne .t5a
+    mov eax, [zone_type]
+    movzx eax, byte [zone_class+rax]
+    add eax, OV_DESIRE_R
+    jmp .have
+.t5a:
+    mov eax, OV_TRAFFIC
+    cmp ecx, T_ROAD
+    je .have
+    cmp ecx, T_UPGRADE
+    je .have
+    mov eax, OV_POLLUTE
+    cmp ecx, T_TREE
+    je .have
+    xor eax, eax
 .t6:
     cmp ecx, T_BUILD
     jne .have
@@ -2585,19 +2603,41 @@ FUNC compute_eff_overlay
     RETURN
 
 ; V / the chip in the tool hint: flip the remembered auto view
+; (no view for this tool: V shows / hides the last view picked with O)
 toggle_auto_view:
     mov eax, [auto_view]
     test eax, eax
-    jz .o
+    jz .manual
+    ; a view picked with O on top of the tool's: V just drops it
+    cmp dword [overlay_mode], 0
+    jne .drop
     xor byte [auto_on+rax], 1
-    mov dword [overlay_mode], 0
     call settings_save
+    jmp .click
+.drop:
+    mov dword [overlay_mode], 0
+    jmp .click
+.manual:
+    mov eax, [overlay_mode]
+    test eax, eax
+    jz .restore
+    mov [ov_last], eax
+    mov dword [overlay_mode], 0
+    jmp .click
+.restore:
+    mov eax, [ov_last]
+    test eax, eax
+    jnz .r
+    mov eax, OV_POWER
+.r:
+    mov [overlay_mode], eax
+.click:
     mov edi, SFX_CLICK
     call sfx_play
-.o: ret
+    ret
 
 section .data
-cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRANSIT, 0
+cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRANSIT, OV_LANDVAL
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
@@ -2607,6 +2647,7 @@ settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
 section .bss
 auto_view resd 1
+ov_last   resd 1
 settings_buf resb 64
 section .text
 

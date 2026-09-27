@@ -12,7 +12,7 @@
 #include <emscripten.h>
 #endif
 
-cpu_t R;
+_Thread_local cpu_t R;
 
 void cpu_trap(const char *why) {
     fprintf(stderr, "cityssembly: cpu trap: %s\n", why);
@@ -143,6 +143,7 @@ void ext_SDL_GetKeyboardState(void) {
 }
 void ext_SDL_GetTicks(void) { RET(SDL_GetTicks()); }
 void ext_SDL_GetPerformanceCounter(void) { RET(SDL_GetPerformanceCounter()); }
+void ext_SDL_GetPerformanceFrequency(void) { RET(SDL_GetPerformanceFrequency()); }
 
 // audio
 // A hidden browser tab gets throttled to ~1 frame a second, far too slow to
@@ -267,6 +268,64 @@ void ext_web_setup(void) {
 #endif
 }
 
+// ------------------------------------------------------------------ threads
+// The game's worker threads (src/threads.asm) run translated code: each
+// gets its own register file (thread-local R) and its own stack.
+void dispatch_call(uint64_t id);
+typedef struct { uint64_t fn, data; } thread_start_t;
+static int thread_tramp(void *p) {
+    thread_start_t st = *(thread_start_t *)p;
+    free(p);
+    size_t sz = 1 << 20;
+    uint8_t *stack = aligned_alloc(16, sz);
+    memset(&R, 0, sizeof R);
+    R.r[4] = (uint64_t)(uintptr_t)(stack + sz - 64) - 8;   // as if called
+    R.r[7] = st.data;
+    dispatch_call(st.fn);
+    free(stack);
+    return (int)R.r[0];
+}
+void ext_SDL_CreateThread(void) {
+    thread_start_t *st = malloc(sizeof *st);
+    st->fn = A0;
+    st->data = A2;
+    RETP(SDL_CreateThread(thread_tramp, P(A1), st));
+}
+void ext_SDL_CreateSemaphore(void) { RETP(SDL_CreateSemaphore((Uint32)A0)); }
+void ext_SDL_SemPost(void) { RET((uint32_t)SDL_SemPost(P(A0))); }
+void ext_SDL_SemWait(void) { RET((uint32_t)SDL_SemWait(P(A0))); }
+void ext_SDL_GetCPUCount(void) {
+#ifdef __EMSCRIPTEN__
+    // as many as the page's worker pool (and only with shared memory)
+    int n = EM_ASM_INT({
+        if (typeof SharedArrayBuffer === 'undefined' || !self.crossOriginIsolated) return 1;
+        return Math.min(navigator.hardwareConcurrency || 1, 8);
+    });
+    RET((uint32_t)n);
+#else
+    RET((uint32_t)SDL_GetCPUCount());
+#endif
+}
+
+// ?bench: the game prints a frame profile every 120 frames
+void ext_web_bench(void) {
+#ifdef __EMSCRIPTEN__
+    RET((uint32_t)EM_ASM_INT({ return /[?&]bench/.test(location.search) ? 1 : 0; }));
+#else
+    RET(0);
+#endif
+}
+
+// a city opened by link: the shell fetched it into /save/shared.sav
+void ext_web_open(void) {
+#ifdef __EMSCRIPTEN__
+    int has = EM_ASM_INT({ return Module.openedCity ? 1 : 0; });
+    RETP(has ? "shared.sav" : NULL);
+#else
+    RETP(NULL);
+#endif
+}
+
 // ------------------------------------------------------------------ start
 void game_init_memory(void);
 void game_main(void);
@@ -308,12 +367,25 @@ int main(void) {
             if (Module.onGameStart) Module.onGameStart();
             Module.ccall('web_start', null, [], [], { async: true });
         }
+        // ?load=URL opens a shared city file
+        var m = location.search.match(/[?&]load=([^&]+)/);
+        var pending = m ? 1 : 0;
+        if (m) {
+            fetch(decodeURIComponent(m[1])).then(function (r) { return r.arrayBuffer(); })
+                .then(function (b) {
+                    FS.writeFile('/save/shared.sav', new Uint8Array(b));
+                    Module.openedCity = true;
+                }).catch(function (e) { console.warn('open city', e); })
+                .finally(function () { pending = 0; if (synced) go('city opened'); });
+        }
+        var synced = false;
         FS.syncfs(true, function (e) {
             if (e) console.warn('save load', e);
-            go('saves ready');
+            synced = true;
+            if (!pending) go('saves ready');
         });
         // never let a stuck IndexedDB keep the city from starting
-        setTimeout(function () { go('saves slow'); }, 2000);
+        setTimeout(function () { synced = true; if (!pending) go('saves slow'); }, 2000);
     });
     emscripten_exit_with_live_runtime();
     return 0;

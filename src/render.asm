@@ -348,26 +348,11 @@ FUNC render_world, 32
     call compute_eff_overlay
     mov dword [prob_n], 0
     call set_target_world
-    lea rdi, [tintbuf]
-    mov ecx, [fb_w]
-    imul ecx, [fb_h]
-    xor eax, eax
-    rep stosb
-    lea rdi, [hbuf]
-    mov ecx, [fb_w]
-    imul ecx, [fb_h]
-    rep stosb
     mov dword [blit_tint], 0
-    mov edi, RAMP(R_DEEPWATER, 1)
-    call clear_target
-    ; clear z-buffer
-    lea rdi, [zbuf]
-    mov ecx, [fb_w]
-    imul ecx, [fb_h]
-    shr ecx, 1
-    inc ecx
-    xor eax, eax
-    rep stosd
+    ; lay the frame out as a draw list, then draw it in bands on every
+    ; core (the buffers are cleared band by band too)
+    mov dword [dl_n], 0
+    mov dword [dl_record], 1
 
     ; visible tile range: iterate diagonally-bounded rectangle
     xor r13d, r13d                  ; ty
@@ -598,12 +583,48 @@ FUNC render_world, 32
     inc r13d
     cmp r13d, MAP_W
     jl .ty
+    mov dword [dl_record], 0
+    mov dword [blit_dither], 0
+    lea rdi, [render_band]
+    mov esi, [fb_h]
+    mov edx, 1
+    call par_rows
     mov dword [blit_tint], TINT_KEEP
     call draw_wires
     cmp dword [eff_overlay], OV_WATER
     jne .np
     call draw_pipes
 .np:
+    RETURN
+
+; clear rows [edi, esi) of the world buffers and draw the list into them
+FUNC render_band
+    mov r12d, edi
+    mov r13d, esi
+    mov r14d, r13d
+    sub r14d, r12d
+    jle .o
+    imul r14d, [fb_w]               ; pixels in the band
+    mov ebx, r12d
+    imul ebx, [fb_w]                ; first pixel
+    lea rdi, [fb+rbx]
+    mov ecx, r14d
+    mov eax, RAMP(R_DEEPWATER, 1)
+    rep stosb
+    lea rdi, [tintbuf+rbx]
+    mov ecx, r14d
+    xor eax, eax
+    rep stosb
+    lea rdi, [hbuf+rbx]
+    mov ecx, r14d
+    rep stosb
+    lea rdi, [zbuf+rbx*2]
+    mov ecx, r14d
+    rep stosw
+    mov edi, r12d
+    mov esi, r13d
+    call dl_draw_rows
+.o:
     RETURN
 
 ; ---------------------------------------------------------------------

@@ -198,9 +198,7 @@ FUNC main
 .fixed:
     call sprites_init
     call light_init
-%ifndef WEB
     call threads_init
-%endif
     call audio_init
     call ui_init
     call settings_load
@@ -244,6 +242,18 @@ FUNC main
 .cam:
     mov esi, [hwy_row]
     call camera_center_tile
+%ifdef WEB
+    call web_bench
+    mov [perf_on], eax
+    ; a city opened by link (?load=...): straight into it
+    call web_open
+    test rax, rax
+    jz .noopen
+    mov rdi, rax
+    call load_city_from
+    mov dword [welcome], 0
+.noopen:
+%endif
 %ifndef WEB
     cmp dword [trailer_mode], 0
     je .notr
@@ -378,6 +388,7 @@ FUNC main
 
     mov dword [running], 1
 .loop:
+    PERF_MARK -1
     call poll_events
     cmp dword [running], 0
     je .quit
@@ -400,6 +411,7 @@ FUNC main
     call game_tick
     jmp .steps
 .render:
+    PERF_MARK 0                     ; simulation
     call update_hover
     call palette_update
     ; screen shake: offset the camera for this frame only.  Only the
@@ -427,17 +439,24 @@ FUNC main
     mov r15d, eax
     add [cam_y], eax
 .ns:
+    PERF_MARK 1                     ; palette etc.
     call render_world
+    PERF_MARK 2
     mov dword [emit_now], 0
     call draw_agents
+    PERF_MARK 3
     call render_ui
     call draw_tool_preview
     call world_input
+    PERF_MARK 4
     sub [cam_x], r14d
     sub [cam_y], r15d
-    call video_present
+    call video_present              ; (marks 5: lighting, 6: upload)
+    PERF_MARK 6
     call audio_update
+    PERF_MARK 7
     inc dword [frame_count]
+    call perf_report
 
     mov eax, [shot_frames]
     test eax, eax
@@ -453,6 +472,66 @@ FUNC main
     CALLC SDL_Quit
     xor eax, eax
     RETURN
+
+; ---------------------------------------------------------------------
+;  frame profile: ?bench in the browser prints where the time goes
+; ---------------------------------------------------------------------
+FUNC perf_report
+    cmp dword [perf_on], 0
+    je .out
+    inc dword [perf_n]
+    cmp dword [perf_n], 120
+    jl .out
+    CALLC SDL_GetPerformanceFrequency
+    mov rbx, rax
+    xor ecx, ecx
+.c:
+    mov rax, [perf_acc+rcx*8]
+    imul rax, rax, 10000
+    xor edx, edx
+    div rbx
+    xor edx, edx
+    mov r8d, 120
+    div r8                          ; 0.1 ms units per frame
+    mov [perf_out+rcx*4], eax
+    mov qword [perf_acc+rcx*8], 0
+    inc ecx
+    cmp ecx, 10
+    jl .c
+    mov dword [perf_n], 0
+    lea rdi, [str_perf]
+    mov esi, [perf_out]
+    mov edx, [perf_out+4]
+    add edx, [perf_out+8]
+    mov ecx, [perf_out+12]
+    mov r8d, [perf_out+16]
+    mov r9d, [perf_out+20]
+    sub rsp, 8
+    mov eax, [perf_out+28]
+    push rax
+    mov eax, [perf_out+24]
+    push rax
+    mov eax, [perf_out+36]
+    push rax
+    mov eax, [perf_out+32]
+    push rax
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 40
+.out:
+    RETURN
+
+section .data
+str_perf db "PERF x0.1ms sim %d world %d agents %d ui %d light %d | tex world %d ui %d | present %d audio %d", 10, 0
+section .bss
+perf_on     resd 1
+perf_n      resd 1
+perf_t      resq 1
+perf_acc    resq 10
+perf_out    resd 10
+section .text
 
 ; ---------------------------------------------------------------------
 FUNC game_tick

@@ -1274,8 +1274,104 @@ sprite_outline:
 ; ---------------------------------------------------------------------
 ;  blit_sprite(edi id, esi sx, edx sy, ecx depth base, r8 remap|0)
 ;  sx,sy = screen position of the sprite anchor. z-buffered.
+;  While the world is being laid out (dl_record) the blit is only
+;  written down; the draw list is then drawn in bands on every core.
 ; ---------------------------------------------------------------------
-FUNC blit_sprite, 48
+FUNC blit_sprite
+    cmp dword [dl_record], 0
+    jne .rec
+    ; tint | dither << 8 | rows 0 .. fb_h
+    movzx r9d, byte [blit_tint]
+    cmp dword [blit_dither], 0
+    je .nd
+    or r9d, 0x100
+.nd:
+    mov eax, [fb_h]
+    shl rax, 32
+    or r9, rax
+    call blit_clip
+    RETURN
+.rec:
+    mov eax, [dl_n]
+    cmp eax, DL_MAX
+    jae .full
+    inc dword [dl_n]
+    shl eax, 5
+    lea rax, [dl_list+rax]
+    mov [rax], edi
+    mov [rax+4], esi
+    mov [rax+8], edx
+    mov [rax+12], ecx
+    mov [rax+16], r8
+    mov ecx, [blit_tint]
+    mov [rax+24], cl
+    mov ecx, [blit_dither]
+    mov [rax+25], cl
+.full:
+    RETURN
+
+section .bss
+DL_MAX      equ 262144
+dl_record   resd 1
+dl_n        resd 1
+alignb 16
+dl_list     resb DL_MAX*32          ; id, sx, sy, depth, remap, tint, dither
+section .text
+
+; draw the recorded blits that touch rows [edi, esi)
+FUNC dl_draw_rows, 16
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    xor ebx, ebx
+.l:
+    cmp ebx, [dl_n]
+    jge .out
+    mov eax, ebx
+    shl eax, 5
+    lea r12, [dl_list+rax]
+    ; rows the sprite covers
+    mov eax, [r12]
+    shl eax, 4
+    movsx ecx, word [spr_table+rax+6]
+    mov edx, [r12+8]
+    sub edx, ecx                    ; top
+    cmp edx, [rbp-52]
+    jge .n
+    movzx ecx, word [spr_table+rax+2]
+    add ecx, edx                    ; bottom
+    cmp ecx, [rbp-48]
+    jle .n
+    movzx r9d, byte [r12+24]
+    movzx eax, byte [r12+25]
+    shl eax, 8
+    or r9d, eax
+    mov eax, [rbp-48]
+    shl eax, 16
+    or r9d, eax
+    mov eax, [rbp-52]
+    shl rax, 32
+    or r9, rax
+    mov edi, [r12]
+    mov esi, [r12+4]
+    mov edx, [r12+8]
+    mov ecx, [r12+12]
+    mov r8, [r12+16]
+    call blit_clip
+.n:
+    inc ebx
+    jmp .l
+.out:
+    RETURN
+
+; the blitter: r9 = tint | dither << 8 | first row << 16 | end row << 32
+FUNC blit_clip, 48
+    mov [rbp-84], r9d               ; tint, dither
+    mov rax, r9
+    shr rax, 16
+    and eax, 0xFFFF
+    mov [rbp-88], eax               ; clip top
+    shr r9, 32
+    mov [rbp-92], r9d               ; clip bottom (exclusive)
     mov eax, edi
     shl eax, 4
     lea rbx, [spr_table+rax]
@@ -1296,15 +1392,15 @@ FUNC blit_sprite, 48
     mov eax, r12d
     imul eax, r13d
     lea r15, [r14+rax]              ; depth plane
-    ; clip rows
+    ; clip rows to [clip top, clip bottom)
     xor ecx, ecx                    ; first row
-    mov eax, edx
-    neg eax
+    mov eax, [rbp-88]
+    sub eax, edx
     cmp eax, 0
     jle .noclipt
     mov ecx, eax
 .noclipt:
-    mov eax, [fb_h]
+    mov eax, [rbp-92]
     sub eax, edx                    ; rows available
     cmp r13d, eax
     jle .rowsok
@@ -1367,8 +1463,8 @@ FUNC blit_sprite, 48
     sub r8d, r9d
     mov r9d, [rbp-80]               ; height plane offset
     mov r10d, [rbp-52]
-    cmp dword [blit_dither], 0
-    jne .colD
+    test dword [rbp-84], 0x100
+    jnz .colD
 .col:
     movzx eax, byte [rsi]
     test eax, eax
@@ -1380,7 +1476,7 @@ FUNC blit_sprite, 48
     mov [rdx], cx
     mov al, [r11+rax]
     mov [rbx], al
-    mov cl, [blit_tint]
+    mov cl, [rbp-84]
     mov [rbx+(tintbuf-fb)], cl
     mov cl, [rsi+r9]
     mov [rbx+(hbuf-fb)], cl
@@ -1414,7 +1510,7 @@ FUNC blit_sprite, 48
     jnz .cnD
     mov al, [r11+rax]
     mov [rbx], al
-    mov cl, [blit_tint]
+    mov cl, [rbp-84]
     mov [rbx+(tintbuf-fb)], cl
     mov cl, [rsi+r9]
     mov [rbx+(hbuf-fb)], cl

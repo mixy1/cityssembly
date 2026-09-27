@@ -24,6 +24,7 @@ tr_frames       resd 1
 tr_follow       resd 1          ; vehicle slot, -1 = off
 tr_todspeed     resd 1
 tr_acc          resd 1
+tr_prob         resd 12
 tr_plan         resb TR_PLAN_MAX
 
 section .data
@@ -34,6 +35,8 @@ str_carfmt       db "CAR %d %d %d", 10, 0
 str_opfmt        db "bad trailer op %d", 10, 0
 str_benchfmt     db "BENCH us/frame: palette %d world %d agents %d light %d present-copy %d", 10, 0
 str_statfmt      db "STAT pop %d power %d/%d water %d/%d sewage %d/%d", 10, 0
+str_statfmt3     db "STAT3 problems: power %d water %d sewage %d garbage %d goods %d workers %d", 10, 0
+str_statfmt4     db "STAT4 fire %d road %d dirty %d route %d unemployed %d jobs %d", 10, 0
 str_statfmt2     db "STAT2 unpowered %d nowater %d noroad %d abandon %d demand %d %d %d %d year %d", 10, 0
 
 section .text
@@ -856,6 +859,50 @@ tr_op_stat:
     xor eax, eax
     call printf
     add rsp, 40
+    ; problem counts over anchors of grown buildings
+    lea rdi, [tr_prob]
+    xor eax, eax
+    mov ecx, 12
+    rep stosd
+    xor ecx, ecx
+.pc:
+    cmp ecx, MAP_TILES
+    jge .pd
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ZONEBLD
+    jne .pn
+    test byte [tiles+rax+T_FLAGS], F_ANCHOR
+    jz .pn
+    movzx edx, byte [tiles+rax+T_PROBLEM]
+    CLAMP edx, 0, 11
+    inc dword [tr_prob+rdx*4]
+.pn:
+    inc ecx
+    jmp .pc
+.pd:
+    lea rdi, [str_statfmt3]
+    mov esi, [tr_prob+4]
+    mov edx, [tr_prob+8]
+    mov ecx, [tr_prob+12]
+    mov r8d, [tr_prob+16]
+    mov r9d, [tr_prob+20]
+    sub rsp, 8
+    push qword [tr_prob+24]
+    xor eax, eax
+    call printf
+    add rsp, 16
+    lea rdi, [str_statfmt4]
+    mov esi, [tr_prob+28]
+    mov edx, [tr_prob+32]
+    mov ecx, [tr_prob+36]
+    mov r8d, [tr_prob+40]
+    mov r9d, [unemployed]
+    sub rsp, 8
+    push qword [workers]
+    xor eax, eax
+    call printf
+    add rsp, 16
     jmp trailer_run.next
 tr_op_lforce:
     TRARGS [light_force]

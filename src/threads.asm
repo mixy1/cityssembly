@@ -4,8 +4,9 @@
 ;  par_rows(rdi fn, esi rows, edx align) splits [0, rows) into one band
 ;  per core (band starts are multiples of align) and runs fn(y0, y1) on
 ;  each band at once, the calling thread taking the first.  Jobs must
-;  only write their own rows.  The browser build runs everything on the
-;  one thread.
+;  only write their own rows.  In the browser the pool needs shared
+;  memory (a cross-origin isolated page); without it everything runs on
+;  the one thread.
 ; =====================================================================
 
 TH_MAX      equ 16
@@ -18,13 +19,13 @@ th_done     resq 1              ; semaphore: a worker finished its band
 th_start    resq TH_MAX         ; semaphore per worker
 th_y0       resd TH_MAX
 th_y1       resd TH_MAX
+th_band     resd 1              ; rows per band of the current job
 
 section .data
 th_name     db "cityssembly-worker", 0
 
 section .text
 
-%ifndef WEB
 FUNC threads_init
     mov dword [th_count], 0
 %ifdef NOTHREADS
@@ -101,14 +102,12 @@ FUNC th_main
 .out:
     xor eax, eax
     RETURN
-%endif
 
 ; ---------------------------------------------------------------------
 FUNC par_rows, 16
     mov r12, rdi                    ; fn
     mov r13d, esi                   ; rows
     mov r14d, edx                   ; align
-%ifndef WEB
     mov r15d, [th_count]
     test r15d, r15d
     jz .single
@@ -127,6 +126,7 @@ FUNC par_rows, 16
     div r14d
     imul eax, r14d
     mov [rbp-48], eax               ; band
+    mov [th_band], eax
     mov [th_fn], r12
     xor ebx, ebx
 .post:
@@ -157,7 +157,7 @@ FUNC par_rows, 16
     inc ebx
     jmp .join
 .single:
-%endif
+    mov [th_band], r13d
     xor edi, edi
     mov esi, r13d
     call r12
