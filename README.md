@@ -105,17 +105,22 @@ Then chase the advisor goals shown in the top-left.
   - moving the view (WASD, right-drag, the wheel);
   - drawing the first street from the highway;
   - zoning homes, shops and industry;
-  - a wind turbine and a power line across the street;
-  - a water tower, a pipe under the street and a sewage outlet on the creek;
+  - a coal plant by the creek, away from the homes (its smoke lowers land
+    value), and a power line bridging the gap to the industry (power passes
+    between buildings up to 2 tiles apart, never along roads);
+  - a pump on the creek bank (water always comes from a pump, and pumps
+    need power), a pipe under the street, and a sewage outlet far up the
+    creek from the pump with a pipe to it;
   - speeding up time and reading demand;
-  - a fire station, clinic, school, landfill and park;
+  - a fire station, clinic, school, landfill and park, all on the street;
   - an info view, the inspector and the budget.
 
   Each step leads the way: first the dock button (the rest dimmed), then the
   item in its menu, then the place in the world (an outlined path with a
   start arrow, an area to drag over, or a spot to click). It moves on once
   you've done it. The village is planned from the map so that following
-  the tour always gives a working village. Money is free, all land is yours
+  the tour always gives a village with all the power, water and sewage it
+  needs (the tour test checks this on every build). Money is free, all land is yours
   and everything is unlocked. Then meteors fall on the village, you pick
   the bulldozer and clear the rubble, and your real city begins on fresh
   land with the real budget and date. The practice village is never saved.

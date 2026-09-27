@@ -46,6 +46,9 @@ jobs:
           for seed in 1 42 777; do
             SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ../cityssembly --tourbot 20000 tour.bmp $seed | tee tour_$seed.txt
             grep -q "TOUR end.*money 30000.*bubble 0" tour_$seed.txt
+            # the village the tour builds has all the power, water and
+            # sewage it needs, and clean water
+            grep -Eq "SERVED ([0-9]+) buildings: \1 powered, \1 water, \1 sewage, 0 dirty" tour_$seed.txt
           done
 
       - uses: actions/upload-artifact@v4

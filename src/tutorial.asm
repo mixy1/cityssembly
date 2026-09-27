@@ -5,9 +5,10 @@
 ;  Once the player takes it, the map and the whole sim state are set
 ;  aside and the player builds a small village step by step, every step
 ;  something to do: move the view, draw the street, zone homes / shops /
-;  industry, a wind turbine and a power line, a water tower, pipes and a
-;  sewage outlet, speed up time, read demand, fire / health / school /
-;  garbage / park, an info view, the inspector and the budget.  Money is
+;  industry, a coal plant away from the homes and a power line to it, a
+;  pump on the creek, pipes, a sewage outlet far from the pump, speed up
+;  time, read demand, fire / health / school / garbage / park (all on the
+;  street), an info view, the inspector and the budget.  Money is
 ;  topped up, all land is owned and everything is unlocked.  Then meteors
 ;  fall on the village, the player bulldozes the rubble, and finishing
 ;  (or skipping) puts the set-aside world and state back: the real city
@@ -15,9 +16,11 @@
 ;
 ;  The village is planned from the map when the tour begins (a street
 ;  from the end of the highway to the creek, homes on one side, shops and
-;  industry on the other, a turbine touching the homes, a line across the
-;  street, a tower on the pipe, the outlet at the creek), so doing what
-;  the tour shows always gives a working village.  A building step leads
+;  industry on the other, the coal plant by the creek past the industry
+;  with a line across the gap, the pump at the end of the street where the
+;  plant powers it, a pipe under the street, the outlet far up the creek
+;  with a pipe to it), so doing what the tour shows always gives a village
+;  that has all the power and water it needs.  A building step leads
 ;  the way in three phases: the dock button (the rest dimmed), then the
 ;  item in its menu, then the place in the world (a path with a start
 ;  arrow, an area to drag over, or a spot to click), with an instruction
@@ -71,9 +74,9 @@ SL_ROAD     equ 0
 SL_R        equ 1
 SL_C        equ 2
 SL_I        equ 3
-SL_WIND     equ 4
+SL_COAL     equ 4
 SL_PLINE    equ 5
-SL_TOWER    equ 6
+SL_PUMP     equ 6
 SL_PIPE     equ 7
 SL_SEWER    equ 8
 SL_FIRE     equ 9
@@ -83,7 +86,9 @@ SL_LANDF    equ 12
 SL_PARK     equ 13
 SL_HOUSE    equ 14
 SL_RUBBLE   equ 15
-SL_COUNT    equ 16
+SL_PIPE2    equ 16
+SL_COUNT    equ 17
+OUTLET_DY   equ 16          ; the outlet this far up the creek from the pump
 
 TUT_W       equ 300
 TUT_MONEY   equ 5000000
@@ -113,6 +118,8 @@ tut_met_ty  resd MET_COUNT
 tut_list_n  resd 1
 tut_list    resd TUT_LIST
 tut_plan    resd SL_COUNT*4
+tut_legr    resd 4          ; one leg of a slot (see tut_leg)
+tut_base    resd 1          ; this step's kind, counted when it began
 ; what is highlighted (ui px), for drawing and for the test player
 tut_hl      resd 1          ; 0 none, 1 ui rect, 2 world target
 tut_rx      resd 1
@@ -150,25 +157,26 @@ tut_steps:
     TSTEP tt5,  tx5,  SK_TOOL, 3, 1, 0, T_ZONETOOL, ZONE_R, WT_RECT, SL_R, DK_RECTZONE, ZC_RES
     TSTEP tt6,  tx6,  SK_TOOL, 3, 1, 2, T_ZONETOOL, ZONE_C, WT_RECT, SL_C, DK_RECTZONE, ZC_COM
     TSTEP tt7,  tx7,  SK_TOOL, 3, 1, 4, T_ZONETOOL, ZONE_I, WT_RECT, SL_I, DK_RECTZONE, ZC_IND
-    TSTEP tt8,  tx8,  SK_TOOL, 4, 2, 1, T_BUILD, BK_WIND, WT_SPOT, SL_WIND, DK_SVC, BK_WIND
+    TSTEP tt8,  tx8,  SK_TOOL, 4, 2, 2, T_BUILD, BK_COAL, WT_SPOT, SL_COAL, DK_SVC, BK_COAL
     TSTEP tt9,  tx9,  SK_TOOL, 4, 2, 0, T_POWERLN, -1, WT_PATH, SL_PLINE, DK_PYLONS, 0
-    TSTEP tt10, tx10, SK_TOOL, 5, 3, 2, T_BUILD, BK_WTOWER, WT_SPOT, SL_TOWER, DK_SVC, BK_WTOWER
+    TSTEP tt10, tx10, SK_TOOL, 5, 3, 1, T_BUILD, BK_PUMP, WT_SPOT, SL_PUMP, DK_SVC, BK_PUMP
     TSTEP tt11, tx11, SK_TOOL, 5, 3, 0, T_PIPE, -1, WT_PATH, SL_PIPE, DK_PATHPIPE, 0
     TSTEP tt12, tx12, SK_TOOL, 5, 3, 3, T_BUILD, BK_SEWAGE, WT_SPOT, SL_SEWER, DK_SVC, BK_SEWAGE
-    TSTEP tt13, tx13, SK_SPEED, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
-    TSTEP tt14, tx14, SK_GROW,  0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
-    TSTEP tt15, tx15, SK_DEMAND, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
-    TSTEP tt16, tx16, SK_TOOL, 7, 5, 1, T_BUILD, BK_FIRE, WT_SPOT, SL_FIRE, DK_SVC, BK_FIRE
-    TSTEP tt17, tx17, SK_TOOL, 8, 6, 0, T_BUILD, BK_CLINIC, WT_SPOT, SL_CLINIC, DK_SVC, BK_CLINIC
-    TSTEP tt18, tx18, SK_TOOL, 9, 7, 0, T_BUILD, BK_ELEM, WT_SPOT, SL_SCHOOL, DK_SVC, BK_ELEM
-    TSTEP tt19, tx19, SK_TOOL, 6, 4, 0, T_BUILD, BK_LANDFILL, WT_SPOT, SL_LANDF, DK_SVC, BK_LANDFILL
-    TSTEP tt20, tx20, SK_TOOL, 11, 9, 0, T_BUILD, BK_PARK, WT_SPOT, SL_PARK, DK_SVC, BK_PARK
-    TSTEP tt21, tx21, SK_TOOL, 13, 10, 1, -1, -1, WT_NONE, 0, DK_OVERLAY, OV_POWER
-    TSTEP tt22, tx22, SK_TOOL, 0, -1, 0, T_INSPECT, -1, WT_SPOT, SL_HOUSE, DK_INSPECT, 0
-    TSTEP tt23, tx23, SK_TOOL, 15, -1, 0, -1, -1, WT_NONE, 0, DK_PANEL, PANEL_BUDGET
-    TSTEP tt24, tx24, SK_METEOR, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
-    TSTEP tt25, tx25, SK_TOOL, 1, -1, 0, T_BULLDOZE, 0, WT_RECT, SL_RUBBLE, DK_CLEAN, 0
-    TSTEP tt26, tx26, SK_FINAL, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
+    TSTEP tt13, tx13, SK_TOOL, 5, 3, 0, T_PIPE, -1, WT_PATH, SL_PIPE2, DK_PATHPIPE, 0
+    TSTEP tt14, tx14, SK_SPEED, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
+    TSTEP tt15, tx15, SK_GROW,  0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
+    TSTEP tt16, tx16, SK_DEMAND, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
+    TSTEP tt17, tx17, SK_TOOL, 7, 5, 1, T_BUILD, BK_FIRE, WT_SPOT, SL_FIRE, DK_SVC, BK_FIRE
+    TSTEP tt18, tx18, SK_TOOL, 8, 6, 0, T_BUILD, BK_CLINIC, WT_SPOT, SL_CLINIC, DK_SVC, BK_CLINIC
+    TSTEP tt19, tx19, SK_TOOL, 9, 7, 0, T_BUILD, BK_ELEM, WT_SPOT, SL_SCHOOL, DK_SVC, BK_ELEM
+    TSTEP tt20, tx20, SK_TOOL, 6, 4, 0, T_BUILD, BK_LANDFILL, WT_SPOT, SL_LANDF, DK_SVC, BK_LANDFILL
+    TSTEP tt21, tx21, SK_TOOL, 11, 9, 0, T_BUILD, BK_PARK, WT_SPOT, SL_PARK, DK_SVC, BK_PARK
+    TSTEP tt22, tx22, SK_TOOL, 13, 10, 1, -1, -1, WT_NONE, 0, DK_OVERLAY, OV_POWER
+    TSTEP tt23, tx23, SK_TOOL, 0, -1, 0, T_INSPECT, -1, WT_SPOT, SL_HOUSE, DK_INSPECT, 0
+    TSTEP tt24, tx24, SK_TOOL, 15, -1, 0, -1, -1, WT_NONE, 0, DK_PANEL, PANEL_BUDGET
+    TSTEP tt25, tx25, SK_METEOR, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
+    TSTEP tt26, tx26, SK_TOOL, 1, -1, 0, T_BULLDOZE, 0, WT_RECT, SL_RUBBLE, DK_CLEAN, 0
+    TSTEP tt27, tx27, SK_FINAL, 0, -1, 0, -1, -1, WT_NONE, 0, 0, 0
 TUT_COUNT equ ($-tut_steps)/TSTEP_BYTES
 
 tt0  db "Welcome, Mayor! Take the tour?", 0
@@ -192,63 +200,77 @@ tt6  db "Shops", 0
 tx6  db "People want to shop nearby: zone some", 10
      db "Commercial across the street.", 0
 tt7  db "Jobs", 0
-tx7  db "And they need work: zone Industry next to", 10
-     db "the shops.", 0
-tt8  db "Electricity", 0
-tx8  db "Nothing grows without power. Place a wind", 10
-     db "turbine touching the homes: power passes", 10
-     db "from building to building.", 0
+tx7  db "They need work too: zone Industry a little", 10
+     db "further along the street.", 0
+tt8  db "Power plant", 0
+tx8  db "Nothing grows without power. Coal plants", 10
+     db "make plenty, but their smoke lowers land", 10
+     db "value: keep them far from homes. Build one", 10
+     db "by the creek, past the industry.", 0
 tt9  db "Power lines", 0
-tx9  db "Roads don't carry power. Run a power line", 10
-     db "across the street to the shops and industry.", 0
-tt10 db "Water", 0
-tx10 db "Place a water tower next to the homes (it", 10
-     db "needs power too).", 0
+tx9  db "Power jumps from building to building (up", 10
+     db "to 2 tiles apart, even across a street),", 10
+     db "but never along roads. Bridge the gap from", 10
+     db "the industry to the plant with a line.", 0
+tt10 db "Water pump", 0
+tx10 db "Water doesn't pass through buildings like", 10
+     db "power: it always comes from a pump. Pumps", 10
+     db "need power too: place one on the creek bank", 10
+     db "at the end of the street, by the plant.", 0
 tt11 db "Pipes", 0
-tx11 db "Water flows through pipes, and serves", 10
-     db "buildings up to 3 tiles away. Lay a pipe", 10
-     db "under the street, from the tower to the end.", 0
+tx11 db "Pipes carry the water to buildings up to 3", 10
+     db "tiles away. Lay one under the street, from", 10
+     db "the pump to the far end.", 0
 tt12 db "Sewage", 0
-tx12 db "Homes need drains too. Place a sewage outlet", 10
-     db "at the end of the pipe, on the creek.", 0
-tt13 db "Time", 0
-tx13 db "Click the fastest speed to let the village", 10
+tx12 db "Used water drains into the creek through a", 10
+     db "sewage outlet, which dirties the water", 10
+     db "around it. Put it far up the creek, well", 10
+     db "away from the pump, so your water stays", 10
+     db "clean.", 0
+tt13 db "Drains", 0
+tx13 db "The same pipes carry the sewage away.", 10
+     db "Connect the outlet: a pipe from the street.", 0
+tt14 db "Time", 0
+tx14 db "Click the fastest speed to let the village", 10
      db "grow. (Space pauses.)", 0
-tt14 db "Let it grow", 0
-tx14 db "Watch the first homes, shops and factories", 10
+tt15 db "Let it grow", 0
+tx15 db "Watch the first homes, shops and factories", 10
      db "go up. Wait for 20 people to move in.", 0
-tt15 db "Demand", 0
-tx15 db "These bars show what the city wants next:", 10
+tt16 db "Demand", 0
+tx16 db "These bars show what the city wants next:", 10
      db "Residential, Commercial, Industry, Offices.", 0
-tt16 db "Safety", 0
-tx16 db "Fires spread fast. Build a fire station.", 0
-tt17 db "Health", 0
-tx17 db "Sick people move away. Build a clinic.", 0
-tt18 db "Schools", 0
-tx18 db "Educated people take better jobs and pay", 10
-     db "more tax. Build a school.", 0
-tt19 db "Garbage", 0
-tx19 db "Trash piles up quickly. Build a landfill,", 10
-     db "away from the homes.", 0
-tt20 db "Parks", 0
-tx20 db "Parks make people happier and land worth", 10
-     db "more. Place one by the homes.", 0
-tt21 db "Info views", 0
-tx21 db "Info views show power, water, traffic, land", 10
+tt17 db "Safety", 0
+tx17 db "Fires spread fast. Build a fire station on", 10
+     db "the street: its trucks need a road.", 0
+tt18 db "Health", 0
+tx18 db "Sick people move away. Build a clinic on", 10
+     db "the street.", 0
+tt19 db "Schools", 0
+tx19 db "Educated people take better jobs and pay", 10
+     db "more tax. Build a school on the street.", 0
+tt20 db "Garbage", 0
+tx20 db "Trash piles up quickly. Build a landfill on", 10
+     db "the street (garbage trucks need a road),", 10
+     db "far from the homes: it smells.", 0
+tt21 db "Parks", 0
+tx21 db "Parks make people happier and land worth", 10
+     db "more. Place one on the street by the homes.", 0
+tt22 db "Info views", 0
+tx22 db "Info views show power, water, traffic, land", 10
      db "value and more. Turn on the power view.", 0
-tt22 db "Inspect", 0
-tx22 db "Check on a building: pick Inspect and click", 10
+tt23 db "Inspect", 0
+tx23 db "Check on a building: pick Inspect and click", 10
      db "a home. Icons over buildings mean trouble.", 0
-tt23 db "Budget", 0
-tx23 db "Taxes pay for everything. Open the budget", 10
+tt24 db "Budget", 0
+tx24 db "Taxes pay for everything. Open the budget", 10
      db "to see income and upkeep.", 0
-tt24 db "Oh no!", 0
-tx24 db "Meteors! Disasters can strike any city.", 0
-tt25 db "Clean up", 0
-tx25 db "Pick the bulldozer and drag over the rubble", 10
+tt25 db "Oh no!", 0
+tx25 db "Meteors! Disasters can strike any city.", 0
+tt26 db "Clean up", 0
+tx26 db "Pick the bulldozer and drag over the rubble", 10
      db "to clear it away.", 0
-tt26 db "Your city begins", 0
-tx26 db "That was practice. Your real city starts on", 10
+tt27 db "Your city begins", 0
+tx27 db "That was practice. Your real city starts on", 10
      db "your own land with $30,000. Follow the goals", 10
      db "top left for rewards. Good luck, Mayor!", 0
 
@@ -275,6 +297,13 @@ si_people    db " / 20 people", 0
 si_left      db " tiles of rubble left", 0
 
 section .text
+
+%macro PSET 5                       ; slot, x0, y0, x1, y1 (registers ok)
+    mov dword [tut_plan+%1*16], %2
+    mov dword [tut_plan+%1*16+4], %3
+    mov dword [tut_plan+%1*16+8], %4
+    mov dword [tut_plan+%1*16+12], %5
+%endmacro
 
 ; ---------------------------------------------------------------------
 ;  starting, finishing
@@ -412,58 +441,120 @@ FUNC tut_enter
     call tut_meteor_begin
     RETURN
 .t:
-    ; service spots are found when their step begins (the land changes)
+    ; what's there already: the step counts what gets added to it
+    mov dword [tut_base], 0
+    cmp dword [rbx+16], SK_TOOL
+    jne .spots
+    call tut_kind_of
+    test edi, edi
+    jz .spots
+    call tut_more
+    mov [tut_base], eax
+.spots:
+    ; spots are found when their step begins (the land changes); every
+    ; building faces the street
     mov eax, [rbx+44]
-    cmp eax, SL_FIRE
+    cmp eax, SL_COAL
+    jne .s0
+    mov edi, SL_COAL
+    mov esi, [tut_ex]
+    sub esi, [tut_hx]
+    sub esi, 3                      ; by the creek, past the industry
+    mov edx, 1
+    mov ecx, 3
+    call tut_find_spot
+    RETURN
+.s0:
+    cmp eax, SL_PLINE
     jne .s1
+    ; from the industry's east edge to the plant, along its middle row
+    mov eax, [tut_plan+SL_I*16+8]
+    inc eax
+    mov ecx, [tut_plan+SL_COAL*16+4]
+    inc ecx
+    mov edx, [tut_plan+SL_COAL*16]
+    dec edx
+    PSET SL_PLINE, eax, ecx, edx, ecx
+    RETURN
+.s1:
+    cmp eax, SL_FIRE
+    jne .s2
     mov edi, SL_FIRE
-    mov esi, 13
-    mov edx, -3
+    mov esi, 10
+    mov edx, -2
     mov ecx, 2
     call tut_find_spot
     RETURN
-.s1:
-    cmp eax, SL_CLINIC
-    jne .s2
-    mov edi, SL_CLINIC
-    mov esi, 13
-    mov edx, 2
-    mov ecx, 1
-    call tut_find_spot
-    RETURN
 .s2:
-    cmp eax, SL_SCHOOL
+    cmp eax, SL_CLINIC
     jne .s3
-    mov edi, SL_SCHOOL
-    mov esi, 15
-    mov edx, 2
+    mov edi, SL_CLINIC
+    mov esi, 7                      ; between the shops and the industry
+    mov edx, 1
     mov ecx, 1
     call tut_find_spot
     RETURN
 .s3:
-    cmp eax, SL_LANDF
+    cmp eax, SL_SCHOOL
     jne .s4
-    mov edi, SL_LANDF
-    mov esi, 17
-    mov edx, 5
-    mov ecx, 2
-    call tut_find_spot
-    RETURN
-.s4:
-    cmp eax, SL_PARK
-    jne .s5
-    mov edi, SL_PARK
-    mov esi, 5
-    mov edx, -5
+    mov edi, SL_SCHOOL
+    mov esi, 8
+    mov edx, 1
     mov ecx, 1
     call tut_find_spot
     RETURN
+.s4:
+    cmp eax, SL_LANDF
+    jne .s5
+    mov edi, SL_LANDF
+    mov esi, [tut_ex]
+    sub esi, [tut_hx]
+    sub esi, 3                      ; far from the homes
+    mov edx, -2
+    mov ecx, 2
+    call tut_find_spot
+    RETURN
 .s5:
+    cmp eax, SL_PARK
+    jne .s6
+    mov edi, SL_PARK
+    mov esi, 9                      ; next to the homes
+    mov edx, -1
+    mov ecx, 1
+    call tut_find_spot
+    RETURN
+.s6:
     cmp eax, SL_HOUSE
     jne .o
     call tut_find_house
 .o:
     RETURN
+
+; the kind a tool step counts (rbx step) -> edi, 0 if none
+tut_kind_of:
+    mov eax, [rbx+48]
+    mov ecx, [rbx+52]
+    xor edi, edi
+    cmp eax, DK_PATHROAD
+    jne .a
+    mov edi, KD_ROAD
+    ret
+.a: cmp eax, DK_RECTZONE
+    jne .b
+    lea edi, [rcx+KD_ZONE]
+    ret
+.b: cmp eax, DK_SVC
+    jne .c
+    lea edi, [rcx+KD_SVC]
+    ret
+.c: cmp eax, DK_PYLONS
+    jne .d
+    mov edi, KD_PYLON
+    ret
+.d: cmp eax, DK_PATHPIPE
+    jne .e
+    mov edi, KD_PIPE
+.e: ret
 
 ; the current step's record -> rax
 tut_cur:
@@ -475,12 +566,6 @@ tut_cur:
 ; ---------------------------------------------------------------------
 ;  the plan
 ; ---------------------------------------------------------------------
-%macro PSET 5                       ; slot, x0, y0, x1, y1 (registers ok)
-    mov dword [tut_plan+%1*16], %2
-    mov dword [tut_plan+%1*16+4], %3
-    mov dword [tut_plan+%1*16+8], %4
-    mov dword [tut_plan+%1*16+12], %5
-%endmacro
 
 FUNC tut_plan_make, 16
     ; the end of the highway on its row
@@ -499,26 +584,15 @@ FUNC tut_plan_make, 16
     inc ebx
     cmp ebx, 64
     jl .hw
+    mov [tut_hx], r12d
     mov r13d, [hwy_row]             ; row
     ; the street runs to just before the creek
-    lea ebx, [r12+1]
-    lea r14d, [r12+18]              ; end if there's no water
-.wf:
-    lea eax, [r12+34]
-    cmp ebx, eax
-    jg .we
-    mov edi, ebx
     mov esi, r13d
-    call tile_at
-    test rax, rax
-    jz .we
-    cmp byte [rax+T_TERRAIN], TER_WATER
-    jne .wn
-    lea r14d, [rbx-2]
-    jmp .we
-.wn:
-    inc ebx
-    jmp .wf
+    call tut_creek_x
+    lea r14d, [rax-2]
+    cmp eax, -1
+    jne .we
+    lea r14d, [r12+20]              ; no water
 .we:
     lea eax, [r12+24]
     cmp r14d, eax
@@ -530,13 +604,14 @@ FUNC tut_plan_make, 16
     jge .e2
     mov r14d, eax
 .e2:
-    mov [rbp-48], r14d              ; street end x
+    mov [tut_ex], r14d
     ; hx = r12, row = r13, ex = r14
     lea eax, [r12+1]
     PSET SL_ROAD, eax, r13d, r14d, r13d
+    ; homes on the near side, shops across the street, industry further on
     lea eax, [r12+2]
     lea ecx, [r13-3]
-    lea edx, [r12+9]
+    lea edx, [r12+8]
     lea r8d, [r13-1]
     PSET SL_R, eax, ecx, edx, r8d
     lea eax, [r12+2]
@@ -544,34 +619,166 @@ FUNC tut_plan_make, 16
     lea edx, [r12+6]
     lea r8d, [r13+2]
     PSET SL_C, eax, ecx, edx, r8d
-    lea eax, [r12+7]
+    lea eax, [r12+9]
     lea ecx, [r13+1]
-    lea edx, [r12+11]
+    lea edx, [r12+13]
     lea r8d, [r13+3]
     PSET SL_I, eax, ecx, edx, r8d
-    lea eax, [r12+1]
-    lea ecx, [r13-3]
-    PSET SL_WIND, eax, ecx, eax, ecx
-    lea eax, [r12+1]
-    lea ecx, [r13-2]
-    lea r8d, [r13+2]
-    PSET SL_PLINE, eax, ecx, eax, r8d
-    lea eax, [r12+10]
-    lea ecx, [r13-1]
-    PSET SL_TOWER, eax, ecx, eax, ecx
-    lea eax, [r12+2]
-    PSET SL_PIPE, eax, r13d, r14d, r13d
+    ; the plant by the creek (found again when its step begins), the line
+    ; from the industry to it
+    lea eax, [r14-3]
+    lea ecx, [r13+1]
+    lea edx, [r14-1]
+    lea r8d, [r13+3]
+    PSET SL_COAL, eax, ecx, edx, r8d
+    lea eax, [r12+14]
+    lea ecx, [r13+2]
+    lea edx, [r14-4]
+    PSET SL_PLINE, eax, ecx, edx, ecx
+    ; the pump at the end of the street, on the bank; the pipe from it
     lea eax, [r14+1]
-    PSET SL_SEWER, eax, r13d, eax, r13d
-    ; services fall back near the middle until found
-    mov [tut_hx], r12d
+    PSET SL_PUMP, eax, r13d, eax, r13d
+    lea eax, [r12+2]
+    PSET SL_PIPE, r14d, r13d, eax, r13d
+    ; the outlet far up the creek, on the bank
+    lea ebx, [r13-OUTLET_DY]
+    mov esi, ebx
+    call tut_creek_x
+    lea r15d, [rax-1]               ; outlet x
+    cmp eax, -1
+    jne .ox
+    lea r15d, [r14+1]
+.ox:
+    PSET SL_SEWER, r15d, ebx, r15d, ebx
+    ; its pipe: up from the street, in a column clear of the creek all
+    ; the way (x - 2 of the creek on every row), then along to the outlet
+    mov [rbp-48], r14d              ; column
+    mov [rbp-52], ebx               ; row
+.col:
+    mov esi, [rbp-52]
+    call tut_creek_x
+    cmp eax, -1
+    je .cn
+    sub eax, 2
+    cmp eax, [rbp-48]
+    jge .cn
+    mov [rbp-48], eax
+.cn:
+    inc dword [rbp-52]
+    cmp [rbp-52], r13d
+    jle .col
+    mov eax, [rbp-48]
+    lea ecx, [r15-1]
+    PSET SL_PIPE2, eax, r13d, ecx, ebx
     RETURN
 
 section .bss
 tut_hx resd 1
+tut_ex resd 1
+section .data
+; path slots hold a start and an end, and run as the line tools lay them
+; (an L, the longer way first); the others are rectangles
+tut_slotpath db 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1
 section .text
 
-; find a free square of size ecx near (hx + esi, row + edx) -> slot edi
+; the first water on row esi east of the highway's end -> eax, -1 if none
+FUNC tut_creek_x
+    mov r12d, esi
+    mov ebx, [tut_hx]
+    add ebx, 8
+    lea r13d, [rbx+34]
+.l:
+    cmp ebx, r13d
+    jg .none
+    mov edi, ebx
+    mov esi, r12d
+    call tile_at
+    test rax, rax
+    jz .none
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    je .y
+    inc ebx
+    jmp .l
+.y:
+    mov eax, ebx
+    RETURN
+.none:
+    mov eax, -1
+    RETURN
+
+; leg edx (0 or 1) of plan slot esi as a tile rect -> tut_legr; eax 0 if
+; the slot has no such leg
+FUNC tut_leg
+    mov r15d, edx
+    mov eax, esi
+    shl eax, 4
+    lea rbx, [tut_plan+rax]
+    mov r12d, [rbx]                 ; x0
+    mov r13d, [rbx+4]               ; y0
+    mov r14d, [rbx+8]               ; x1
+    mov r8d, [rbx+12]               ; y1
+    mov eax, esi
+    cmp byte [tut_slotpath+rax], 0
+    jne .path
+    test r15d, r15d
+    jnz .none
+    jmp .put
+.path:
+    mov eax, r14d
+    sub eax, r12d
+    mov ecx, eax
+    sar ecx, 31
+    xor eax, ecx
+    sub eax, ecx                    ; |dx|
+    mov edx, r8d
+    sub edx, r13d
+    mov ecx, edx
+    sar ecx, 31
+    xor edx, ecx
+    sub edx, ecx                    ; |dy|
+    cmp eax, edx
+    jl .yfirst
+    ; along x on the start row, then along y on the end column
+    test r15d, r15d
+    jnz .x1
+    mov r8d, r13d
+    jmp .put
+.x1:
+    cmp r8d, r13d
+    je .none
+    mov r12d, r14d
+    jmp .put
+.yfirst:
+    ; along y on the start column, then along x on the end row
+    test r15d, r15d
+    jnz .y1
+    mov r14d, r12d
+    jmp .put
+.y1:
+    cmp r14d, r12d
+    je .none
+    mov r13d, r8d
+.put:
+    cmp r12d, r14d
+    jle .nx
+    xchg r12d, r14d
+.nx:
+    cmp r13d, r8d
+    jle .ny
+    xchg r13d, r8d
+.ny:
+    mov [tut_legr], r12d
+    mov [tut_legr+4], r13d
+    mov [tut_legr+8], r14d
+    mov [tut_legr+12], r8d
+    mov eax, 1
+    RETURN
+.none:
+    xor eax, eax
+    RETURN
+
+; find a free square of size ecx that faces a street (a road tile beside
+; one of its edges), nearest to (hx + esi, row + edx) -> slot edi
 FUNC tut_find_spot, 32
     mov [rbp-48], edi               ; slot
     mov eax, [tut_hx]
@@ -628,6 +835,50 @@ FUNC tut_find_spot, 32
     inc r14d
     jmp .fy
 .ok:
+    ; a street beside it: a tile just outside one of its edges
+    mov r14d, -1                    ; ry
+.ay:
+    cmp r14d, [rbp-60]
+    jg .no
+    mov r15d, -1                    ; rx
+.ax:
+    cmp r15d, [rbp-60]
+    jg .ayn
+    xor ecx, ecx                    ; how many of rx, ry are outside
+    cmp r15d, 0
+    jl .o1
+    cmp r15d, [rbp-60]
+    jl .i1
+.o1:
+    inc ecx
+.i1:
+    cmp r14d, 0
+    jl .o2
+    cmp r14d, [rbp-60]
+    jl .i2
+.o2:
+    inc ecx
+.i2:
+    cmp ecx, 1
+    jne .axn
+    mov edi, [rbp-76]
+    add edi, r15d
+    mov esi, [rbp-80]
+    add esi, r14d
+    call tile_at
+    test rax, rax
+    jz .axn
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .axn
+    cmp byte [rax+T_ROADTYPE], RT_HIGHWAY
+    jne .road
+.axn:
+    inc r15d
+    jmp .ax
+.ayn:
+    inc r14d
+    jmp .ay
+.road:
     mov eax, r12d
     imul eax, eax
     mov ecx, r13d
@@ -832,24 +1083,28 @@ FUNC tut_more
     mov eax, r12d
     RETURN
 
-; tiles of kind edi inside plan slot esi -> eax matched, edx area
-FUNC tut_in_slot
+; tiles of kind edi on plan slot esi (its legs) -> eax matched, edx area
+FUNC tut_in_slot, 16
     mov ebx, edi
-    shl esi, 4
-    lea r15, [tut_plan+rsi]
+    mov [rbp-48], esi
+    mov dword [rbp-52], 0           ; leg
     xor r14d, r14d                  ; matched
     xor r13d, r13d                  ; area
-    mov r12d, [r15+4]
+.leg:
+    mov esi, [rbp-48]
+    mov edx, [rbp-52]
+    call tut_leg
+    test eax, eax
+    jz .ln
+    mov r12d, [tut_legr+4]
 .y:
-    cmp r12d, [r15+12]
-    jg .d
-    mov eax, [r15]
-    mov [rsp], eax
+    cmp r12d, [tut_legr+12]
+    jg .ln
+    mov r15d, [tut_legr]
 .x:
-    mov eax, [rsp]
-    cmp eax, [r15+8]
+    cmp r15d, [tut_legr+8]
     jg .yn
-    mov edi, eax
+    mov edi, r15d
     mov esi, r12d
     call tile_at
     test rax, rax
@@ -860,18 +1115,21 @@ FUNC tut_in_slot
     call tut_match
     add r14d, eax
 .xn:
-    inc dword [rsp]
+    inc r15d
     jmp .x
 .yn:
     inc r12d
     jmp .y
-.d:
+.ln:
+    inc dword [rbp-52]
+    cmp dword [rbp-52], 2
+    jl .leg
     mov eax, r14d
     mov edx, r13d
     RETURN
 
 ; is at least 70% of plan slot esi of kind edi, or have that many been
-; built anywhere? -> eax
+; built anywhere in this step? -> eax
 FUNC tut_slot_done
     mov r12d, edi
     call tut_in_slot
@@ -883,6 +1141,7 @@ FUNC tut_slot_done
     mov r13d, edx
     mov edi, r12d
     call tut_more
+    sub eax, [tut_base]
     cmp eax, r13d
     jge .y
     xor eax, eax
@@ -925,8 +1184,11 @@ FUNC tut_done
     cmp eax, SK_GROW
     jne .k3
     xor eax, eax
+    cmp dword [tut_st], 180         ; a moment to read it, even if they're in
+    jl .gn
     cmp dword [population], 20
     setge al
+.gn:
     RETURN
 .k3:
     cmp eax, SK_DEMAND
@@ -963,6 +1225,7 @@ FUNC tut_done
     jne .d4
     lea edi, [r12+KD_SVC]
     call tut_more
+    sub eax, [tut_base]
     cmp eax, 0
     setg al
     movzx eax, al
@@ -972,6 +1235,7 @@ FUNC tut_done
     jne .d5
     mov edi, KD_PYLON
     call tut_more
+    sub eax, [tut_base]
     cmp eax, 2
     setge al
     movzx eax, al
@@ -1170,8 +1434,27 @@ FUNC tut_update
 ; ---------------------------------------------------------------------
 ;  the meteor shower
 ; ---------------------------------------------------------------------
-; is tile index edi something the tour built? -> eax
+; is tile index edi something the tour built in the village? -> eax
+; (the outlet far up the creek, and anything built well away, is spared)
 tut_built:
+    mov eax, edi
+    and eax, MAP_W-1
+    mov ecx, [tut_hx]
+    cmp eax, ecx
+    jl .n
+    mov ecx, [tut_ex]
+    add ecx, 2
+    cmp eax, ecx
+    jg .n
+    mov eax, edi
+    shr eax, MAP_SHIFT
+    mov ecx, [hwy_row]
+    sub ecx, 4
+    cmp eax, ecx
+    jl .n
+    add ecx, 8
+    cmp eax, ecx
+    jg .n
     mov eax, edi
     shl eax, TILE_SHIFT
     movzx ecx, byte [tiles+rax+T_OBJ]
@@ -1480,11 +1763,18 @@ FUNC ui_disc, 16
 .o:
     RETURN
 
-; outline plan slot edi (a tile rect) in colour esi
-FUNC tut_outline_slot, 48
+; outline plan slot edi (each of its legs) in colour esi
+FUNC tut_outline_slot, 64
     mov [rbp-48], esi
-    shl edi, 4
-    lea rbx, [tut_plan+rdi]
+    mov [rbp-84], edi
+    mov dword [rbp-88], 0
+.leg:
+    mov esi, [rbp-84]
+    mov edx, [rbp-88]
+    call tut_leg
+    test eax, eax
+    jz .ln
+    lea rbx, [tut_legr]
     ; corners: top of (x0,y0), top of (x1+1,y0), top of (x1+1,y1+1),
     ; top of (x0,y1+1)
     mov edi, [rbx]
@@ -1531,6 +1821,10 @@ FUNC tut_outline_slot, 48
     TLINE 60, 64, 68, 72
     TLINE 68, 72, 76, 80
     TLINE 76, 80, 52, 56
+.ln:
+    inc dword [rbp-88]
+    cmp dword [rbp-88], 2
+    jl .leg
     RETURN
 
 ; a bouncing arrow pointing down at the centre of tile (edi, esi)
@@ -1714,6 +2008,24 @@ FUNC tut_ui_target, 16
     xor eax, eax
     RETURN
 
+; is tile (edi, esi) well inside the view? -> eax
+tut_on_screen:
+    call tile_screen
+    mov ecx, eax
+    xor eax, eax
+    cmp ecx, 16
+    jl .n
+    add ecx, 16
+    cmp ecx, [fb_w]
+    jg .n
+    cmp edx, 50
+    jl .n
+    add edx, 40
+    cmp edx, [fb_h]
+    jg .n
+    inc eax
+.n: ret
+
 ; bring this step's world target into view once
 FUNC tut_frame_target
     cmp dword [tut_camset], 0
@@ -1754,16 +2066,14 @@ FUNC tut_frame_target
     ; and both ends of a long path
     mov edi, [rbx]
     mov esi, [rbx+4]
-    call tile_screen
-    cmp eax, 16
-    jl .c
+    call tut_on_screen
+    test eax, eax
+    jz .c
     mov edi, [rbx+8]
     mov esi, [rbx+12]
-    call tile_screen
-    mov ecx, [fb_w]
-    sub ecx, 16
-    cmp eax, ecx
-    jg .c
+    call tut_on_screen
+    test eax, eax
+    jz .c
     jmp .done
 .c:
     mov edi, r12d
@@ -1849,18 +2159,71 @@ FUNC draw_tutorial, 64
     lea rbx, [tut_plan+rax]
     mov edi, [rbx]
     mov esi, [rbx+4]
+    cmp dword [r15+40], WT_RECT
+    jne .spot
+    ; an area: from its left corner to its right one (the top one can be
+    ; under the card)
+    mov esi, [rbx+12]
+    jmp .aim
+.spot:
+    cmp dword [r15+40], WT_SPOT
+    jne .aim
+    ; a building goes down centred on the pointer: aim at its middle
+    mov eax, [rbx+8]
+    sub eax, edi
+    sar eax, 1
+    add edi, eax
+    mov eax, [rbx+12]
+    sub eax, esi
+    sar eax, 1
+    add esi, eax
+.aim:
+    mov [rbp-76], edi
+    mov [rbp-80], esi
     call tut_w2win
     mov [tut_wax], eax
     mov [tut_way], edx
     mov edi, [rbx+8]
     mov esi, [rbx+12]
+    cmp dword [r15+40], WT_RECT
+    jne .bend
+    mov esi, [rbx+4]
+.bend:
     call tut_w2win
     mov [tut_wbx], eax
     mov [tut_wby], edx
+    ; its top and bottom on screen (ui px), to keep the card off it
+    mov edi, [rbx]
+    mov eax, [rbx+8]
+    cmp edi, eax
+    cmovg edi, eax
+    mov esi, [rbx+4]
+    mov eax, [rbx+12]
+    cmp esi, eax
+    cmovg esi, eax
+    xor edx, edx
+    xor ecx, ecx
+    call tut_w2ui
+    sub edx, 24                     ; room for the arrow
+    mov [rbp-84], edx
+    mov edi, [rbx]
+    mov eax, [rbx+8]
+    cmp edi, eax
+    cmovl edi, eax
+    inc edi
+    mov esi, [rbx+4]
+    mov eax, [rbx+12]
+    cmp esi, eax
+    cmovl esi, eax
+    inc esi
+    xor edx, edx
+    xor ecx, ecx
+    call tut_w2ui
+    mov [rbp-88], edx
     cmp dword [r15+40], WT_RECT
     je .card
-    mov edi, [rbx]
-    mov esi, [rbx+4]
+    mov edi, [rbp-76]
+    mov esi, [rbp-80]
     call tut_arrow
     jmp .card
 .uit:
@@ -1961,6 +2324,23 @@ FUNC draw_tutorial, 64
     sub r14d, 40
     jmp .place
 .nlow:
+    cmp dword [tut_hl], 2
+    jne .nwt
+    ; a world target under the card: the card goes to the bottom, if the
+    ; target is clear of it there
+    lea eax, [r14+r13+8]
+    cmp [rbp-84], eax
+    jge .place
+    mov eax, [ui_h]
+    sub eax, r13d
+    sub eax, 40
+    mov ecx, [rbp-88]
+    add ecx, 8
+    cmp ecx, eax
+    jg .place
+    mov r14d, eax
+    jmp .place
+.nwt:
     cmp dword [tut_hl], 1
     jne .place
     ; a menu item: beside the menu, so the card hides none of it
@@ -2347,6 +2727,10 @@ bot_cfmt    db "CENTER %d,%d -> cam %d,%d zoom %d", 10, 0
 bot_mfmt    db "meteor_%03d.bmp", 0
 bot_efmt    db "TOUR end frame %d: money %d, year %d, population %d, bubble %d", 10, 0
 bot_shotfmt db "tour_%02d_%d.bmp", 0
+bot_sv1     db "SERVED %d buildings: %d powered, %d water, %d sewage, %d dirty", 10, 0
+bot_sv2     db "SERVED %d services: %d powered, %d with a road", 10, 0
+bot_sv3     db "SUPPLY power %d/%d, water %d/%d", 10, 0
+bot_sv4     db "SUPPLY sewage %d/%d, population %d", 10, 0
 bot_shotname times 32 db 0
 section .text
 
@@ -2730,6 +3114,11 @@ FUNC tut_bot_log, 16
     jl .pl
 .np:
     call tut_cur
+    cmp dword [rax+16], SK_METEOR
+    jne .ns
+    call tut_bot_served
+.ns:
+    call tut_cur
     lea rdi, [bot_fmt]
     mov esi, [frame_count]
     mov edx, [tut_step]
@@ -2739,6 +3128,92 @@ FUNC tut_bot_log, 16
     xor eax, eax
     CALLC printf
 .o:
+    RETURN
+
+; how well the village is served, before the meteors: the test that
+; what the tour builds is enough
+FUNC tut_bot_served, 48
+    xor eax, eax
+    mov [rbp-48], eax               ; buildings
+    mov [rbp-52], eax               ; powered
+    mov [rbp-56], eax               ; water
+    mov [rbp-60], eax               ; sewage
+    mov [rbp-64], eax               ; dirty
+    mov [rbp-68], eax               ; services
+    mov [rbp-72], eax               ; powered
+    mov [rbp-76], eax               ; with a road
+    xor ebx, ebx
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    lea r12, [tiles+rax]
+    test byte [r12+T_FLAGS], F_ANCHOR
+    jz .n
+    cmp byte [r12+T_OBJ], OBJ_SERVICE
+    je .svc
+    cmp byte [r12+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    test byte [r12+T_FLAGS], F_BUILD
+    jnz .n
+    inc dword [rbp-48]
+    test byte [r12+T_FLAGS], F_POWER
+    jz .z1
+    inc dword [rbp-52]
+.z1:
+    test byte [r12+T_FLAGS], F_WATER
+    jz .z2
+    inc dword [rbp-56]
+.z2:
+    test byte [r12+T_FLAGS2], F2_SEWAGE
+    jz .z3
+    inc dword [rbp-60]
+.z3:
+    test byte [r12+T_FLAGS2], F2_DIRTY
+    jz .n
+    inc dword [rbp-64]
+    jmp .n
+.svc:
+    inc dword [rbp-68]
+    test byte [r12+T_FLAGS], F_POWER
+    jz .s1
+    inc dword [rbp-72]
+.s1:
+    mov edi, ebx
+    call access_road
+    cmp eax, -1
+    je .n
+    inc dword [rbp-76]
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    lea rdi, [bot_sv1]
+    mov esi, [rbp-48]
+    mov edx, [rbp-52]
+    mov ecx, [rbp-56]
+    mov r8d, [rbp-60]
+    mov r9d, [rbp-64]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [bot_sv2]
+    mov esi, [rbp-68]
+    mov edx, [rbp-72]
+    mov ecx, [rbp-76]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [bot_sv3]
+    mov esi, [power_demand]
+    mov edx, [power_supply]
+    mov ecx, [water_demand]
+    mov r8d, [water_supply]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [bot_sv4]
+    mov esi, [sewage_demand]
+    mov edx, [sewage_cap]
+    mov ecx, [population]
+    xor eax, eax
+    CALLC printf
     RETURN
 
 ; after a frame is shown: screenshots, and stop when the tour is over
