@@ -1,21 +1,25 @@
 # Trailer pipeline
 
-Everything in the trailer is rendered by the game itself, then graded,
-titled and scored here.
+Everything in the trailer is rendered by the game itself, then cut, graded,
+titled and scored here. The current trailer is `v3/`:
 
-1. **Footage** - `cityssembly --trailer out.raw` runs a scripted director
-   (`src/trailer.asm`): camera moves, a time-lapse of the city growing, a
-   tracking shot, info views, sunset/night, seasons, a meteor and interface
-   shots. It writes raw 960x540 BGRA frames plus shot markers on stdout.
-   ```sh
-   ../cityssembly --trailer raw.bgra > shots.txt
-   ffmpeg -f rawvideo -pix_fmt bgra -s 960x540 -r 30 -i raw.bgra \
-          -c:v libx264 -crf 4 -pix_fmt yuv444p capture.mkv
-   ```
-2. **Instruments** - the game's synthesized samples are dumped from memory
-   (see `dump.gdb` recipe in the commit history) into `samples/`.
-3. **Score** - `python3 music.py` arranges them into `music.wav`, cut to the
-   same 110 BPM bar grid as the edit (`timeline.py`).
-4. **Edit + motion graphics** - `python3 compose.py` renders the titles,
-   code cold-open, grading, bloom, transitions and end card in parallel and
-   muxes `trailer.mp4`.
+1. **City**: `city.py` plans a bay town (a river, a coast, seven districts)
+   that grows in eras, so each neighbourhood gets its own architecture.
+2. **Footage**: `v3/shoot.py` writes a bytecode plan for the in-engine
+   director (`src/trailer.asm`, `--trailer out.raw plan.bin W H`) and films
+   every take at 2560x1440 with world pixels 1:1. The takes are the empty
+   valley, the first road drawing itself, a time-lapse of all eras, the
+   neighbourhoods, info views, golden hour, night fires and the meteor.
+3. **Score**: `v3/score.py` arranges the game's recorded band (the same CC0
+   samples the game plays) on the shared 90 BPM grid in `v3/timeline.py`.
+   A bar is exactly 80 frames.
+4. **Edit**: `v3/compose.py` handles cameras (sub-pixel pans and zooms that
+   keep pixel art crisp), grading, bloom, tilt-shift, letterbox, typography,
+   the voxel logo and the mux into `v3/trailer_v3.mp4`.
+
+```sh
+cd v3 && python3 shoot.py && python3 score.py && python3 compose.py
+python3 compose.py --still 12.5 30   # stills at story bars
+```
+
+`compose.py` in the top folder is the older v2 edit.

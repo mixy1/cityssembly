@@ -133,6 +133,10 @@ def utilities(p):
     # power: nuclear plant in the south-west, wind on the northern hills
     p.place(BK["NUCLEAR"], 30, 104)
     p.place(BK["NUCLEAR"], 33, 105)
+    p.place(BK["NUCLEAR"], 27, 104)
+    # pumps on the river bank by the north highway bridge
+    for x in range(51, 57):
+        p.place(BK["PUMP"], x, 29)
     for i in range(6):
         p.place(BK["WIND"], 40 + i * 3, 10)
     # water towers and sewage by the sea south of the city
@@ -141,12 +145,27 @@ def utilities(p):
         p.place(BK["WTOWER"], 34 + i, 65)
     for i in range(12):
         p.place(BK["WTOWER"], 57 + i, 65)
-    for y in range(104, 118):
-        p.place(BK["SEWAGE"], int(coast_x(y)) - 1, y)
+    for i in range(14):
+        p.place(BK["WTOWER"], 71 + i, 65)
+    # sewage outlets on the beach south of town, along a coastal street
+    prev = None
+    for y in range(104, 123):
+        cx = int(coast_x(y))
+        while is_water(cx - 1, y):
+            cx -= 1
+        rx = cx - 2
+        if prev is not None and prev != rx:
+            p.road(min(prev, rx), y - 1, max(prev, rx), y - 1, RT_STREET)
+        p.road(rx, y, rx, y, RT_STREET)
+        prev = rx
+        p.place(BK["SEWAGE"], cx - 1, y)
     # garbage: incinerators by the power trunk and a landfill in the woods
     p.place(BK["INCIN"], 28, 66)
     p.place(BK["INCIN"], 28, 69)
     p.place(BK["INCIN"], 52, 66)
+    p.place(BK["INCIN"], 44, 31)
+    p.place(BK["INCIN"], 46, 31)
+    p.place(BK["INCIN"], 64, 104)
     p.place(BK["LANDFILL"], 27, 100)
 
 def build_roads(p):
@@ -195,9 +214,15 @@ def stage_shore(p, part):
         vroad(p, 86, 100, 104)
         return
     zone(p, x0, y0, x1, y1, ZONE_R)
-    zone(p, 86, 66, 93, 72, ZONE_RH)
+    zone(p, 86, 66, 93, 72, ZONE_CH)
+    zone(p, 86, 74, 93, 98, ZONE_C)       # beach shops inland, houses by the sand
     p.place(BK["PARK"], 98, 70)
     p.place(BK["FIRE"], 87, 80)
+    p.place(BK["CLINIC"], 95, 83)
+    p.place(BK["CLINIC"], 95, 93)
+    p.place(BK["ELEM"], 99, 87)
+    p.place(BK["POLICE"], 91, 87)
+    p.place(BK["PARK"], 99, 77)
     DISTRICTS["shore"] = (x0, y0, x1, y1)
 
 def stage_uptown(p, part):
@@ -228,8 +253,12 @@ def stage_garden(p, part):
         grid(p, x0, y0, x1, y1, 6, 4)
         return
     zone(p, x0, y0, x1, y1, ZONE_R)
+    zone(p, x0, 70, x1, 74, ZONE_C)       # a high street
     p.trees(30, 70, 54, 96, 12)
     p.place(BK["ELEM"], 43, 79)
+    p.place(BK["HOSPITAL"], 49, 91)
+    p.place(BK["CLINIC"], 37, 77)
+    p.place(BK["POLICE"], 31, 91)
     p.place(BK["PARK"], 37, 87)
     p.place(BK["PARK"], 49, 75)
     DISTRICTS["garden"] = (x0, y0, x1, y1)
@@ -241,13 +270,16 @@ def stage_industry(p, part):
         grid(p, x0, y0, x1, y1, 5, 4)
         grid(p, 28, 42, 48, 60, 4, 3)
         vroad(p, 38, 30, 42, RT_STREET, bridges=True)
+        grid(p, 38, 99, 62, 109, 6, 5)       # the southern industrial park
         return
     zone(p, x0, y0, x1, y1, ZONE_I)
     zone(p, 28, 42, 48, 60, ZONE_R)
     zone(p, 40, 42, 48, 50, ZONE_RH)
     zone(p, 28, 57, 48, 60, ZONE_C)
+    zone(p, 38, 99, 62, 109, ZONE_I)
     p.place(BK["LANDFILL"], 30, 34)
     p.place(BK["BUSDEPOT"], 44, 52)
+    p.place(BK["CLINIC"], 30, 46)
     DISTRICTS["industry"] = (x0, y0, x1, y1)
     DISTRICTS["workers"] = (28, 42, 48, 60)
 
@@ -273,9 +305,12 @@ def stage_north(p, part):
         grid(p, x0, y0, x1, y1, 4, 4)
         return
     zone(p, x0, y0, x1, y1, ZONE_R)
-    zone(p, 76, 18, 90, 26, ZONE_RH)
+    zone(p, 76, 14, 90, 20, ZONE_RH)
+    zone(p, 56, 22, 98, 30, ZONE_O)
     zone(p, 56, 26, 98, 30, ZONE_C)
     p.place(BK["ELEM"], 69, 21)
+    p.place(BK["CLINIC"], 62, 23)
+    p.place(BK["HOSPITAL"], 74, 23)
     p.place(BK["FIRE"], 85, 17)
     p.place(BK["PARK"], 61, 17)
     DISTRICTS["north"] = (x0, y0, x1, y1)
@@ -289,30 +324,50 @@ STAGES = [stage_old_town, stage_north, stage_industry, stage_shore,
           stage_garden, stage_uptown, stage_modern]
 
 
+def connectors(p):
+    """connect every district to the network"""
+    for y in (18, 22, 26, 30, 42, 45, 48, 51, 54, 57, 60):
+        hroad(p, y, 48, 50)                 # industry, workers -> north highway
+    hroad(p, 31, 80, 82)                    # docks -> old town avenue
+    vroad(p, 54, 62, 64)                    # modern -> ring avenue
+    vroad(p, 74, 62, 64)                    # old town -> ring avenue
+    vroad(p, 98, 62, 64)
+
+
 def power_lines(p):
-    """after all streets exist: a trunk from the plant along the free
-    corridor at row 63, and a line through each district's blocks"""
-    p.pline(33, 102, 33, 63)
-    p.pline(27, 63, 101, 63)
-    p.pline(29, 44, 29, 62)            # workers
-    p.pline(29, 44, 47, 44)
-    p.pline(73, 42, 73, 62)            # modern / old town edge
-    p.pline(73, 46, 99, 46)            # old town
-    p.pline(73, 58, 99, 58)
-    p.pline(57, 63, 57, 87)            # uptown
-    p.pline(57, 68, 85, 68)
-    p.pline(57, 84, 85, 84)
-    p.pline(85, 65, 85, 97)            # shore
-    p.pline(85, 68, 99, 68)
-    p.pline(85, 80, 99, 80)
-    p.pline(31, 63, 31, 97)            # garden
-    p.pline(31, 76, 53, 76)
-    p.pline(31, 88, 53, 88)
-    p.pline(41, 11, 41, 62)            # wind farm, industry, workers, trunk
-    p.pline(41, 13, 99, 13)            # north
-    p.pline(57, 13, 57, 29)
-    p.pline(57, 20, 97, 20)
-    p.pline(73, 28, 73, 42)            # docks and the bridge to old town
+    """after all streets exist. The power line tool only joins lines at
+    drag end points, so the network is drawn as chains between known
+    pylons: a trunk along the free corridor at row 63, branches into the
+    middle of each district's blocks."""
+    def chain(*pts):
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            p.pline(x0, y0, x1, y1)
+    # plant -> trunk, with the garden rows branching off
+    chain((33, 102), (33, 88), (33, 76), (33, 63))
+    chain((33, 76), (53, 76))
+    chain((33, 102), (61, 102))
+    chain((33, 88), (53, 88))
+    # the corridor trunk
+    chain((29, 63), (33, 63), (41, 63), (57, 63), (73, 63), (85, 63), (101, 63))
+    # workers
+    chain((29, 63), (29, 44), (47, 44))
+    # industry, the wind farm and the north bank
+    chain((41, 63), (41, 44), (41, 13), (43, 10))
+    chain((41, 13), (57, 13), (97, 13))
+    chain((57, 13), (57, 20), (57, 29))
+    chain((57, 20), (97, 20))
+    # modern, old town, the docks
+    chain((73, 63), (73, 58), (73, 46), (73, 42), (73, 28))
+    chain((73, 46), (99, 46))
+    chain((73, 58), (99, 58))
+    # uptown
+    chain((57, 63), (57, 68), (57, 84), (57, 87))
+    chain((57, 68), (85, 68))
+    chain((57, 84), (85, 84))
+    # shore
+    chain((85, 63), (85, 68), (85, 80), (85, 97))
+    chain((85, 68), (99, 68))
+    chain((85, 80), (99, 80))
 
 
 def build(p, film=None):
@@ -323,13 +378,7 @@ def build(p, film=None):
     build_roads(p)
     for st in STAGES:
         st(p, 'roads')
-    # connect every district to the network
-    for y in (18, 22, 26, 30, 42, 45, 48, 51, 54, 57, 60):
-        hroad(p, y, 48, 50)                 # industry, workers -> north highway
-    hroad(p, 31, 80, 82)                    # docks -> old town avenue
-    vroad(p, 54, 62, 64)                    # modern -> ring avenue
-    vroad(p, 74, 62, 64)                    # old town -> ring avenue
-    vroad(p, 98, 62, 64)
+    connectors(p)
     utilities(p)
     power_lines(p)
     stops(p)

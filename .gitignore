@@ -18,3 +18,7 @@ trailer_work/__pycache__/
 *.mp4
 site/
 .wrangler/
+trailer_work/v3/cap/
+trailer_work/v3/seg/
+trailer_work/v3/stills/
+trailer_work/v3/*.log

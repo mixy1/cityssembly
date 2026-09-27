@@ -25,6 +25,8 @@ tr_follow       resd 1          ; vehicle slot, -1 = off
 tr_todspeed     resd 1
 tr_acc          resd 1
 tr_prob         resd 12
+tr_seasonspeed  resd 1
+tr_seasonacc    resd 1
 tr_plan         resb TR_PLAN_MAX
 
 section .data
@@ -33,6 +35,7 @@ str_shotfmt      db "SHOT %d %d", 10, 0
 str_tilefmt      db "TILE %d %d %d", 10, 0
 str_carfmt       db "CAR %d %d %d", 10, 0
 str_opfmt        db "bad trailer op %d", 10, 0
+str_outfmt       db "OUT %s %d", 10, 0
 str_benchfmt     db "BENCH us/frame: palette %d world %d agents %d light %d present-copy %d", 10, 0
 str_statfmt      db "STAT pop %d power %d/%d water %d/%d sewage %d/%d", 10, 0
 str_statfmt3     db "STAT3 problems: power %d water %d sewage %d garbage %d goods %d workers %d", 10, 0
@@ -70,6 +73,13 @@ FUNC tr_ticks
     mov eax, [tr_todspeed]
     add [tod], eax
     and dword [tod], 0xFFFF
+    mov eax, [tr_seasonspeed]
+    add [tr_seasonacc], eax
+    mov eax, [tr_seasonacc]
+    shr eax, 4
+    and dword [tr_seasonacc], 15
+    add [season_pos], eax
+    and dword [season_pos], 1023
     inc dword [water_phase]
     dec ebx
     jmp .l
@@ -364,7 +374,7 @@ FUNC tr_nets
     RETURN
 
 ; animate a road being drawn (x0 y0 x1 y1 type rate ticks)
-; rate = tiles per frame in 1/16
+; rate = tiles per frame in 1/256
 FUNC tr_roadanim, 32
     call tr_arg
     mov r12d, eax
@@ -385,9 +395,9 @@ FUNC tr_roadanim, 32
     mov eax, [rbp-60]
     add [tr_acc], eax
 .tile:
-    cmp dword [tr_acc], 16
+    cmp dword [tr_acc], 256
     jl .film
-    sub dword [tr_acc], 16
+    sub dword [tr_acc], 256
     mov edi, r12d
     mov esi, r13d
     mov edx, [rbp-56]
@@ -560,6 +570,7 @@ tr_ops:
     dq tr_op_fire, tr_op_speed, tr_op_year, tr_op_confetti, tr_op_trees
     dq tr_op_clear, tr_op_load, tr_op_light, tr_op_money, tr_op_lock
     dq tr_op_save, tr_op_drag, tr_op_stat, tr_op_lforce, tr_op_bench
+    dq tr_op_out, tr_op_todspeed2, tr_op_seasonspeed
 TR_NOPS equ ($-tr_ops)/8
 section .text
 
@@ -984,4 +995,36 @@ tr_op_bench:
     mov r9d, [rbp-124]
     xor eax, eax
     call printf
+    jmp trailer_run.next
+; switch the film to another file (a NUL-terminated name follows)
+tr_op_out:
+    mov rbx, [tr_pc]
+    mov r12, rbx
+.os:
+    cmp byte [rbx], 0
+    je .oe
+    inc rbx
+    jmp .os
+.oe:
+    inc rbx
+    mov [tr_pc], rbx
+    mov rdi, [tr_rw]
+    CALLC SDL_RWclose
+    mov rdi, r12
+    lea rsi, [str_wb]
+    CALLC SDL_RWFromFile
+    mov [tr_rw], rax
+    lea rdi, [str_outfmt]
+    mov rsi, r12
+    mov edx, [tr_frames]
+    xor eax, eax
+    call printf
+    jmp trailer_run.next
+; time of day speed per tick, in 1/16 (fine control for time-lapses)
+tr_op_todspeed2:
+    TRARGS [tr_todspeed]
+    jmp trailer_run.next
+; seasons advance while filming (per tick, 1/16 of a step)
+tr_op_seasonspeed:
+    TRARGS [tr_seasonspeed]
     jmp trailer_run.next

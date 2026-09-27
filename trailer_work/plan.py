@@ -13,7 +13,7 @@ import numpy as np
 
 OPS = ["end", "terrain", "road", "zone", "place", "pline", "stop", "nets", "ff", "mark",
        "cam", "zoom", "vel", "tod", "season", "film", "roadanim", "follow", "overlay", "meteor",
-       "fire", "speed", "year", "confetti", "trees", "clear", "load", "light", "money", "lock", "save", "drag", "stat", "lforce", "bench"]
+       "fire", "speed", "year", "confetti", "trees", "clear", "load", "light", "money", "lock", "save", "drag", "stat", "lforce", "bench", "out", "todspeed2", "seasonspeed"]
 OP = {n: i for i, n in enumerate(OPS)}
 
 # game constants
@@ -57,6 +57,11 @@ class Plan:
 
     def savefile(self, path):
         self.b.append(OP["save"])
+        self.b += path.encode() + b"\0"
+        return self
+
+    def outfile(self, path):
+        self.b.append(OP["out"])
         self.b += path.encode() + b"\0"
         return self
 
