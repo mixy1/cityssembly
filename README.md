@@ -35,14 +35,15 @@ Run `dist/cityssembly.exe` from Windows, or straight from WSL with
 ## Playing
 
 Start by extending one of the two **regional highways** (west and north) with
-a road, zone some homes and industry next to it, and add a power plant. Every
-tool shows its own **info view** while you use it:
+a road, zone some homes and industry next to it, and add a power plant.
+Utility and service tools show their **info view** while you use them:
 
 - power tools show the grid
 - water tools show the underground **pipe network** and who is served
-- zoning shows desirability for that zone
-- roads show traffic
 - services show their coverage
+
+All other views (traffic, land value, pollution, desirability...) are one
+press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
 

@@ -127,8 +127,8 @@ sm_leisure  dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK, -1
 sm_overlay  dd 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009
             dd 1010, 1011, 1012, 1013, 1014, 1015, -1
 ; the info view a submenu shows while it is open
-submenu_view dd OV_TRAFFIC, OV_DESIRE_R, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
-             dd OV_HEALTH, OV_EDU, OV_TRANSIT, OV_LANDVAL, 0
+submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
+             dd OV_HEALTH, OV_EDU, OV_TRANSIT, 0, 0
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
@@ -1621,30 +1621,13 @@ FUNC compute_eff_overlay
     jmp .set
 .t1:
     cmp ecx, T_PIPE
-    jne .t2
-    mov eax, OV_WATER
-    jmp .set
-.t2:
-    cmp ecx, T_ROAD
     jne .t3
-    mov eax, OV_TRAFFIC
+    mov eax, OV_WATER
     jmp .set
 .t3:
     cmp ecx, T_BUSSTOP
-    jne .t4
-    mov eax, OV_TRANSIT
-    jmp .set
-.t4:
-    cmp ecx, T_TREE
-    jne .t5
-    mov eax, OV_POLLUTE
-    jmp .set
-.t5:
-    cmp ecx, T_ZONETOOL
     jne .t6
-    mov ecx, [zone_type]
-    movzx eax, byte [zone_class+rcx]
-    add eax, OV_DESIRE_R
+    mov eax, OV_TRANSIT
     jmp .set
 .t6:
     cmp ecx, T_BUILD
@@ -1663,7 +1646,7 @@ FUNC compute_eff_overlay
     mov [eff_overlay], eax
     RETURN
 section .data
-cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRANSIT, OV_LANDVAL
+cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRANSIT, 0
 section .text
 
 ; =====================================================================
