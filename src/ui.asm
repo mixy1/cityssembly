@@ -22,6 +22,8 @@ PANEL_HELP     equ 3
 PANEL_POLICIES equ 4
 PANEL_STATS    equ 5
 PANEL_SETTINGS equ 6
+PANEL_SAVE     equ 7
+PANEL_LOAD     equ 8
 
 MAX_TL      equ 1100
 NOTIFS      equ 5
@@ -1548,12 +1550,14 @@ FUNC draw_menu, 16
     MBTN s_m_save
     test eax, eax
     jz .m2
-    call save_city
+    call open_save_panel
+    jmp .out
 .m2:
     MBTN s_m_load
     test eax, eax
     jz .m3
-    call load_city
+    call open_load_panel
+    jmp .out
 .m3:
     MBTN s_m_new
     test eax, eax
@@ -1561,12 +1565,6 @@ FUNC draw_menu, 16
     call new_city
     mov dword [panel], PANEL_NONE
 .m4:
-    MBTN s_m_autold
-    test eax, eax
-    jz .m5
-    lea rdi, [s_autofile]
-    call load_city_from
-    mov dword [panel], PANEL_NONE
 .m5:
     MBTN s_m_settings
     test eax, eax
@@ -1979,38 +1977,20 @@ FUNC draw_welcome
     call text_button
     test eax, eax
     jz .out
-    lea rdi, [s_savefile]
-    cmp dword [has_save], 2
-    jne .ld
-    lea rdi, [s_autofile]
-.ld:
-    call load_city_from
+    mov dword [welcome], 0
+    mov dword [slots_start], 1
+    call open_load_panel
 .out:
     RETURN
 
-; does a save exist? has_save: 1 city.sav, 2 only autosave.sav
+; does any save exist? (has_save)
 FUNC check_saves
     mov dword [has_save], 0
     cmp dword [sandbox], 0
     jne .out
-    lea rdi, [s_savefile]
-    lea rsi, [str_rb]
-    CALLC SDL_RWFromFile
-    test rax, rax
-    jz .a
-    mov rdi, rax
-    CALLC SDL_RWclose
-    mov dword [has_save], 1
-    jmp .out
-.a:
-    lea rdi, [s_autofile]
-    lea rsi, [str_rb]
-    CALLC SDL_RWFromFile
-    test rax, rax
-    jz .out
-    mov rdi, rax
-    CALLC SDL_RWclose
-    mov dword [has_save], 2
+    call slots_scan
+    call slots_any
+    mov [has_save], eax
 .out:
     RETURN
 
@@ -2249,8 +2229,14 @@ rezone_clear:
 ;  skipped.  Older "CSAVv004" saves (one fixed block) still load.
 ; ---------------------------------------------------------------------
 save_city:
-    lea rdi, [s_savefile]
+    mov eax, [current_slot]
+    mov rdi, [slot_files+rax*8]
 FUNC save_city_to, 16
+    push rdi
+    push rdi
+    call save_prepare
+    pop rdi
+    pop rdi
     lea rsi, [str_wb]
     CALLC SDL_RWFromFile
     test rax, rax
@@ -2322,7 +2308,8 @@ save_take:
     ret
 
 load_city:
-    lea rdi, [s_savefile]
+    mov eax, [current_slot]
+    mov rdi, [slot_files+rax*8]
 FUNC load_city_from, 32
     lea rsi, [str_rb]
     CALLC SDL_RWFromFile
@@ -2358,7 +2345,7 @@ FUNC load_city_from, 32
     jne .fail
     ; ---- CSAVv004: magic, tiles, state, seed (12) [, camera (12)] ----
     lea rsi, [load_buf+8]
-    lea rdi, [save_chunks+0*16]
+    lea rdi, [save_chunks+SC_TILE*16]
     mov edx, MAP_TILES*TILE_BYTES
     call save_take
     mov r15, r14
@@ -2371,14 +2358,14 @@ FUNC load_city_from, 32
     jae .nocam4
     sub r15, 12
     lea rsi, [load_buf+r14-12]
-    lea rdi, [save_chunks+3*16]
+    lea rdi, [save_chunks+SC_CAMR*16]
     mov edx, 12
     call save_take
 .nocam4:
     cmp r15, 0
     jle .fail
     lea rsi, [load_buf+8+MAP_TILES*TILE_BYTES]
-    lea rdi, [save_chunks+1*16]
+    lea rdi, [save_chunks+SC_SIMS*16]
     mov edx, r15d
     push rsi
     push rsi
@@ -2386,7 +2373,7 @@ FUNC load_city_from, 32
     pop rsi
     pop rsi
     add rsi, r15
-    lea rdi, [save_chunks+2*16]
+    lea rdi, [save_chunks+SC_SEED*16]
     mov edx, 12
     call save_take
     jmp .loaded
@@ -2416,7 +2403,7 @@ FUNC load_city_from, 32
     inc edx
     jmp .find
 .take:
-    cmp edx, 0
+    cmp ebx, 'TILE'
     jne .t
     mov r15d, 1
 .t:
@@ -2442,6 +2429,7 @@ FUNC load_city_from, 32
     call camera_clamp
 .nocam:
     mov dword [welcome], 0
+    mov dword [slots_start], 0
     call agents_init
     call scenic_init
     call style_existing
@@ -2478,6 +2466,12 @@ save_magic4 db "CSAVv004"
 align 8
 ; tag, address, length
 save_chunks:
+    db "INFO"
+    dq save_info
+    dd INFO_BYTES
+    db "THMB"
+    dq save_thumb
+    dd THUMB_BYTES
     db "TILE"
     dq tiles
     dd MAP_TILES*TILE_BYTES
@@ -2491,6 +2485,10 @@ save_chunks:
     dq cam_save
     dd 12
 SAVE_CHUNKS equ ($-save_chunks)/16
+SC_TILE equ 2
+SC_SIMS equ 3
+SC_SEED equ 4
+SC_CAMR equ 5
 section .text
 
 
@@ -7279,6 +7277,14 @@ FUNC render_ui
     call draw_welcome
     jmp .cursor
 .game:
+    cmp dword [slots_start], 0
+    je .gs
+    cmp dword [panel], PANEL_LOAD
+    je .gs
+    mov dword [slots_start], 0
+    mov dword [welcome], 1
+    jmp .ui
+.gs:
     mov eax, [panel]
     cmp eax, PANEL_BUDGET
     jne .p2
@@ -7306,8 +7312,19 @@ FUNC render_ui
     jmp .hud
 .p6:
     cmp eax, PANEL_SETTINGS
-    jne .hud
+    jne .p7
     call draw_settings
+    jmp .hud
+.p7:
+    cmp eax, PANEL_SAVE
+    je .p8
+    cmp eax, PANEL_LOAD
+    jne .hud
+.p8:
+    ; modal: only the top bar and the picker
+    call draw_topbar
+    call draw_slots
+    jmp .tip
 .hud:
     call draw_topbar
     cmp dword [sel_x], 0
@@ -7328,6 +7345,7 @@ FUNC render_ui
     call draw_overlay_legend
     call draw_cursor_cost
     call draw_tutorial
+.tip:
     mov rdx, [tooltip]
     test rdx, rdx
     jz .cursor
@@ -7596,7 +7614,7 @@ FUNC ui_key
 .k9:
     cmp eax, SC_F9
     jne .k10
-    call load_city
+    call open_load_panel
     jmp .out
 .k10:
     cmp eax, SC_F11

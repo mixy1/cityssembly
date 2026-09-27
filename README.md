@@ -110,8 +110,12 @@ Then chase the advisor goals shown in the top-left.
 - **Settings** (Esc → Settings) cover music and sound volume sliders,
   see-through buildings, lighting, edge scrolling, autosave (every 3 months), disasters,
   day/night and fullscreen. They're remembered in `cityssembly.cfg`.
-- **Continue** your city from the welcome screen. Saves also remember where
-  you were looking. Saves carry over to new versions of the game: the file
+- **Several cities:** Save and Load (menu, F9) show seven city slots plus
+  the autosave as cards, each with a picture of the city, the date,
+  population and money. The latest save is marked; overwriting a city asks
+  for a second click. F5 quick-saves to the city you're playing. When a
+  save exists, the game opens on the Load screen (with New city). Saves
+  also remember where you were looking. Saves carry over to new versions of the game: the file
   is a list of chunks, and state added later starts at its default.
 - **Re-zoning:** paint a zone over built-up land to replace what's there, for
   example low-density homes with apartments. The old buildings come down and
@@ -171,7 +175,7 @@ Then chase the advisor goals shown in the top-left.
 | `F2` `F3` `F4` | budget & taxes, policies, city statistics |
 | `Tab` | minimap (click it to jump) |
 | `N` / `M` | lock daylight / music on-off |
-| `F5` / `F9` | save / load (`city.sav`) |
+| `F5` / `F9` | quick save / load screen |
 | `F11`, `F1`, `Esc` | fullscreen, help, menu |
 | `Ctrl+Z` | undo (up to 24 actions, money refunded) |
 | `U` | upgrade roads (click a road to upgrade the whole stretch) |
@@ -361,6 +365,7 @@ frame.
 | `src/music.asm` | the "Five Boroughs" band: arranging, form, solos |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
 | `src/tutorial.asm` | the first-time guided tour |
+| `src/saves.asm` | save slots with pictures, the Save / Load screens |
 | `src/buildings.asm` | service building stats |
 
 `tools/icons_to_asm.py` only validates the 16×16 ASCII-art icons and emits

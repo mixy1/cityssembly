@@ -203,6 +203,17 @@ FUNC main
     call ui_init
     call settings_load
     call check_saves
+    ; a city is saved: start in the load picker (not in test modes)
+    cmp dword [has_save], 0
+    je .nopick
+    mov eax, [demo_mode]
+    or eax, [trailer_mode]
+    or eax, [wav_seconds]
+    jnz .nopick
+    mov dword [slots_start], 1
+    mov dword [welcome], 0
+    call open_load_panel
+.nopick:
     ; demo and trailer worlds skip land plots and the starter creek
     mov eax, [trailer_mode]
     or eax, [demo_mode]
@@ -1020,6 +1031,15 @@ FUNC demo_build, 16
     mov dword [tut_freeze], 1
     mov dword [sel_x], -1
 .vtut:
+    cmp eax, 'j'
+    jne .vj
+    call open_load_panel
+.vj:
+    cmp eax, 'J'
+    jne .vJ
+    call open_save_panel
+    mov dword [slot_confirm], 1
+.vJ:
     cmp eax, 'X'
     jne .v17
     mov dword [tool], T_ROAD
@@ -1239,6 +1259,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "tunes.asm"
 %include "ui.asm"
 %include "tutorial.asm"
+%include "saves.asm"
 %ifndef WEB
 %include "trailer.asm"
 %endif
