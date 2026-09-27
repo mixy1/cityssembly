@@ -145,16 +145,44 @@ void ext_SDL_GetTicks(void) { RET(SDL_GetTicks()); }
 void ext_SDL_GetPerformanceCounter(void) { RET(SDL_GetPerformanceCounter()); }
 
 // audio
+// A hidden browser tab gets throttled to ~1 frame a second, far too slow to
+// keep the queue fed, so sound stutters. While hidden: pause and stay silent.
+static SDL_AudioDeviceID audio_dev;
+static int audio_hidden;
+static void audio_visibility(void) {
+#ifdef __EMSCRIPTEN__
+    int hidden = EM_ASM_INT({ return document.hidden ? 1 : 0; });
+    if (!audio_dev || hidden == audio_hidden) return;
+    audio_hidden = hidden;
+    if (hidden) {
+        SDL_PauseAudioDevice(audio_dev, 1);
+        SDL_ClearQueuedAudio(audio_dev);
+    } else {
+        SDL_PauseAudioDevice(audio_dev, 0);
+    }
+#endif
+}
 void ext_SDL_OpenAudioDevice(void) {
     SDL_AudioSpec want, have;
     spec_from_game(A2, &want);
     SDL_AudioDeviceID d = SDL_OpenAudioDevice(P(A0), (int)A1, &want, A3 ? &have : NULL, (int)A4);
     if (A3) spec_to_game(A3, &have);
+    audio_dev = d;
     RET(d);
 }
-void ext_SDL_PauseAudioDevice(void) { SDL_PauseAudioDevice((SDL_AudioDeviceID)A0, (int)A1); }
-void ext_SDL_QueueAudio(void) { RET((uint32_t)SDL_QueueAudio((SDL_AudioDeviceID)A0, P(A1), (Uint32)A2)); }
-void ext_SDL_GetQueuedAudioSize(void) { RET(SDL_GetQueuedAudioSize((SDL_AudioDeviceID)A0)); }
+void ext_SDL_PauseAudioDevice(void) {
+    SDL_PauseAudioDevice((SDL_AudioDeviceID)A0, audio_hidden ? 1 : (int)A1);
+}
+void ext_SDL_QueueAudio(void) {
+    if (audio_hidden) { RET(0); return; }        // drop: nobody is listening
+    RET((uint32_t)SDL_QueueAudio((SDL_AudioDeviceID)A0, P(A1), (Uint32)A2));
+}
+void ext_SDL_GetQueuedAudioSize(void) {
+    audio_visibility();
+    // hidden: report a full queue so the game doesn't mix sound for nothing
+    if (audio_hidden) { RET(1u << 20); return; }
+    RET(SDL_GetQueuedAudioSize((SDL_AudioDeviceID)A0));
+}
 void ext_SDL_LoadWAV_RW(void) {
     SDL_AudioSpec s;
     Uint8 *buf = 0; Uint32 len = 0;
