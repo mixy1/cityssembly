@@ -188,6 +188,7 @@ exp_loans       resd 1
 loan_left       resd 3                  ; months still to pay per loan
 ms_card         resd 1                  ; milestone card to show (0 none)
 sim_state_end:
+exp_cat         resd 8          ; upkeep per service category (not saved)
 
 demand_r equ demand
 demand_c equ demand+4
@@ -3343,12 +3344,18 @@ FUNC month_end, 32
     mov [exp_roads], eax
     xor ebx, ebx
     xor r12d, r12d
+    lea rdi, [exp_cat]
+    xor eax, eax
+    mov ecx, 8
+    rep stosd
 .svc:
     mov edi, ebx
     call bld_rec
     mov ecx, [rax+BI_UPKEEP]
     imul ecx, [svc_count+rbx*4]
     add r12d, ecx
+    movzx eax, byte [rax+BI_CATEGORY]
+    add [exp_cat+rax*4], ecx
     inc ebx
     cmp ebx, BK_COUNT
     jl .svc

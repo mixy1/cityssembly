@@ -14,6 +14,7 @@ MAX_VEH      equ 1200
 VREC         equ 128
 MAX_PATH     equ 250
 PF_MAX_POPS  equ 14000
+TURN_COST    equ 8
 
 ; vehicle record
 V_TX     equ 0      ; word
@@ -114,6 +115,17 @@ FUNC traffic_init
     xor eax, eax
     mov ecx, MAP_TILES/2
     rep stosd
+    ; no vehicles means no one on the roads: saves stored the lane counts
+    ; of cars that no longer exist, which blocked roads after loading
+    xor ebx, ebx
+.o:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    mov dword [tiles+rax+T_OCC], 0
+    mov byte [tiles+rax+T_JAM], 0
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .o
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -224,6 +236,15 @@ FUNC path_find, 32
     movzx eax, byte [r10+T_JAM]
     shr eax, 5
     add ecx, eax
+    ; turning costs extra: cars keep to their lane on wide roads and
+    ; prefer straight routes instead of zig-zagging through grids
+    cmp ebx, [rbp-48]
+    je .nturn
+    movzx eax, byte [pf_from+rbx]
+    cmp eax, r9d
+    je .nturn
+    add ecx, TURN_COST
+.nturn:
     add ecx, [rbp-56]
     cmp ecx, 0xFFF0
     jae .dn
@@ -535,6 +556,26 @@ FUNC vehicle_spawn, 32
     jmp .s
 .have:
     lea r15, [vehicles+rax]
+    ; no room on the starting road: the trip waits (fire trucks excepted).
+    ; Without this, cars piled up without limit on entry tiles.
+    cmp dword [rbp-56], VT_FIRE
+    je .room
+    mov eax, [rbp-48]
+    shl eax, TILE_SHIFT
+    movzx ecx, byte [tiles+rax+T_ROADTYPE]
+    CLAMP ecx, 0, 2
+    movzx ecx, byte [road_cap+rcx]
+    shl ecx, 1
+    movzx edx, byte [tiles+rax+T_OCC]
+    movzx r8d, byte [tiles+rax+T_OCC+1]
+    add edx, r8d
+    movzx r8d, byte [tiles+rax+T_OCC+2]
+    add edx, r8d
+    movzx r8d, byte [tiles+rax+T_OCC+3]
+    add edx, r8d
+    cmp edx, ecx
+    jge .fail
+.room:
     mov edi, [rbp-48]
     mov esi, [rbp-52]
     call path_find

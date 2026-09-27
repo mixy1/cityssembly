@@ -80,6 +80,8 @@ notif_col       resd NOTIFS
 notif_tx        resd NOTIFS
 notif_ty        resd NOTIFS
 notif_time      resd NOTIFS
+notif_cnt       resd NOTIFS
+notif_show      resb 128
 money_shown     resq 1
 last_tool_err   resd 1
 minimap_buf     resb 160*80
@@ -239,7 +241,7 @@ s_help      db "CONTROLS", 10, 10
             db 7, "Right click", 1, "  close / cancel, one step at a time", 10
             db 7, "V H", 1, "          tool's info view on/off, see-through buildings", 10
             db 7, "Ctrl+Z", 1, "       undo (up to 24 actions)", 10
-            db 7, "U K", 1, "          upgrade roads, buy land", 10
+            db 7, "U K Home", 1, "     upgrade roads, buy land, back to the city", 10
             db 7, "Wheel", 1, "        zoom (also - and =)", 10
             db 7, "Q B R T P L", 1, "  inspect, bulldoze, road, trees, pipes, power line", 10
             db 7, "1 2 3 4 5 6", 1, "  zones: res, shop, industry, office, dense res/shop", 10
@@ -257,6 +259,24 @@ s_locked    db "Unlocks at ", 0
 s_lockpeop  db " people)", 0
 s_people    db " people", 0
 s_tiles     db " tiles", 0
+s_stretch   db "Stretch: ", 0
+s_isstip    db "Click to visit each one", 0
+iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11
+is1  db "without power", 0
+is2  db "without water", 0
+is3  db "without sewage", 0
+is4  db "with garbage piling up", 0
+is5  db "shops out of goods", 0
+is6  db "short of workers", 0
+is7  db "on fire!", 0
+is8  db "with no road", 0
+is9  db "with dirty water", 0
+is10 db "whose trips can't get through", 0
+is11 db "jammed road tiles - upgrade?", 0
+iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136
+iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD
+s_stjam1    db ", ", 3, 0
+s_stjam2    db " jammed", 0
 s_mmtip     db "Click or drag to move the view  (Tab hides)", 0
 s_notowned  db "You don't own this land yet - buy it with the Land tool (K).", 0
 ht_land     db "Buy land", 0
@@ -539,6 +559,19 @@ hx_line db "Drag a line: pylons go up every", 10
         db 6, "$20 a pylon, $2 a tile.", 0
 hx_zone db "Drag along roads. Buildings", 10
         db "grow on their own.", 0
+s_zd1   db 10, 1, "Demand right now: ", 0
+cat_names dq cn0, cn1, cn2, cn3, cn4, cn5, cn6, cn7
+cn0 db "Power       ", 0
+cn1 db "Water       ", 0
+cn2 db "Garbage     ", 0
+cn3 db "Police/fire ", 0
+cn4 db "Health      ", 0
+cn5 db "Education   ", 0
+cn6 db "Transit     ", 0
+cn7 db "Parks & fun ", 0
+s_zdhi  db 2, "high", 0
+s_zdmid db 4, "some", 0
+s_zdlo  db 3, "none", 1, 10, "(zone what the top bar wants)", 0
 hz_zone db "They need a road, power and", 10
         db "water to grow past level 1.", 0
 hx_pipe db "Pipes run underground (roads", 10
@@ -668,6 +701,35 @@ FUNC notify
     mov r13d, esi
     mov r14d, edx
     mov r15d, ecx
+    ; the same message again: count it instead of stacking copies
+    xor ebx, ebx
+.dup:
+    cmp ebx, NOTIFS
+    jge .new
+    cmp dword [notif_time+rbx*4], 0
+    je .dn
+    imul eax, ebx, 96
+    lea rdi, [notif_text+rax]
+    mov rsi, r12
+.cmp:
+    mov al, [rsi]
+    cmp al, [rdi]
+    jne .dn
+    test al, al
+    jz .same
+    inc rsi
+    inc rdi
+    jmp .cmp
+.same:
+    inc dword [notif_cnt+rbx*4]
+    mov dword [notif_time+rbx*4], 420
+    mov [notif_tx+rbx*4], r14d
+    mov [notif_ty+rbx*4], r15d
+    jmp .out
+.dn:
+    inc ebx
+    jmp .dup
+.new:
     ; shift the list down
     mov ebx, NOTIFS-1
 .sh:
@@ -687,6 +749,8 @@ FUNC notify
     mov [notif_ty+rbx*4], eax
     mov eax, [notif_time+rbx*4-4]
     mov [notif_time+rbx*4], eax
+    mov eax, [notif_cnt+rbx*4-4]
+    mov [notif_cnt+rbx*4], eax
     dec ebx
     jmp .sh
 .ins:
@@ -707,6 +771,8 @@ FUNC notify
     mov [notif_tx], r14d
     mov [notif_ty], r15d
     mov dword [notif_time], 420
+    mov dword [notif_cnt], 1
+.out:
     RETURN
 
 
@@ -722,6 +788,26 @@ FUNC draw_notifications
     dec dword [notif_time+rbx*4]
     imul eax, ebx, 96
     lea r13, [notif_text+rax]
+    cmp dword [notif_cnt+rbx*4], 1
+    jle .one
+    ; "Fire! A building is burning.  x3"
+    call tb_reset
+    mov rdi, r13
+    call tb_str
+    mov edi, ' '
+    call tb_char
+    mov edi, 6
+    call tb_char
+    mov edi, 'x'
+    call tb_char
+    movsxd rdi, dword [notif_cnt+rbx*4]
+    call tb_num
+    lea rsi, [textbuf]
+    lea rdi, [notif_show]
+    mov ecx, 120
+    rep movsb
+    lea r13, [notif_show]
+.one:
     mov rdi, r13
     call text_width
     lea r14d, [rax+16]              ; width
@@ -1769,6 +1855,11 @@ set_autosave  dd 1
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
+iss_count      resd 12
+iss_shown      resd 12
+iss_next       resd 12
+iss_worst      resd 1
+iss_age        resd 1
 settings_dirty resd 1
 has_save       resd 1
 save_quiet     resd 1
@@ -2611,6 +2702,332 @@ FUNC road_stretch, 16
     inc r14d
     cmp r14d, 4
     jl .d
+.out:
+    RETURN
+
+; inspector: the road's stretch and one-click upgrades
+FUNC inspect_road_upgrade, 32
+    mov dword [tl_n], 0
+    mov edi, [sel_x]
+    mov esi, [sel_y]
+    call road_stretch
+    ; how much of it is jammed
+    xor ebx, ebx
+    xor r12d, r12d
+.j:
+    cmp ebx, [tl_n]
+    jge .jd
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call tile_at
+    cmp byte [rax+T_JAM], 150
+    jb .jn
+    inc r12d
+.jn:
+    inc ebx
+    jmp .j
+.jd:
+    call tb_reset
+    lea rdi, [s_stretch]
+    call tb_str
+    movsxd rdi, dword [tl_n]
+    call tb_num
+    lea rdi, [s_tiles]
+    call tb_str
+    test r12d, r12d
+    jz .nj
+    lea rdi, [s_stjam1]
+    call tb_str
+    movsxd rdi, r12d
+    call tb_num
+    lea rdi, [s_stjam2]
+    call tb_str
+.nj:
+    add dword [row_y], 2
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call row_text
+    ; a button per other road type, with the price for the stretch
+    mov edi, [sel_x]
+    mov esi, [sel_y]
+    call tile_at
+    movzx eax, byte [rax+T_ROADTYPE]
+    mov [rbp-48], eax               ; current type
+    mov dword [rbp-52], 0           ; buttons drawn
+    xor r13d, r13d                  ; target type
+.t:
+    cmp r13d, 3
+    jge .out
+    cmp r13d, [rbp-48]
+    je .tn
+    ; price: sum over the stretch
+    mov dword [rbp-56], 0
+    xor ebx, ebx
+.c:
+    cmp ebx, [tl_n]
+    jge .cd
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call tile_at
+    test byte [rax+T_FLAGS], F_HIGHWAY
+    jnz .cn
+    movzx ecx, byte [rax+T_ROADTYPE]
+    cmp ecx, r13d
+    je .cn
+    mov eax, [road_costs+r13*4]
+    sub eax, [road_costs+rcx*4]
+    cmp eax, 2
+    jge .ca
+    mov eax, 2
+.ca:
+    add [rbp-56], eax
+.cn:
+    inc ebx
+    jmp .c
+.cd:
+    call tb_reset
+    mov rdi, [up_names+r13*8]
+    call tb_str
+    mov edi, ' '
+    call tb_char
+    ; locked?
+    mov ecx, [road_unlock+r13*4]
+    call unlocked_pop
+    cmp eax, ecx
+    jge .open
+    mov edi, [road_unlock+r13*4]
+    call milestone_for
+    mov rdi, [milestone_names+rax*8]
+    call tb_str
+    mov dword [rbp-60], 1
+    jmp .btn
+.open:
+    movsxd rdi, dword [rbp-56]
+    call tb_money
+    mov dword [rbp-60], 0
+.btn:
+    mov eax, [rbp-52]
+    imul eax, eax, 88
+    mov edi, [row_x]
+    lea edi, [rdi+rax+6]
+    mov esi, [row_y]
+    mov edx, 86
+    lea rcx, [textbuf]
+    xor r8d, r8d
+    call text_button
+    inc dword [rbp-52]
+    test eax, eax
+    jz .tn
+    cmp dword [rbp-60], 0
+    jne .locked
+    ; apply through the upgrade tool (undo, costs, checks all included)
+    mov [up_type], r13d
+    mov eax, [tool]
+    mov [rbp-64], eax
+    mov dword [tool], T_UPGRADE
+    call tool_apply
+    mov eax, [rbp-64]
+    mov [tool], eax
+    jmp .out
+.locked:
+    mov edi, [road_unlock+r13*4]
+    call tb_unlock_msg
+    lea rdi, [textbuf]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.tn:
+    inc r13d
+    jmp .t
+.out:
+    add dword [row_y], 18
+    RETURN
+
+; ---------------------------------------------------------------------
+;  city issues: what's wrong across the city, click to visit each case
+; ---------------------------------------------------------------------
+ISSUE_JAM equ 11
+
+FUNC issues_count
+    lea rdi, [iss_count]
+    xor eax, eax
+    mov ecx, 12
+    rep stosd
+    mov dword [iss_worst], -1
+    xor r12d, r12d                  ; worst jam
+    xor ebx, ebx
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    lea rdi, [tiles+rax]
+    movzx ecx, byte [rdi+T_OBJ]
+    cmp ecx, OBJ_ROAD
+    jne .b
+    test byte [rdi+T_FLAGS], F_HIGHWAY
+    jnz .n
+    cmp byte [rdi+T_ROADTYPE], RT_HIGHWAY
+    je .n
+    movzx eax, byte [rdi+T_JAM]
+    cmp eax, 200
+    jb .n
+    inc dword [iss_count+ISSUE_JAM*4]
+    cmp eax, r12d
+    jbe .n
+    mov r12d, eax
+    mov [iss_worst], ebx
+    jmp .n
+.b:
+    cmp ecx, OBJ_ZONEBLD
+    je .z
+    cmp ecx, OBJ_SERVICE
+    jne .n
+.z:
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .n
+    movzx eax, byte [rdi+T_PROBLEM]
+    test eax, eax
+    jz .n
+    cmp eax, 10
+    ja .n
+    inc dword [iss_count+rax*4]
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    RETURN
+
+; jump to the next building with issue edi (cycles through them)
+FUNC issue_visit
+    mov r12d, edi
+    cmp r12d, ISSUE_JAM
+    jne .p
+    mov eax, [iss_worst]
+    test eax, eax
+    js .out
+    jmp .go
+.p:
+    mov ebx, [iss_next+r12*4]
+    xor r13d, r13d
+.l:
+    inc ebx
+    and ebx, MAP_TILES-1
+    inc r13d
+    cmp r13d, MAP_TILES
+    jg .out
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    test byte [tiles+rax+T_FLAGS], F_ANCHOR
+    jz .l
+    movzx ecx, byte [tiles+rax+T_PROBLEM]
+    cmp ecx, r12d
+    jne .l
+    mov [iss_next+r12*4], ebx
+    mov eax, ebx
+.go:
+    mov edi, eax
+    and edi, MAP_W-1
+    mov esi, eax
+    shr esi, MAP_SHIFT
+    mov [sel_x], edi
+    mov [sel_y], esi
+    call camera_center_tile
+    mov dword [tool], T_INSPECT
+    mov edi, SFX_CLICK
+    call sfx_play
+.out:
+    RETURN
+
+FUNC draw_issues, 16
+    cmp dword [welcome], 0
+    jne .out
+    cmp dword [tool], T_INSPECT
+    jne .out
+    cmp dword [panel], PANEL_NONE
+    jne .out
+    dec dword [iss_age]
+    jns .d
+    mov dword [iss_age], 20
+    call issues_count
+.d:
+    mov r13d, 64                    ; y
+    ; biggest first: pick up to 5 by repeated max
+    lea rdi, [iss_shown]
+    xor eax, eax
+    mov ecx, 12
+    rep stosd
+    mov dword [rbp-48], 0
+.pick:
+    cmp dword [rbp-48], 5
+    jge .out
+    xor r12d, r12d                  ; best count
+    mov r14d, -1                    ; best issue
+    mov ebx, 1
+.m:
+    cmp dword [iss_shown+rbx*4], 0
+    jne .mn
+    mov eax, [iss_count+rbx*4]
+    cmp eax, r12d
+    jle .mn
+    mov r12d, eax
+    mov r14d, ebx
+.mn:
+    inc ebx
+    cmp ebx, 12
+    jl .m
+    test r14d, r14d
+    js .out
+    mov dword [iss_shown+r14*4], 1
+    ; one row: glyph, count, name
+    call tb_reset
+    movsxd rdi, r12d
+    call tb_num
+    mov edi, ' '
+    call tb_char
+    mov rdi, [iss_names+r14*8]
+    call tb_str
+    lea rdi, [textbuf]
+    call text_width
+    lea r15d, [rax+22]
+    mov edi, 4
+    mov esi, r13d
+    mov edx, r15d
+    mov ecx, 13
+    call ui_over
+    mov [rbp-52], eax
+    mov r8d, UI_BG2
+    test eax, eax
+    jz .bg
+    mov r8d, UI_BTN_HI
+    lea rax, [s_isstip]
+    mov [tooltip], rax
+.bg:
+    mov edi, 4
+    mov esi, r13d
+    mov edx, r15d
+    mov ecx, 13
+    call draw_box
+    movzx edx, byte [iss_glyph+r14]
+    movzx ecx, byte [iss_col+r14]
+    mov edi, 8
+    lea esi, [r13+3]
+    call draw_glyph
+    mov edi, 18
+    lea esi, [r13+3]
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call draw_text
+    cmp dword [rbp-52], 0
+    je .nx
+    cmp dword [click_pending], 0
+    je .nx
+    mov dword [click_pending], 0
+    mov edi, r14d
+    call issue_visit
+.nx:
+    add r13d, 15
+    inc dword [rbp-48]
+    jmp .pick
 .out:
     RETURN
 
@@ -4873,6 +5290,10 @@ FUNC draw_inspect, 32
     movzx esi, byte [rbx+T_JAM]
     mov edx, UI_BAD
     call stat_row
+    test byte [rbx+T_FLAGS], F_HIGHWAY
+    jnz .rdone
+    call inspect_road_upgrade
+.rdone:
     test byte [rbx+T_FLAGS2], F2_BUSSTOP
     jz .maps
     lea rdx, [s_stop_here]
@@ -5161,6 +5582,16 @@ FUNC draw_budget, 32
     add r13d, 11
     BROW s_roads, exp_roads, UI_BAD
     BROW s_services, exp_services, UI_BAD
+    ; hover: what the services cost, by kind
+    lea edi, [r12+10]
+    lea esi, [r13-11]
+    mov edx, 160
+    mov ecx, 11
+    call ui_over
+    test eax, eax
+    jz .nsv
+    call budget_services_tip
+.nsv:
     BROW s_policiesx, exp_policies, UI_BAD
     BROW s_loans, exp_loans, UI_BAD
     mov eax, [income_last]
@@ -5612,7 +6043,9 @@ FUNC draw_tool_hint, 16
 .nbz:
     cmp eax, T_ZONETOOL
     jne .t
-    lea r14, [hz_zone]
+    call zone_demand_text
+    lea r14, [textbuf]
+    mov eax, [tool]
 .t:
     mov r12, [hint_title+rax*8]
     mov r13, [hint_text+rax*8]
@@ -5765,6 +6198,90 @@ FUNC draw_cursor_cost
     lea rdx, [textbuf]
     call draw_text
 .out:
+    RETURN
+
+; zoning hint: the rules plus how much this zone is wanted right now
+FUNC zone_demand_text
+    call tb_reset
+    lea rdi, [hz_zone]
+    call tb_str
+    lea rdi, [s_zd1]
+    call tb_str
+    mov eax, [zone_type]
+    movzx eax, byte [zone_class+rax]
+    mov ebx, [demand+rax*4]
+    lea rdi, [s_zdhi]
+    cmp ebx, 40
+    jg .s
+    lea rdi, [s_zdmid]
+    cmp ebx, 10
+    jg .s
+    lea rdi, [s_zdlo]
+.s:
+    call tb_str
+    RETURN
+
+FUNC budget_services_tip
+    call tb_reset
+    xor ebx, ebx
+.l:
+    mov rdi, [cat_names+rbx*8]
+    call tb_str
+    movsxd rdi, dword [exp_cat+rbx*4]
+    call tb_money
+    cmp ebx, 7
+    je .d
+    mov edi, 10
+    call tb_char
+.d:
+    inc ebx
+    cmp ebx, 8
+    jl .l
+    lea rsi, [textbuf]
+    lea rdi, [tt_buf]
+    mov ecx, 300
+    rep movsb
+    lea rax, [tt_buf]
+    mov [tooltip], rax
+    RETURN
+
+; Home: back to the middle of the city (its buildings' centre)
+FUNC camera_home
+    xor ebx, ebx
+    xor r12, r12                    ; sum x
+    xor r13, r13                    ; sum y
+    xor r14d, r14d                  ; count
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    mov eax, ebx
+    and eax, MAP_W-1
+    add r12, rax
+    mov eax, ebx
+    shr eax, MAP_SHIFT
+    add r13, rax
+    inc r14d
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    mov edi, 38
+    mov esi, 64
+    test r14d, r14d
+    jz .go
+    mov rax, r12
+    xor edx, edx
+    div r14
+    mov edi, eax
+    mov rax, r13
+    xor edx, edx
+    div r14
+    mov esi, eax
+.go:
+    call camera_center_tile
+    call camera_clamp
     RETURN
 
 ; count_lines(rdi str) -> eax
@@ -6550,6 +7067,7 @@ FUNC render_ui
     cmp dword [sel_x], 0
     jge .nogoal
     call draw_goal
+    call draw_issues
 .nogoal:
     call draw_notifications
     call draw_submenu
@@ -6730,6 +7248,11 @@ FUNC ui_key
     mov ecx, T_UPGRADE
     cmp eax, SC_U
     je .settool
+    cmp eax, SC_HOME
+    jne .nhome
+    call camera_home
+    jmp .out
+.nhome:
     cmp eax, SC_H
     jne .nh
     mov eax, [set_xray]

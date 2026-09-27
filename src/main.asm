@@ -174,7 +174,13 @@ FUNC main
     je .sbx0
     cmp dword [demo_view], 'Z'
     je .sbx0
+    cmp dword [demo_view], 'l'
+    je .sbx0
+    cmp dword [demo_view], 'r'
+    je .sbx0
     cmp dword [demo_view], 'R'
+    je .sbx0
+    cmp dword [demo_view], 'W'
     je .sbx0
     cmp dword [demo_view], 'U'
     je .sbx0
@@ -215,6 +221,26 @@ FUNC main
     call playtest_build
     jmp .nodemo
 .ld:
+    cmp dword [demo_view], 'l'
+    je .ldl
+    cmp dword [demo_view], 'r'
+    jne .ldl0
+.ldl:
+    call load_city
+    mov dword [welcome], 0
+    mov dword [tool], T_INSPECT
+    mov dword [mouse_x], 1275
+    mov dword [mouse_y], 400
+    mov dword [sel_x], -1
+    mov edi, 34
+    mov esi, 64
+    call camera_center_tile
+    cmp dword [demo_view], 'r'
+    jne .nodemo
+    mov dword [sel_x], 30
+    mov dword [sel_y], 64
+    jmp .nodemo
+.ldl0:
     cmp dword [demo_view], 'm'
     jne .ldm
     call pt_minimap_loop_setup
@@ -233,7 +259,11 @@ FUNC main
     cmp eax, 'N'
     je .ex
     cmp eax, 'G'
+    je .ex
+    cmp eax, 'W'                    ; long run of the unchanged city
     jne .ld0
+    mov dword [pt_ticks], 3500
+    mov dword [demo_view], 'R'
 .ex:
     call load_city
     mov dword [welcome], 0

@@ -77,6 +77,15 @@ Then chase the advisor goals shown in the top-left.
 - The **minimap** shows districts, your land and your view. Click or drag it
   to move.
 - Clicking a notification jumps to where it happened and dismisses it.
+  Repeats are grouped (×3).
+- **City issues** list (top left, with the inspect tool): counts of buildings
+  with each problem plus jammed roads. Click a line to visit each case in
+  turn; jammed roads open the road inspector.
+- **Road inspector** shows the stretch, how much of it is jammed, and
+  one-click upgrade buttons with the price.
+- The zoning hint shows **live demand** for the zone you're painting.
+- Hover *Services* in the budget for the **cost per category**.
+- `Home` jumps back to the middle of your city.
 
 ### Progression (Cities: Skylines style)
 
@@ -117,6 +126,7 @@ Then chase the advisor goals shown in the top-left.
 | `Ctrl+Z` | undo (up to 24 actions, money refunded) |
 | `U` | upgrade roads (click a road to upgrade the whole stretch) |
 | `H` | see-through buildings: near cursor / all / off |
+| `Home` | back to the middle of the city |
 
 Icons above buildings show their most urgent problem (no power, no water,
 sewage, garbage, missing goods, missing workers, fire, no road, no route).

@@ -667,6 +667,8 @@ tr_f5 db "TRAFFIC link %d,%d", 10, 0
 tr_cam db "CAM %d %d %d", 10, 0
 tr_f6 db "TRAFFIC buildings with no route: %d  zone bld=%d", 10, 0
 tr_f7 db "TRAFFIC vehicles on the north link: %d  mask(44,18)=%d mask(44,17)=%d", 10, 0
+section .data
+pt_ticks dd 700
 section .bss
 tr_q    resw MAP_TILES
 tr_pur  resd 16
@@ -676,7 +678,7 @@ FUNC pt_traffic, 32
     mov dword [sim_speed], 3
     mov dword [trips_ok], 0
     mov dword [trips_failed], 0
-    mov ebx, 700
+    mov ebx, [pt_ticks]
 .ff:
     call sim_tick
     call agents_tick
