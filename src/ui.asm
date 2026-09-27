@@ -2241,6 +2241,14 @@ FUNC load_city_from, 16
     test rax, rax
     jz .fail
     mov r12, rax
+    ; a save of the wrong size would load as garbage: refuse it
+    mov rdi, r12
+    CALLC SDL_RWsize
+    cmp rax, SAVE_BYTES
+    je .sizeok
+    cmp rax, SAVE_BYTES+12
+    jne .close
+.sizeok:
     mov rdi, r12
     lea rsi, [numbuf]
     mov edx, 8
@@ -2309,6 +2317,7 @@ FUNC load_city_from, 16
     call notify
 .out:
     RETURN
+SAVE_BYTES equ 8 + MAP_TILES*TILE_BYTES + (sim_state_end - money) + 12
 section .data
 save_magic db "CSAVv004"
 section .text

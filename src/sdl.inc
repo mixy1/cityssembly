@@ -11,7 +11,7 @@ extern SDL_GetKeyboardState, SDL_GetWindowSize, SDL_ShowCursor
 extern SDL_SetWindowTitle, SDL_GetPerformanceCounter, SDL_GetPerformanceFrequency
 extern SDL_OpenAudioDevice, SDL_PauseAudioDevice, SDL_QueueAudio
 extern SDL_GetQueuedAudioSize, SDL_ClearQueuedAudio
-extern SDL_CreateRGBSurfaceWithFormatFrom, SDL_SaveBMP_RW, SDL_RWFromFile
+extern SDL_CreateRGBSurfaceWithFormatFrom, SDL_SaveBMP_RW, SDL_RWFromFile, SDL_RWsize
 extern SDL_FreeSurface, SDL_GetError, SDL_SetWindowFullscreen
 extern SDL_RWread, SDL_RWwrite, SDL_RWclose, SDL_LoadWAV_RW, SDL_FreeWAV
 extern printf, exit, strcmp, atoi
