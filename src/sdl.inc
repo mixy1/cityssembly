@@ -14,6 +14,9 @@ extern SDL_GetQueuedAudioSize, SDL_ClearQueuedAudio
 extern SDL_CreateRGBSurfaceWithFormatFrom, SDL_SaveBMP_RW, SDL_RWFromFile, SDL_RWsize
 extern SDL_FreeSurface, SDL_GetError, SDL_SetWindowFullscreen
 extern SDL_RWread, SDL_RWwrite, SDL_RWclose, SDL_LoadWAV_RW, SDL_FreeWAV
+%ifndef WEB
+extern SDL_CreateThread, SDL_CreateSemaphore, SDL_SemPost, SDL_SemWait, SDL_GetCPUCount
+%endif
 extern printf, exit, strcmp, atoi
 
 SDL_INIT_TIMER          equ 0x00000001

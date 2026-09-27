@@ -27,6 +27,8 @@ lhmap       resb LS_W*LS_W      ; object height per cell (voxels)
 alignb 16
 lsmap       resw LS_W*LS_W      ; shadow height per cell (8.8 voxels)
 alignb 16
+laomap      resb LS_W*LS_W      ; contact shade per cell (0..240)
+alignb 16
 cloudtex    resb CLOUD_W*CLOUD_W
 alignb 16
 litbuf      resd MAX_FB_W*MAX_FB_H
@@ -34,6 +36,7 @@ hbuf        resb MAX_FB_W*MAX_FB_H
 alignb 16
 bl_a        resd (MAX_FB_W/4)*(MAX_FB_H/4)*3 + 16    ; bloom cells (b, g, r)
 bl_b        resd (MAX_FB_W/4)*(MAX_FB_H/4)*3 + 16
+bl_z        resb (MAX_FB_W/4)*(MAX_FB_H/4) + 16   ; 1: no glow near this cell
 bl_w        resd 1
 bl_h        resd 1
 bl_gain     resd 1
@@ -75,8 +78,7 @@ FUNC light_init
 .x:
     mov edi, r12d
     mov esi, r13d
-    mov edx, 9173
-    call fbm
+    call cloud_val
     mov ecx, r13d
     shl ecx, 9
     add ecx, r12d
@@ -88,6 +90,115 @@ FUNC light_init
     cmp r13d, CLOUD_W
     jl .y
     RETURN
+
+; tileable value noise for the cloud texture (edi x, esi y) -> eax 0..255
+; octaves of 64, 32, 16 and 8 texels, all dividing the 512 texel period
+FUNC cloud_val, 16
+    mov r12d, edi
+    mov r13d, esi
+    xor r14d, r14d                  ; sum
+    mov r15d, 6                     ; log2 size
+    mov dword [rbp-48], 128         ; amplitude
+.oct:
+    mov ecx, r15d
+    mov eax, 1
+    shl eax, cl
+    dec eax
+    mov ebx, eax                    ; size-1
+    ; fractions (0..256) with smoothstep
+    mov eax, r12d
+    and eax, ebx
+    shl eax, 8
+    shr eax, cl
+    mov edi, eax
+    call .smooth
+    mov [rbp-52], eax               ; sx
+    mov eax, r13d
+    and eax, ebx
+    shl eax, 8
+    shr eax, cl
+    mov edi, eax
+    call .smooth
+    mov [rbp-56], eax               ; sy
+    ; lattice cell and wrap mask
+    mov eax, r12d
+    shr eax, cl
+    mov r8d, eax                    ; lx
+    mov eax, r13d
+    shr eax, cl
+    mov r9d, eax                    ; ly
+    mov eax, 512
+    shr eax, cl
+    dec eax
+    mov r10d, eax                   ; cells-1
+    ; four corners
+    mov edi, r8d
+    mov esi, r9d
+    call .lat
+    mov [rbp-60], eax
+    lea edi, [r8+1]
+    mov esi, r9d
+    call .lat
+    sub eax, [rbp-60]
+    imul eax, [rbp-52]
+    sar eax, 8
+    add [rbp-60], eax               ; top
+    mov edi, r8d
+    lea esi, [r9+1]
+    call .lat
+    mov [rbp-64], eax
+    lea edi, [r8+1]
+    lea esi, [r9+1]
+    call .lat
+    sub eax, [rbp-64]
+    imul eax, [rbp-52]
+    sar eax, 8
+    add eax, [rbp-64]               ; bottom
+    sub eax, [rbp-60]
+    imul eax, [rbp-56]
+    sar eax, 8
+    add eax, [rbp-60]
+    imul eax, [rbp-48]
+    shr eax, 8
+    add r14d, eax
+    shr dword [rbp-48], 1
+    dec r15d
+    cmp r15d, 3
+    jge .oct
+    ; 240 max -> 0..255
+    mov eax, r14d
+    imul eax, 272
+    shr eax, 8
+    CLAMP eax, 0, 255
+    RETURN
+.smooth:                            ; edi t 0..256 -> eax 3t^2 - 2t^3
+    mov eax, edi
+    imul eax, edi
+    mov edx, 768
+    sub edx, edi
+    sub edx, edi
+    imul eax, edx
+    shr eax, 16
+    ret
+.lat:                               ; edi x, esi y (wrapped) -> eax 0..255
+    and edi, r10d
+    and esi, r10d
+    imul esi, esi, 1031
+    add edi, esi
+    imul eax, r15d, 7919
+    add edi, eax
+    add edi, 0x5bd1e995
+    push r8
+    push r9
+    push r10
+    push r11
+    call hash32
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    and eax, 255
+    ret
 
 ; ---------------------------------------------------------------------
 ;  light_sun: sun position and strength from the time of day
@@ -180,11 +291,12 @@ FUNC light_sun
     shr eax, 4
     add eax, 3
     mov [glint_n], eax
-    ; clouds drift with the game clock
+    ; clouds drift slowly with the game clock (8.8 texels)
     mov eax, [anim_tick]
-    shr eax, 1
+    imul eax, 5
     mov [cloud_ox], eax
-    shr eax, 1
+    mov eax, [anim_tick]
+    add eax, eax
     mov [cloud_oy], eax
     mov eax, [sun_str]
     mov [cloud_str], eax
@@ -250,7 +362,7 @@ FUNC light_obj_sprite
 ; ---------------------------------------------------------------------
 ;  light_prepare: height map + shadow sweep for the current view
 ; ---------------------------------------------------------------------
-FUNC light_prepare, 32
+FUNC light_prepare, 48
     call light_sun
     cmp dword [sun_on], 0
     je .out
@@ -266,10 +378,6 @@ FUNC light_prepare, 32
     mov ebx, 1
 %%s:
 %endmacro
-    LKEY 0, [cam_x]
-    LKEY 1, [cam_y]
-    LKEY 2, [fb_w]
-    LKEY 3, [fb_h]
     mov ecx, [sun_drop]
     shr ecx, 2
     LKEY 4, ecx
@@ -277,11 +385,7 @@ FUNC light_prepare, 32
     sar ecx, 2
     LKEY 5, ecx
     or ebx, [light_force]
-    jnz .go
-    cmp dword [lc_age], 30
-    jl .out
-.go:
-    mov dword [lc_age], 0
+    mov [rbp-64], ebx
     ; view bounds in voxels
     mov eax, [cam_x]
     sub eax, ORIGIN_X
@@ -341,6 +445,40 @@ FUNC light_prepare, 32
     LCELL 52
     LCELL 56
     LCELL 60
+    ; reuse the last sweep while the view stays inside it
+    cmp dword [rbp-64], 0
+    jne .go
+    cmp dword [lc_age], 30
+    jge .go
+    mov eax, [rbp-48]
+    cmp eax, [lb_x0]
+    jl .go
+    mov eax, [rbp-52]
+    cmp eax, [lb_x1]
+    jg .go
+    mov eax, [rbp-56]
+    cmp eax, [lb_y0]
+    jl .go
+    mov eax, [rbp-60]
+    cmp eax, [lb_y1]
+    jg .go
+    jmp .out
+.go:
+    mov dword [lc_age], 0
+    ; sweep a margin around the view so panning can reuse it
+%macro LGROW 2
+    mov eax, [rbp-%1]
+    add eax, %2
+    CLAMP eax, 0, LS_W-1
+    mov [rbp-%1], eax
+%endmacro
+    cmp dword [light_force], 0
+    jne .nogrow
+    LGROW 48, -96
+    LGROW 52, 96
+    LGROW 56, -96
+    LGROW 60, 96
+.nogrow:
     mov eax, [rbp-48]
     mov [lb_x0], eax
     mov eax, [rbp-52]
@@ -471,7 +609,7 @@ FUNC light_prepare, 32
 .row:
     dec r13d
     cmp r13d, [lb_y0]
-    jl .out
+    jl .aomap
     mov eax, r13d
     inc eax
     shl eax, LS_SHIFT
@@ -524,19 +662,77 @@ FUNC light_prepare, 32
     mov [lsmap+rax*2], si
     inc ebx
     jmp .col
+.aomap:
+    ; ---- contact shade: ground cells next to taller things ----
+    mov r13d, [lb_y0]
+    inc r13d
+.ay:
+    mov eax, [lb_y1]
+    dec eax
+    cmp r13d, eax
+    jge .out
+    mov ebx, [lb_x0]
+    inc ebx
+.axx:
+    mov eax, [lb_x1]
+    dec eax
+    cmp ebx, eax
+    jge .ayn
+    mov ecx, r13d
+    shl ecx, LS_SHIFT
+    add ecx, ebx
+    xor edx, edx
+    movzx r11d, byte [lhmap+rcx]
+    cmp r11d, 3
+    ja .aost
+    add r11d, 5
+%macro AOTAP 1
+    movzx eax, byte [lhmap+rcx+(%1)]
+    cmp eax, r11d
+    jbe %%n
+    add edx, 30
+%%n:
+%endmacro
+    AOTAP 1
+    AOTAP -1
+    AOTAP LS_W
+    AOTAP -LS_W
+    AOTAP LS_W+1
+    AOTAP LS_W-1
+    AOTAP -LS_W+1
+    AOTAP -LS_W-1
+.aost:
+    mov [laomap+rcx], dl
+    inc ebx
+    jmp .axx
+.ayn:
+    inc r13d
+    jmp .ay
 .out:
     RETURN
 
 ; ---------------------------------------------------------------------
 ;  light_compose: fb (palette indices) -> litbuf (argb) with lighting
 ; ---------------------------------------------------------------------
-FUNC light_compose, 48
+FUNC light_compose
     call light_prepare
-    xor r13d, r13d                  ; y
-    lea r12, [fb]
-    lea r15, [litbuf]
+    lea rdi, [light_rows]
+    mov esi, [fb_h]
+    mov edx, 1
+    call par_rows
+    call light_bloom
+    RETURN
+
+; the light pass for rows [edi, esi) (runs on worker threads)
+FUNC light_rows, 48
+    mov r13d, edi                   ; y
+    mov [rbp-72], esi               ; end
+    mov eax, edi
+    imul eax, [fb_w]
+    lea r12, [fb+rax]
+    lea r15, [litbuf+rax*4]
 .y:
-    cmp r13d, [fb_h]
+    cmp r13d, [rbp-72]
     jge .out
     mov eax, r13d
     add eax, [cam_y]
@@ -590,37 +786,10 @@ FUNC light_compose, 48
     CLAMP edx, 0, 256
     mov r10d, edx
 .ao:
-    ; contact shade: ground next to tall things
+    ; contact shade (ground only; walls keep their own shading)
     cmp esi, 3
     ja .cloud
-    lea r11d, [rsi+5]
-    xor edx, edx
-%macro AOTAP 1
-    movzx eax, byte [lhmap+rcx+(%1)]
-    cmp eax, r11d
-    jbe %%n
-    add edx, 30
-%%n:
-%endmacro
-    cmp edi, [lb_x0]
-    jle .cloud
-    cmp edi, [lb_x1]
-    jge .cloud
-    mov eax, ecx
-    shr eax, LS_SHIFT
-    cmp eax, [lb_y0]
-    jle .cloud
-    inc eax
-    cmp eax, [lb_y1]
-    jge .cloud
-    AOTAP 1
-    AOTAP -1
-    AOTAP LS_W
-    AOTAP -LS_W
-    AOTAP LS_W+1
-    AOTAP LS_W-1
-    AOTAP -LS_W+1
-    AOTAP -LS_W-1
+    movzx edx, byte [laomap+rcx]
     cmp edx, r10d
     jbe .cloud
     mov r10d, edx
@@ -628,15 +797,19 @@ FUNC light_compose, 48
     ; cloud cover: texel = 4 voxels
     mov [rbp-56], r8d
     mov [rbp-60], r9d
-    sar r8d, 3
+    ; texel = 8 half voxels; the offset is in 8.8 texels
+    shl r8d, 5
     add r8d, [cloud_ox]
+    sar r8d, 8
     and r8d, CLOUD_W-1
-    sar r9d, 3
+    shl r9d, 5
     add r9d, [cloud_oy]
+    sar r9d, 8
     and r9d, CLOUD_W-1
     shl r9d, 9
-    add r9d, r8d
-    movzx edx, byte [cloudtex+r9]
+    movzx eax, byte [cloudtex+r9+r8]
+    xor r9d, r9d
+    lea edx, [rax+r9]
     sub edx, 136
     jle .apply
     imul edx, 5
@@ -708,7 +881,6 @@ FUNC light_compose, 48
     inc r13d
     jmp .y
 .out:
-    call light_bloom
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -736,13 +908,206 @@ FUNC light_bloom, 48
     lea rdi, [bl_a]
     xor eax, eax
     rep stosd
-    ; ---- gather ----
-    xor r13d, r13d                  ; y
-    lea r12, [fb]
-    lea r15, [litbuf]
+    ; ---- gather (rows in multiples of 4: each thread owns its cells) ----
+    lea rdi, [bloom_gather_rows]
+    mov esi, [fb_h]
+    mov edx, 4
+    call par_rows
+.blur:
+    ; two box passes each way: bl_a -> bl_b (h), bl_b -> bl_a (v)
+    mov ebx, 2
+.bp:
+    lea rdi, [blur_h_rows]
+    mov esi, [bl_h]
+    mov edx, 1
+    call par_rows
+    lea rdi, [blur_v_cols]
+    mov esi, [bl_w]
+    lea esi, [rsi+rsi*2]
+    mov edx, 1
+    call par_rows
+    dec ebx
+    jnz .bp
+    ; ---- cells with no glow around them are skipped ----
+    mov eax, [bl_w]
+    imul eax, [bl_h]
+    mov r8d, eax
+    xor ecx, ecx
+    mov r9d, [bl_w]
+    lea r9d, [r9+r9*2]              ; row stride (dwords)
+.zf:
+    cmp ecx, r8d
+    jge .zd
+    lea rax, [rcx+rcx*2]
+    lea rsi, [bl_a+rax*4]
+    mov eax, [rsi]
+    or eax, [rsi+4]
+    or eax, [rsi+8]
+    or eax, [rsi+12]
+    or eax, [rsi+16]
+    or eax, [rsi+20]
+    lea rdi, [rsi+r9*4]
+    mov edx, ecx
+    add edx, [bl_w]
+    cmp edx, r8d
+    jae .zo
+    or eax, [rdi]
+    or eax, [rdi+4]
+    or eax, [rdi+8]
+    or eax, [rdi+12]
+    or eax, [rdi+16]
+    or eax, [rdi+20]
+.zo:
+    test eax, eax
+    setz byte [bl_z+rcx]
+    inc ecx
+    jmp .zf
+.zd:
+    ; ---- add back, bilinear ----
+    lea rdi, [bloom_add_rows]
+    mov esi, [fb_h]
+    mov edx, 1
+    call par_rows
+.out:
+    RETURN
+
+; horizontal box blur, radius 2 (rsi src, rdi dst, ecx w, r8d h)
+bloom_box:
+    push rbx
+    push r12
+    push r13
+    mov r9d, r8d                    ; rows
+.r:
+    xor r10d, r10d                  ; x
+.x:
+    xor r11d, r11d
+.ch:
+    xor eax, eax
+    mov r12d, -2
+.k:
+    lea r13d, [r10+r12]
+    cmp r13d, 0
+    jl .kn
+    cmp r13d, ecx
+    jge .kn
+    lea r13, [r13+r13*2]
+    add r13, r11
+    add eax, [rsi+r13*4]
+.kn:
+    inc r12d
+    cmp r12d, 2
+    jle .k
+    imul eax, eax, 205              ; / 5
+    shr eax, 10
+    lea r13, [r10+r10*2]
+    add r13, r11
+    mov [rdi+r13*4], eax
+    inc r11d
+    cmp r11d, 3
+    jl .ch
+    inc r10d
+    cmp r10d, ecx
+    jl .x
+    lea rax, [rcx+rcx*2]
+    lea rsi, [rsi+rax*4]
+    lea rdi, [rdi+rax*4]
+    dec r9d
+    jnz .r
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+; vertical box blur, radius 2 (rsi src, rdi dst, edx row stride dwords,
+; ecx h, r8d first column, r9d end column, in dwords)
+bloom_box_v:
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+    mov r14d, edx
+    mov r15d, r9d
+    mov r9d, r8d                    ; column
+.c:
+    xor r10d, r10d                  ; y
+.y:
+    xor eax, eax
+    mov r12d, -2
+.k:
+    lea r13d, [r10+r12]
+    cmp r13d, 0
+    jl .kn
+    cmp r13d, ecx
+    jge .kn
+    imul r13d, r14d
+    add r13d, r9d
+    add eax, [rsi+r13*4]
+.kn:
+    inc r12d
+    cmp r12d, 2
+    jle .k
+    imul eax, eax, 205              ; / 5
+    shr eax, 10
+    mov r13d, r10d
+    imul r13d, r14d
+    add r13d, r9d
+    mov [rdi+r13*4], eax
+    inc r10d
+    cmp r10d, ecx
+    jl .y
+    inc r9d
+    cmp r9d, r15d
+    jl .c
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+; blur jobs: horizontal over cell rows, vertical over dword columns
+FUNC blur_h_rows
+    mov r12d, edi
+    mov r13d, esi
+    mov eax, [bl_w]
+    lea eax, [rax+rax*2]
+    imul eax, r12d                  ; first dword
+    lea rsi, [bl_a+rax*4]
+    lea rdi, [bl_b+rax*4]
+    mov ecx, [bl_w]
+    mov r8d, r13d
+    sub r8d, r12d
+    jle .o
+    call bloom_box
+.o:
+    RETURN
+
+FUNC blur_v_cols
+    cmp edi, esi
+    jge .o
+    mov r8d, edi
+    mov r9d, esi
+    lea rsi, [bl_b]
+    lea rdi, [bl_a]
+    mov edx, [bl_w]
+    lea edx, [rdx+rdx*2]
+    mov ecx, [bl_h]
+    call bloom_box_v
+.o:
+    RETURN
+
+; bloom: sum glow pixels of rows [edi, esi) into their cells
+FUNC bloom_gather_rows, 16
+    mov r13d, edi
+    mov [rbp-52], esi
+    mov eax, edi
+    imul eax, [fb_w]
+    lea r12, [fb+rax]
+    lea r15, [litbuf+rax*4]
 .gy:
-    cmp r13d, [fb_h]
-    jge .blur
+    cmp r13d, [rbp-52]
+    jge .out
     mov eax, r13d
     shr eax, 2
     imul eax, [bl_w]
@@ -776,30 +1141,18 @@ FUNC light_bloom, 48
 .gyn:
     inc r13d
     jmp .gy
-.blur:
-    ; two box passes each way: bl_a -> bl_b (h), bl_b -> bl_a (v)
-    mov ebx, 3
-.bp:
-    lea rsi, [bl_a]
-    lea rdi, [bl_b]
-    mov edx, 3                      ; step between neighbours (dwords)
-    mov ecx, [bl_w]
-    mov r8d, [bl_h]
-    call bloom_box
-    lea rsi, [bl_b]
-    lea rdi, [bl_a]
-    mov edx, [bl_w]
-    lea edx, [rdx+rdx*2]
-    mov ecx, [bl_h]
-    mov r8d, [bl_w]
-    call bloom_box_v
-    dec ebx
-    jnz .bp
-    ; ---- add back, bilinear ----
-    xor r13d, r13d
-    lea r15, [litbuf]
+.out:
+    RETURN
+
+; bloom: add the blurred glow to rows [edi, esi)
+FUNC bloom_add_rows, 48
+    mov r13d, edi
+    mov [rbp-60], esi
+    mov eax, edi
+    imul eax, [fb_w]
+    lea r15, [litbuf+rax*4]
 .ay:
-    cmp r13d, [fb_h]
+    cmp r13d, [rbp-60]
     jge .out
     ; v = y/4 - 3/8 in 8.8
     mov eax, r13d
@@ -835,6 +1188,8 @@ FUNC light_bloom, 48
     sub eax, 2
     CLAMP ecx, 0, eax
     add ecx, [rbp-56]
+    cmp byte [bl_z+rcx], 0
+    jne .askip
     lea rcx, [rcx+rcx*2]
     lea rsi, [bl_a+rcx*4]           ; c00
     mov edx, [bl_w]
@@ -875,6 +1230,7 @@ FUNC light_bloom, 48
     BLCH 2, 16
     or r9d, 0xFF000000
     mov [r15], r9d
+.askip:
     add r15, 4
     inc r14d
     jmp .ax
@@ -883,99 +1239,3 @@ FUNC light_bloom, 48
     jmp .ay
 .out:
     RETURN
-
-; horizontal box blur, radius 2 (rsi src, rdi dst, ecx w, r8d h)
-bloom_box:
-    push rbx
-    push r12
-    push r13
-    mov r9d, r8d                    ; rows
-.r:
-    xor r10d, r10d                  ; x
-.x:
-    xor r11d, r11d
-.ch:
-    xor eax, eax
-    mov r12d, -2
-.k:
-    lea r13d, [r10+r12]
-    cmp r13d, 0
-    jl .kn
-    cmp r13d, ecx
-    jge .kn
-    lea r13, [r13+r13*2]
-    add r13, r11
-    add eax, [rsi+r13*4]
-.kn:
-    inc r12d
-    cmp r12d, 2
-    jle .k
-    xor edx, edx
-    mov ebx, 5
-    div ebx
-    lea r13, [r10+r10*2]
-    add r13, r11
-    mov [rdi+r13*4], eax
-    inc r11d
-    cmp r11d, 3
-    jl .ch
-    inc r10d
-    cmp r10d, ecx
-    jl .x
-    lea rax, [rcx+rcx*2]
-    lea rsi, [rsi+rax*4]
-    lea rdi, [rdi+rax*4]
-    dec r9d
-    jnz .r
-    pop r13
-    pop r12
-    pop rbx
-    ret
-
-; vertical box blur, radius 2 (rsi src, rdi dst, edx row stride dwords,
-; ecx h, r8d w)
-bloom_box_v:
-    push rbx
-    push r12
-    push r13
-    push r14
-    mov r14d, edx
-    xor r9d, r9d                    ; column (in dwords, 0 .. 3w)
-.c:
-    xor r10d, r10d                  ; y
-.y:
-    xor eax, eax
-    mov r12d, -2
-.k:
-    lea r13d, [r10+r12]
-    cmp r13d, 0
-    jl .kn
-    cmp r13d, ecx
-    jge .kn
-    imul r13d, r14d
-    add r13d, r9d
-    add eax, [rsi+r13*4]
-.kn:
-    inc r12d
-    cmp r12d, 2
-    jle .k
-    push rcx
-    xor edx, edx
-    mov ecx, 5
-    div ecx
-    pop rcx
-    mov r13d, r10d
-    imul r13d, r14d
-    add r13d, r9d
-    mov [rdi+r13*4], eax
-    inc r10d
-    cmp r10d, ecx
-    jl .y
-    inc r9d
-    cmp r9d, r14d
-    jl .c
-    pop r14
-    pop r13
-    pop r12
-    pop rbx
-    ret

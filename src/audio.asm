@@ -1806,7 +1806,8 @@ softclip:
     ret
 
 ; ---------------------------------------------------------------------
-;  audio_update: keep ~60 ms queued
+;  audio_update: keep ~100 ms queued, so one slow frame (a big window
+;  fully zoomed out, a save, a burst of city growth) never starves it
 ; ---------------------------------------------------------------------
 FUNC audio_update
     call music_fade_tick
@@ -1815,7 +1816,7 @@ FUNC audio_update
 .more:
     mov edi, [audio_dev]
     CALLC SDL_GetQueuedAudioSize
-    cmp eax, 2600*4
+    cmp eax, 4400*4
     jae .out
     ; compose ahead
     mov rax, [audio_time]

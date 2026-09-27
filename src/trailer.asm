@@ -32,6 +32,9 @@ str_shotfmt      db "SHOT %d %d", 10, 0
 str_tilefmt      db "TILE %d %d %d", 10, 0
 str_carfmt       db "CAR %d %d %d", 10, 0
 str_opfmt        db "bad trailer op %d", 10, 0
+str_benchfmt     db "BENCH us/frame: palette %d world %d agents %d light %d present-copy %d", 10, 0
+str_statfmt      db "STAT pop %d power %d/%d water %d/%d sewage %d/%d", 10, 0
+str_statfmt2     db "STAT2 unpowered %d nowater %d noroad %d abandon %d demand %d %d %d %d year %d", 10, 0
 
 section .text
 
@@ -553,12 +556,12 @@ tr_ops:
     dq tr_op_film, tr_op_roadanim, tr_op_follow, tr_op_overlay, tr_op_meteor
     dq tr_op_fire, tr_op_speed, tr_op_year, tr_op_confetti, tr_op_trees
     dq tr_op_clear, tr_op_load, tr_op_light, tr_op_money, tr_op_lock
-    dq tr_op_save, tr_op_drag
+    dq tr_op_save, tr_op_drag, tr_op_stat, tr_op_lforce, tr_op_bench
 TR_NOPS equ ($-tr_ops)/8
 section .text
 
 ; ---------------------------------------------------------------------
-FUNC trailer_run, 32
+FUNC trailer_run, 96
     ; the plan
     mov rdi, [tr_plan_file]
     test rdi, rdi
@@ -823,4 +826,115 @@ tr_op_drag:
     call tool_apply
     mov dword [drag_active], 0
     mov dword [tool], T_INSPECT
+    jmp trailer_run.next
+tr_op_stat:
+    call stats_update
+    lea rdi, [str_statfmt]
+    mov esi, [population]
+    mov edx, [power_supply]
+    mov ecx, [power_demand]
+    mov r8d, [water_supply]
+    mov r9d, [water_demand]
+    mov eax, [sewage_demand]
+    push rax
+    mov eax, [sewage_cap]
+    push rax
+    xor eax, eax
+    call printf
+    add rsp, 16
+    lea rdi, [str_statfmt2]
+    mov esi, [cnt_unpowered]
+    mov edx, [cnt_nowater]
+    mov ecx, [cnt_noroad]
+    mov r8d, [cnt_abandon]
+    mov r9d, [demand]
+    sub rsp, 8
+    push qword [year]
+    push qword [demand+12]
+    push qword [demand+8]
+    push qword [demand+4]
+    xor eax, eax
+    call printf
+    add rsp, 40
+    jmp trailer_run.next
+tr_op_lforce:
+    TRARGS [light_force]
+    jmp trailer_run.next
+; time the stages of a frame over n frames (n)
+%macro TRT 1
+    CALLC SDL_GetPerformanceCounter
+    mov rcx, rax
+    sub rax, [rbp-64]
+    add [rbp-%1], rax
+    mov [rbp-64], rcx
+%endmacro
+tr_op_bench:
+    TRARGS [rbp-48]
+    xor eax, eax
+    mov [rbp-56], rax
+    mov [rbp-72], rax
+    mov [rbp-80], rax
+    mov [rbp-88], rax
+    mov [rbp-96], rax
+    mov [rbp-104], rax
+    mov ebx, [rbp-48]
+.bl:
+    CALLC SDL_GetPerformanceCounter
+    mov [rbp-64], rax
+    call palette_update
+    TRT 72
+    call render_world
+    TRT 80
+    mov dword [emit_now], 0
+    call draw_agents
+    TRT 88
+    call light_compose
+    TRT 96
+    ; what video_present does with the result: copy rows to a texture
+    lea rdi, [shotbuf]
+    lea rsi, [litbuf]
+    mov ecx, [fb_w]
+    imul ecx, [fb_h]
+    rep movsd
+    TRT 104
+    dec ebx
+    jnz .bl
+    CALLC SDL_GetPerformanceFrequency
+    mov rcx, rax
+    xor edx, edx
+    mov eax, 1000000
+    ; us per frame = ticks * 1e6 / freq / n
+%macro TRUS 2
+    mov rax, [rbp-%1]
+    imul rax, rax, 1000
+    xor edx, edx
+    div rcx
+    imul rax, rax, 1000
+    movsxd r8, dword [rbp-48]
+    xor edx, edx
+    div r8
+    mov %2, eax
+%endmacro
+    mov [rbp-56], rcx
+    mov rcx, [rbp-56]
+    TRUS 72, esi
+    mov rcx, [rbp-56]
+    TRUS 80, edx
+    mov [rbp-112], edx
+    mov rcx, [rbp-56]
+    TRUS 88, eax
+    mov [rbp-116], eax
+    mov rcx, [rbp-56]
+    TRUS 96, eax
+    mov [rbp-120], eax
+    mov rcx, [rbp-56]
+    TRUS 104, eax
+    mov [rbp-124], eax
+    lea rdi, [str_benchfmt]
+    mov edx, [rbp-112]
+    mov ecx, [rbp-116]
+    mov r8d, [rbp-120]
+    mov r9d, [rbp-124]
+    xor eax, eax
+    call printf
     jmp trailer_run.next

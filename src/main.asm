@@ -198,6 +198,9 @@ FUNC main
 .fixed:
     call sprites_init
     call light_init
+%ifndef WEB
+    call threads_init
+%endif
     call audio_init
     call ui_init
     call settings_load
@@ -1139,6 +1142,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "sprites3.asm"
 %include "render.asm"
 %include "light.asm"
+%include "threads.asm"
 %include "sim.asm"
 %include "traffic.asm"
 %include "agents.asm"

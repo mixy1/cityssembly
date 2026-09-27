@@ -313,6 +313,11 @@ shadows, and sun glints on the water. At night, lit windows, street lamps and
 neon glow and spill light onto the streets. Settings → Lighting turns it all
 off for slow machines.
 
+The light passes run on every CPU core (a small SDL thread pool splits the
+screen into bands). The shadow sweep covers a margin around the view and is
+reused while you pan. At 4K fully zoomed out, lighting takes about 5 ms a
+frame.
+
 ## Source layout
 
 | File | Contents |
@@ -324,6 +329,7 @@ off for slow machines.
 | `src/draw.asm`, `src/font.asm` | 2D primitives, proportional pixel font (ASCII art) |
 | `src/voxel.asm` | voxel primitives, material shaders, isometric ray-caster, z-buffered blitter |
 | `src/light.asm` | sun and cloud shadows, contact shading, water glints, night bloom |
+| `src/threads.asm` | worker thread pool for the per-pixel passes |
 | `src/sprites.asm`, `src/sprites2.asm` | every model: terrain, 3 road types, trees, ~40 zone building designs x 4 variants, 2x2 buildings, farms / forestry / mines, 22 services, 6 vehicle types |
 | `src/world.asm` | map, noise, terrain generation, road/power masks |
 | `src/sim.asm` | growth, utilities (power / pipes / sewage), services, workforce, budget |
