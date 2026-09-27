@@ -117,3 +117,6 @@ SC_LSHIFT equ 225
 SC_RSHIFT equ 229
 
 AUDIO_S16LSB equ 0x8010
+%ifdef WEB
+extern web_setup
+%endif

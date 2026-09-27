@@ -150,6 +150,13 @@ FUNC main
     mov rax, [r13+24]
     mov [shot_file], rax
 .noargs:
+%ifdef WEB
+    ; the browser window decides the canvas size
+    call web_setup
+    mov [init_w], eax
+    shr rax, 32
+    mov [init_h], eax
+%endif
     call video_init
     mov dword [mouse_inside], 1
     call palette_init

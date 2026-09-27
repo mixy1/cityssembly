@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CITYSSEMBLY</title>
+<meta name="description" content="A city builder written entirely in x86-64 assembly, running in your browser.">
+<style>
+  :root { --bg: #0d1017; --fg: #e8e2d0; --dim: #8a8573; --gold: #f2c14e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+               font: 15px/1.5 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; }
+  canvas#canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
+                  image-rendering: pixelated; outline: none; cursor: none; }
+  #boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg);
+          transition: opacity .4s; z-index: 2; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  .card { text-align: center; max-width: 560px; padding: 24px; }
+  h1 { font-size: 34px; letter-spacing: 6px; color: var(--gold); margin: 0 0 6px; }
+  .sub { color: var(--dim); margin: 0 0 22px; }
+  .bar { height: 6px; width: 320px; max-width: 80vw; margin: 0 auto; background: #242938; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .2s; }
+  #status { margin-top: 14px; color: var(--dim); min-height: 1.5em; }
+  a { color: var(--gold); }
+  .links { margin-top: 22px; font-size: 13px; color: var(--dim); }
+  #crash { display: none; }
+  #log { position: fixed; left: 8px; bottom: 8px; max-height: 45vh; overflow: hidden; z-index: 3;
+         font-size: 12px; color: #9fe; background: #000a; padding: 6px; white-space: pre-wrap; display: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<pre id="log"></pre>
+<div id="boot"><div class="card">
+  <h1>CITYSSEMBLY</h1>
+  <p class="sub">a city builder written in x86-64 assembly</p>
+  <div class="bar"><i id="progress"></i></div>
+  <div id="status">loading…</div>
+  <div id="crash"></div>
+  <div class="links">
+    <a href="https://github.com/mixy1/cityssembly">source</a> ·
+    <a href="https://github.com/mixy1/cityssembly/releases">windows / linux builds</a>
+  </div>
+</div></div>
+<script>
+  var boot = document.getElementById('boot');
+  var statusEl = document.getElementById('status');
+  var bar = document.getElementById('progress');
+  window.cityCrash = function (why) {
+    boot.classList.remove('gone');
+    statusEl.textContent = 'The city crashed (' + why + '). Reload the page to try again.';
+  };
+  var logEl = document.getElementById('log');
+  var debug = /[?&]debug/.test(location.search);
+  if (debug) logEl.style.display = 'block';
+  function logLine(t) { if (debug) logEl.textContent = (logEl.textContent + t + '\n').slice(-4000); }
+  window.cityQuit = function () {
+    boot.classList.remove('gone');
+    statusEl.innerHTML = 'The mayor has left the building. <a href="">Play again</a>';
+  };
+  window.cityPerf = function (f, ms) { logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame'); };
+  window.addEventListener('error', function (e) { logLine('error: ' + e.message); });
+  window.addEventListener('unhandledrejection', function (e) { logLine('rejection: ' + (e.reason && (e.reason.stack || e.reason))); });
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    webglContextAttributes: { preserveDrawingBuffer: /[?&]shot/.test(location.search) },
+    print: function (t) { console.log(t); logLine(t); },
+    printErr: function (t) { console.warn(t); logLine('! ' + t); },
+    setStatus: function (t) {
+      var m = t && t.match(/\((\d+(\.\d+)?)\/(\d+)\)/);
+      if (m) bar.style.width = (100 * m[1] / m[3]) + '%';
+      if (t) statusEl.textContent = t.replace(/\(.*\)/, '').trim() || 'loading…';
+    },
+    onGameStart: function () {
+      bar.style.width = '100%';
+      boot.classList.add('gone');
+      Module.canvas.focus();
+    },
+    onAbort: function (w) { window.cityCrash(w || 'abort'); }
+  };
+  // keep keys like Space / arrows / Tab / F-keys inside the game
+  window.addEventListener('keydown', function (e) {
+    if ([' ', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1', 'F2', 'F3', 'F4', 'F5', 'F9'].indexOf(e.key) >= 0)
+      e.preventDefault();
+  }, { capture: true });
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

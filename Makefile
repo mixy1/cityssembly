@@ -1,6 +1,7 @@
 # CITYSSEMBLY build
 #   make            -> Windows build (dist/cityssembly.exe, SDL2 linked statically)
 #   make linux      -> native Linux build (./cityssembly, uses system libSDL2)
+#   make web        -> browser build in site/ (needs emcc, python capstone + pyelftools)
 
 NASM     ?= nasm
 MINGW    ?= x86_64-w64-mingw32-gcc
@@ -45,4 +46,7 @@ build/main.o: $(SRC)
 clean:
 	rm -rf build cityssembly dist/cityssembly.exe
 
-.PHONY: all windows linux clean deps
+.PHONY: all windows linux clean deps web
+
+web:
+	./web/build.sh

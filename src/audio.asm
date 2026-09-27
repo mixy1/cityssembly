@@ -1749,6 +1749,7 @@ softclip:
 ;  audio_update: keep ~60 ms queued
 ; ---------------------------------------------------------------------
 FUNC audio_update
+    call music_fade_tick
     cmp dword [audio_ok], 0
     je .out
 .more:

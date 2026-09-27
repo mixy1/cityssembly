@@ -1833,9 +1833,24 @@ FUNC autosave_tick
 .out:
     RETURN
 
+; once per frame: raise the launch fade-in (about 4 seconds)
+FUNC music_fade_tick
+    mov eax, [music_fade]
+    cmp eax, 256
+    jge .out
+    inc eax
+    mov [music_fade], eax
+    call apply_volumes
+.out:
+    RETURN
+
 ; volume percentages -> the mixer's float gains
 FUNC apply_volumes
-    cvtsi2ss xmm0, dword [set_music]
+    ; music fades in over the first few seconds after launch
+    mov eax, [set_music]
+    imul eax, [music_fade]
+    shr eax, 8
+    cvtsi2ss xmm0, eax
     mulss xmm0, [f_music_scale]
     movss [music_vol], xmm0
     cvtsi2ss xmm0, dword [set_sfx]
@@ -1847,8 +1862,9 @@ section .data
 align 4
 f_music_scale dd 0.008
 f_sfx_scale   dd 0.01
-set_music     dd 75
-set_sfx       dd 80
+music_fade    dd 0          ; 0..256
+set_music     dd 45
+set_sfx       dd 55
 set_xray      dd 1          ; 0 off, 1 near the cursor, 2 all
 set_edge      dd 0
 set_autosave  dd 1

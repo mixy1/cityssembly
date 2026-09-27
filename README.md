@@ -32,6 +32,34 @@ The Windows build downloads the SDL2 MinGW development package into
 Run `dist/cityssembly.exe` from Windows, or straight from WSL with
 `./dist/cityssembly.exe`.
 
+## Play in the browser
+
+**https://cityssembly.mixy.one** runs the same assembly in your browser.
+
+The x86-64 code isn't emulated. `tools/asm2c/translate.py` reads the object
+file NASM produces from the unchanged source (code, data, symbols and
+relocations) and translates it statically into C:
+
+- every function becomes a C function, with registers as locals
+- flags are lazy, evaluated only where a jump or `setcc` reads them
+- the emulated stack keeps the native layout
+- data keeps NASM's exact layout
+- the few jump and function-pointer tables become switches
+
+Emscripten compiles that C and a small SDL/libc shim (`web/runtime.c`) to
+WebAssembly. The native build of the translated code is pixel-identical to the
+real binary and runs at about 85% of its speed. Saves go to IndexedDB. Add
+`?debug` to the URL to see the log and frame timings.
+
+```sh
+make web        # -> site/  (needs nasm, emcc, pip install capstone pyelftools)
+```
+
+GitHub Actions builds Windows, Linux and web on every push. With the
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets set, it deploys the
+site to Cloudflare Pages (project `cityssembly`). By hand:
+`npx wrangler pages deploy site --project-name cityssembly`.
+
 ## Playing
 
 Start by extending one of the two **regional highways** (west and north) with
