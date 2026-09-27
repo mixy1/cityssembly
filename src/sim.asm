@@ -3273,6 +3273,12 @@ FUNC month_end, 32
     xor edx, edx
     mov ecx, 16
     div ecx
+    ; industrial filters are paid for out of industry's taxes
+    test dword [policies], P_FILTERS
+    jz .nfl
+    lea eax, [rax*2+rax]
+    shr eax, 2
+.nfl:
     mov [inc_class+8], eax
     mov eax, [jobs+ZC_OFF*4]
     imul eax, [tax_rate+ZC_OFF*4]

@@ -389,6 +389,11 @@ s_policies  db "POLICIES", 0
 s_stats     db "CITY STATISTICS", 0
 s_pcost     db "costs ", 0
 s_free      db "free", 0
+s_lostfare  db "-", 0
+s_farestr   db " fares", 0
+s_nobus     db "no buses yet", 0
+s_indtax    db "-25% ind. tax", 0
+s_growth    db "limits growth", 0
 
 policy_names dq pn0, pn1, pn2, pn3, pn4, pn5, pn6, pn7
 policy_desc  dq pd0, pd1, pd2, pd3, pd4, pd5, pd6, pd7
@@ -402,10 +407,10 @@ pn6 db "Education boost", 0
 pn7 db "Parks & recreation", 0
 pd0 db "Halves the chance of fires.", 0
 pd1 db "25% less garbage.", 0
-pd2 db "More bus riders, no fares.", 0
+pd2 db "More bus riders, but no fare income.", 0
 pd3 db "Dense zones stop at level 3.", 0
 pd4 db "Fewer car trips.", 0
-pd5 db "Industry pollutes much less.", 0
+pd5 db "Industry pollutes far less, pays less tax.", 0
 pd6 db "Schools reach further.", 0
 pd7 db "Bigger parks, happier people.", 0
 
@@ -4781,7 +4786,27 @@ FUNC draw_policies, 16
     mov ecx, [policy_cost_div+rbx*4]
     test ecx, ecx
     jnz .c
+    ; policies whose price isn't a monthly bill
+    cmp ebx, 2
+    jne .k3
+    lea rdi, [s_nobus]
+    cmp dword [svc_count+BK_BUSDEPOT*4], 0
+    je .ks
+    lea rdi, [s_lostfare]
+    call tb_str
+    movsxd rdi, dword [bus_riders]
+    call tb_money
+    lea rdi, [s_farestr]
+    jmp .ks
+.k3:
+    lea rdi, [s_growth]
+    cmp ebx, 3
+    je .ks
+    lea rdi, [s_indtax]
+    cmp ebx, 5
+    je .ks
     lea rdi, [s_free]
+.ks:
     call tb_str
     jmp .cd
 .c:
