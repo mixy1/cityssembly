@@ -15,14 +15,14 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from timeline import EDIT, BAR_FRAMES, FPS, BARS, IMPACT_BAR, LOGO_BAR, PRE, bar  # noqa
+from timeline import (EDIT, BAR_FRAMES, FPS, BARS, IMPACT_BAR, LOGO_BAR, PRE, bar,  # noqa
+                      DAWN, LIFE, GROW, TRIAL, FINAL, END, STORY_BARS)
 
 W, H = 1920, 1080
 CW, CH = 2560, 1440                       # capture size (world px 1:1)
 CAP = os.path.join(HERE, "cap")
 TAKES = json.load(open(os.path.join(CAP, "takes.json")))
 TOTAL = BARS * BAR_FRAMES
-STORY_BARS = BARS - PRE
 FONT = "/usr/share/fonts/opentype/inter/InterDisplay-Medium.otf"
 FONT_LIGHT = "/usr/share/fonts/opentype/inter/InterDisplay-Light.otf"
 FONT_BOLD = "/usr/share/fonts/opentype/inter/InterDisplay-Bold.otf"
@@ -81,7 +81,7 @@ SHOTS = {
     "bridge": dict(start=8, speed=1.0, cam=lin_cam("bridge", (1, -1), (-1, 1), 2.7, 2.9)),
     "north": dict(start=8, speed=1.0, cam=lin_cam("north", (0, 1), (2, -1), 2.4, 2.6)),
     "stadium": dict(start=8, speed=1.0, cam=lin_cam("stadium", (1, 1), (0, 0), 2.8, 3.2)),
-    "timelapse": dict(start=0, speed=480 / 440, cam=lin_cam("timelapse", (0, 0), (0, 0), 1.0, 1.12)),
+    "timelapse": dict(start=0, speed=480 / 200, cam=lin_cam("timelapse", (0, 0), (0, 0), 1.0, 1.12)),
     "view_power": dict(start=4, speed=1.0, cam=lin_cam("view_power", (0, 0), (1, 0), 1.5, 1.55)),
     "view_water": dict(start=4, speed=1.0, cam=lin_cam("view_water", (1, 0), (2, 0), 1.55, 1.6)),
     "view_traffic": dict(start=4, speed=1.0, cam=lin_cam("view_traffic", (2, 0), (3, 0), 1.6, 1.65)),
@@ -143,11 +143,11 @@ def source_and_cam(take, local, length):
         return sf, (cx, cy), sh["zoom"]
     if take == "meteor":
         imp = TAKES["meteor"]["impact"]
-        sf = imp - (IMPACT_BAR - 29.5) * BAR_FRAMES + local
+        sf = imp - (IMPACT_BAR - (TRIAL + 2)) * BAR_FRAMES + local
     elif take == "wide":
         sf = local
-        # pull out over bars 35-37, then hold for the logo
-        v = ease_in_out(local / (2 * BAR_FRAMES))
+        # pull out until the logo lands, then hold
+        v = ease_in_out(local / ((LOGO_BAR - FINAL - 2) * BAR_FRAMES))
         z = 2.6 + (0.92 - 2.6) * v
         p0 = off("wide", 2, -3)
         p1 = off("wide", 0, 0)
@@ -209,13 +209,13 @@ def camera_view(src, center, zoom):
 
 # ------------------------------------------------------------------ grading
 def act_of(b):
-    if b < 9:
+    if b < LIFE:
         return 1
-    if b < 17:
+    if b < GROW:
         return 2
-    if b < 25:
+    if b < TRIAL:
         return 3
-    if b < 32:
+    if b < FINAL:
         return 4
     return 5
 
@@ -324,79 +324,6 @@ def over(img, layer, alpha=1.0):
     return img * (1 - al) + a[..., :3] * al
 
 
-def caption_intro(img, t_bar):
-    """act I statements, centred, fading"""
-    lines = [(1.6, 3.2, "EVERY CITY"), (3.7, 6.2, "BEGINS WITH A SINGLE ROAD")]
-    for b0, b1, txt in lines:
-        if b0 <= t_bar < b1:
-            a = min(smooth((t_bar - b0) / 0.35), smooth((b1 - t_bar) / 0.4))
-            lay = text_layer(lambda d: spaced(d, (W / 2, H * 0.78), txt, font(FONT_LIGHT, 38), (245, 240, 230, 255), 14))
-            img = over(img, lay, a)
-    return img
-
-
-def caption_location(img, t_bar, name, b0):
-    """act II: lower-left location title, a thin rule wiping in"""
-    u = t_bar - b0
-    if u < 0.06 or u > 0.94:
-        return img
-    a = min(smooth((u - 0.06) / 0.1), smooth((0.94 - u) / 0.1))
-    wipe = ease_out((u - 0.06) / 0.25)
-
-    def d(dr):
-        x, y = 110, H - 170
-        wtxt = spaced(dr, (x, y), name, font(FONT_BOLD, 46), (255, 255, 255, 255), 9, anchor="lm")
-        dr.rectangle((x, y + 40, x + (wtxt + 10) * wipe, y + 43), fill=(255, 210, 90, 255))
-    lay = text_layer(d)
-    return over(img, lay, a)
-
-
-def caption_small(img, t_bar, name, b0, b1):
-    """info views: a label in the corner"""
-    u = (t_bar - b0) / (b1 - b0)
-    a = min(smooth(u / 0.15), smooth((1 - u) / 0.15))
-    lay = text_layer(lambda dr: spaced(dr, (110, 190), name, font(FONT_BOLD, 34), (255, 255, 255, 255), 8, anchor="lm"))
-    return over(img, lay, a)
-
-
-def caption_tested(img, t_bar):
-    b0, b1 = 26.0, 29.3
-    if not (b0 <= t_bar < b1):
-        return img
-    a = min(smooth((t_bar - b0) / 0.5), smooth((b1 - t_bar) / 0.5))
-    lay = text_layer(lambda d: spaced(d, (W / 2, H * 0.8), "EVERY CITY IS TESTED", font(FONT_LIGHT, 38), (235, 238, 250, 255), 14))
-    return over(img, lay, a)
-
-
-def counters(img, t_bar):
-    """the time-lapse: the year and the population"""
-    b0, b1 = 17.0, 22.5
-    if not (b0 <= t_bar < b1):
-        return img
-    u = (t_bar - b0) / (b1 - b0)
-    year = int(2026 + 22 * u)
-    pops = [0] + POPS + [POPS[-1]]
-    x = u * (len(pops) - 1)
-    i = min(len(pops) - 2, int(x))
-    pop = int(pops[i] + (pops[i + 1] - pops[i]) * (x - i))
-    a = min(smooth((t_bar - b0) / 0.3), smooth((b1 - t_bar) / 0.3))
-
-    def d(dr):
-        dr.text((W - 110, H - 250), str(year), font=font(FONT_BOLD, 92), fill=(255, 255, 255, 255), anchor="rs")
-        spaced(dr, (W - 110, H - 205), f"POPULATION {pop:,}", font(FONT, 30), (255, 214, 120, 255), 5, anchor="rm")
-    return over(img, text_layer(d), a)
-
-
-POPS = []
-try:
-    for ln in open(os.path.join(CAP, "log.txt")):
-        if ln.startswith("STAT pop"):
-            POPS.append(int(ln.split()[2]))
-    POPS = POPS[:4]
-except OSError:
-    POPS = [10000, 23000, 29000, 48000]
-
-
 # ------------------------------------------------------------------ the logo: voxel type from the game's font
 def load_game_font():
     import re
@@ -423,6 +350,137 @@ def logo_cells(word):
 
 
 LOGO = logo_cells("CITYSSEMBLY")
+
+
+# ------------------------------------------------------------------ voxel type (the game's pixel font, extruded)
+def glyph_cols(text):
+    """proportional columns of 8-row booleans from the game's font"""
+    cols = []
+    for ch in text:
+        if ch == " ":
+            cols += [[False] * 8] * 3
+            continue
+        g = GF.get(ch)
+        if g is None:
+            continue
+        used = [c for c in range(5) if any(len(r) > c and r[c] == "#" for r in g)]
+        if ch.isdigit() or not used:
+            used = list(range(5))
+        for c in range(min(used), max(used) + 1):
+            cols.append([len(g[r]) > c and g[r][c] == "#" for r in range(8)])
+        cols.append([False] * 8)
+    return cols[:-1]
+
+
+def mix(a, b, u):
+    return tuple(int(a[i] + (b[i] - a[i]) * u) for i in range(3))
+
+
+def voxel_text(img, text, x, y, s, top_col, bot_col, t, t_in, t_out=None, anchor="c",
+               spread=0.35, drop=90, shadow=0.55):
+    """draw text as voxel cubes; letters drop in left to right from t_in,
+    and fall away from t_out. x, y: anchor point (bars, t in bars)"""
+    cols = glyph_cols(text)
+    if not cols or t < t_in:
+        return img
+    wtot = len(cols) * s
+    x0 = x - wtot / 2 if anchor == "c" else (x - wtot if anchor == "r" else x)
+    y0 = y - 4 * s
+    dep = max(2, s * 0.42)
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    cubes = []
+    n = len(cols)
+    for ci, col in enumerate(cols):
+        for ri, on in enumerate(col):
+            if not on:
+                continue
+            delay = ci / max(1, n) * spread
+            p = (t - t_in - delay) / 0.12
+            if p <= 0:
+                continue
+            e = ease_out(min(1.0, p))
+            a = min(1.0, p * 2)
+            dy = -(1 - e) * drop
+            if t_out is not None and t > t_out + delay * 0.5:
+                q = (t - t_out - delay * 0.5) / 0.15
+                dy += q * q * 240
+                a *= max(0.0, 1 - q)
+            if a <= 0:
+                continue
+            cubes.append((ci, ri, dy, a))
+    # shadow pass, then extrusion, then faces
+    for ci, ri, dy, a in cubes:
+        cx, cy = x0 + ci * s + s * 0.35, y0 + ri * s + dy + s * 0.55
+        d.rectangle((cx, cy, cx + s + dep, cy + s + dep * 0.5), fill=(0, 0, 0, int(255 * shadow * a)))
+    lay = lay.filter(ImageFilter.GaussianBlur(max(1, s * 0.35)))
+    d = ImageDraw.Draw(lay)
+    for ci, ri, dy, a in sorted(cubes, key=lambda c: (c[1], c[0])):
+        cx, cy = x0 + ci * s, y0 + ri * s + dy
+        face = mix(top_col, bot_col, ri / 7)
+        side = mix(face, (0, 0, 0), 0.42)
+        bot = mix(face, (0, 0, 0), 0.58)
+        al = int(255 * a)
+        d.polygon([(cx + s, cy), (cx + s + dep, cy + dep * 0.5), (cx + s + dep, cy + s + dep * 0.5), (cx + s, cy + s)],
+                  fill=side + (al,))
+        d.polygon([(cx, cy + s), (cx + s, cy + s), (cx + s + dep, cy + s + dep * 0.5), (cx + dep, cy + s + dep * 0.5)],
+                  fill=bot + (al,))
+        d.rectangle((cx, cy, cx + s - 1, cy + s - 1), fill=face + (al,))
+        d.rectangle((cx, cy, cx + s - 1, cy + max(1, s // 6)), fill=mix(face, (255, 255, 255), 0.35) + (al,))
+    return over(img, lay)
+
+
+CREAM = ((255, 250, 236), (232, 206, 160))
+GOLD2 = ((255, 238, 150), (236, 146, 40))
+WHITE2 = ((255, 255, 255), (196, 206, 226))
+VIEWCOL = {"POWER": ((255, 236, 110), (230, 170, 30)), "WATER": ((150, 230, 255), (40, 140, 230)),
+           "TRAFFIC": ((255, 190, 120), (230, 90, 40)), "LAND VALUE": ((170, 255, 150), (50, 170, 70))}
+
+
+def caption_intro(img, t_bar):
+    img = voxel_text(img, "EVERY CITY", W / 2, H * 0.75, 11, *CREAM, t_bar, DAWN + 0.15, DAWN + 0.95)
+    img = voxel_text(img, "BEGINS WITH A SINGLE ROAD", W / 2, H * 0.75, 11, *CREAM, t_bar, DAWN + 1.1, DAWN + 2.8)
+    return img
+
+
+def caption_location(img, t_bar, name, b0, b1):
+    return voxel_text(img, name, 120, H - 205, 13, *GOLD2, t_bar, b0 + 0.03, b1 - 0.1, anchor="l",
+                      spread=0.12, drop=60)
+
+
+def caption_view(img, t_bar, name, b0, b1):
+    top, bot = VIEWCOL.get(name, WHITE2)
+    return voxel_text(img, name, 120, 205, 11, top, bot, t_bar, b0 + 0.01, None, anchor="l", spread=0.06, drop=40)
+
+
+def caption_tested(img, t_bar):
+    return voxel_text(img, "EVERY CITY IS TESTED", W / 2, H * 0.75, 11, (236, 240, 255), (150, 160, 210),
+                      t_bar, TRIAL + 0.4, TRIAL + 1.9)
+
+
+POPS = []
+try:
+    for ln in open(os.path.join(CAP, "log.txt")):
+        if ln.startswith("STAT pop"):
+            POPS.append(int(ln.split()[2]))
+    POPS = POPS[:4]
+except OSError:
+    POPS = [10000, 23000, 29000, 48000]
+
+
+def counters(img, t_bar):
+    b0, b1 = GROW, GROW + 2.5
+    if not (b0 <= t_bar < b1):
+        return img
+    u = (t_bar - b0) / (b1 - b0)
+    year = int(2026 + 22 * u)
+    pops = [0] + POPS + [POPS[-1]]
+    xx = u * (len(pops) - 1)
+    i = min(len(pops) - 2, int(xx))
+    pop = int(pops[i] + (pops[i + 1] - pops[i]) * (xx - i))
+    img = voxel_text(img, str(year), W - 120, H - 290, 20, *WHITE2, t_bar, b0, None, anchor="r", spread=0.05, drop=40)
+    return voxel_text(img, f"POP {pop:,}", W - 120, H - 200, 8, *GOLD2, t_bar, b0 + 0.05, None, anchor="r",
+                      spread=0.05, drop=30)
 
 
 def draw_logo(img, t_bar):
@@ -461,24 +519,22 @@ def draw_logo(img, t_bar):
         d.rectangle((x, y, x + s - 1, y + s - 1), fill=gold + (int(255 * min(1, p * 2)),))
         d.rectangle((x, y, x + s - 1, y + 4), fill=top + (int(255 * min(1, p * 2)),))
     img = over(img, lay)
-    a1 = smooth((t - 0.9) / 0.3)
-    a2 = smooth((t - 1.35) / 0.3)
-    if a1 > 0:
-        img = over(img, text_layer(lambda dr: spaced(dr, (W / 2, H * 0.62), "A CITY BUILDER WRITTEN IN PURE X86-64 ASSEMBLY",
-                                                     font(FONT, 30), (250, 245, 235, 255), 8)), a1)
-    if a2 > 0:
-        def d2(dr):
-            spaced(dr, (W / 2, H * 0.70), "PLAY FREE IN YOUR BROWSER", font(FONT_BOLD, 34), (255, 214, 110, 255), 9)
-            spaced(dr, (W / 2, H * 0.76), "cityssembly.mixy.one", font(FONT, 32), (255, 255, 255, 255), 3)
-            spaced(dr, (W / 2, H * 0.82), "WINDOWS  ·  LINUX  ·  WEB", font(FONT, 22), (190, 196, 210, 255), 8)
-        img = over(img, text_layer(d2), a2)
+    tb = LOGO_BAR
+    img = voxel_text(img, "A CITY BUILDER IN PURE X86-64 ASSEMBLY", W / 2, H * 0.62, 5, *CREAM, t_bar, tb + 0.35,
+                     None, spread=0.2, drop=30, shadow=0.4)
+    img = voxel_text(img, "PLAY FREE IN YOUR BROWSER", W / 2, H * 0.71, 8, *GOLD2, t_bar, tb + 0.6, None,
+                     spread=0.2, drop=40)
+    img = voxel_text(img, "cityssembly.mixy.one", W / 2, H * 0.79, 8, *WHITE2, t_bar, tb + 0.8, None,
+                     spread=0.2, drop=40)
+    img = voxel_text(img, "WINDOWS - LINUX - WEB", W / 2, H * 0.86, 4, (190, 196, 214), (140, 146, 170), t_bar,
+                     tb + 1.0, None, spread=0.2, drop=20, shadow=0.3)
     return img
 
 
 # ------------------------------------------------------------------ the meteor
 def fireball(img, t_bar, take, center, zoom):
     """a burning meteor streaks down onto the impact tile"""
-    b0 = 30.0
+    b0 = TRIAL + 2.3
     if not (b0 <= t_bar < IMPACT_BAR):
         return img
     u = (t_bar - b0) / (IMPACT_BAR - b0)
@@ -533,41 +589,41 @@ def render(f, reader):
     if act == 1:
         img = caption_intro(img, t_bar)
     if entry and entry[3] and act == 2:
-        img = caption_location(img, t_bar, entry[3], entry[0])
+        img = caption_location(img, t_bar, entry[3], entry[0], entry[1])
     if entry and entry[3] and take and take.startswith("view"):
-        img = caption_small(img, t_bar, entry[3], entry[0], entry[1])
+        img = caption_view(img, t_bar, entry[3], entry[0], entry[1])
     img = counters(img, t_bar)
     if act == 4:
         img = caption_tested(img, t_bar)
     # ---- fades, flashes, bars
-    if t_bar < 1.6:
-        img *= smooth((t_bar - 1.0) / 0.6)
-    if 8.85 <= t_bar < 9.0:
-        img *= 1 - smooth((t_bar - 8.85) / 0.1)
-    if 24.5 <= t_bar < 25.0:
+    if t_bar < DAWN + 0.3:
+        img *= smooth((t_bar - DAWN) / 0.3)
+    if LIFE - 0.08 <= t_bar < LIFE:
+        img *= 1 - smooth((t_bar - (LIFE - 0.08)) / 0.08)
+    if GROW + 3.5 <= t_bar < TRIAL:
         img[:] = 0
-    if 25.0 <= t_bar < 25.3:
-        img *= smooth((t_bar - 25.0) / 0.3)
-    if IMPACT_BAR <= t_bar < 32.0:
+    if TRIAL <= t_bar < TRIAL + 0.25:
+        img *= smooth((t_bar - TRIAL) / 0.25)
+    if IMPACT_BAR <= t_bar < FINAL:
         k = t_bar - IMPACT_BAR
-        if k < 0.25:
-            img = img * 0 + (1 - k / 0.25) + img * (k / 0.25)
+        if k < 0.2:
+            img = img * 0 + (1 - k / 0.2) + img * (k / 0.2)
         else:
-            img *= max(0.0, 1 - (k - 0.25) / 0.35)
+            img *= max(0.0, 1 - (k - 0.2) / 0.2)
     if t_bar >= LOGO_BAR:
-        k = smooth((t_bar - LOGO_BAR) / 0.8)
+        k = smooth((t_bar - LOGO_BAR) / 0.6)
         sm = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).resize((W // 8, H // 8), Image.BILINEAR)
         sm = np.asarray(sm.filter(ImageFilter.GaussianBlur(1.5)).resize((W, H), Image.BILINEAR), np.float32) / 255
         img = img * (1 - k) + sm * k * 0.45
         img = draw_logo(img, t_bar)
-    if t_bar > STORY_BARS + 1 - 0.8:
-        img *= smooth((STORY_BARS + 1 - t_bar) / 0.8)
-    # letterbox for acts I-IV; it opens on the finale
+    if t_bar > END - 0.6:
+        img *= smooth((END - t_bar) / 0.6)
+    # letterbox until the finale; it opens as the brass comes in
     lb = 0.0
-    if t_bar < 32:
+    if t_bar < FINAL:
         lb = 1.0
-    elif t_bar < 33:
-        lb = 1 - ease_in_out(t_bar - 32)
+    elif t_bar < FINAL + 0.75:
+        lb = 1 - ease_in_out((t_bar - FINAL) / 0.75)
     if lb > 0:
         hbar = int(round(H * (1 - 1920 / 2.35 / H) / 2 * lb))
         img[:hbar] = 0
@@ -577,8 +633,7 @@ def render(f, reader):
 
 
 # ------------------------------------------------------------------ the cold open
-COLD = [("gold_b", 0, 80, (1, 2), (0, 0), 2.2, 2.5, 5),
-        ("night", 80, 160, (-2, 1), (0, 0), 1.9, 2.15, 4)]
+COLD = [("gold_b", 0, 80, (1, 2), (0, 0), 2.2, 2.6, 5)]
 
 
 def render_cold_open(f, reader):
@@ -596,8 +651,8 @@ def render_cold_open(f, reader):
             img = grade(img, act)
             img = bloom(img, 0.55 if take == "night" else 0.35)
             img = tilt_shift(img, 0.6)
-            if f >= b - 6 and take == "night":
-                img *= (b - f) / 6
+            if f >= b - 5:
+                img *= (b - f) / 5
             return (np.clip(grain(img, f), 0, 1) * 255).astype(np.uint8)
     return np.zeros((H, W, 3), np.uint8)
 
