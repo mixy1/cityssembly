@@ -1836,7 +1836,7 @@ tile_water_use:
     shl eax, 2
 .o: ret
 
-FUNC water_flood, 64
+FUNC water_flood, 80
     lea rdi, [comp_map]
     xor eax, eax
     mov ecx, MAP_TILES/2
@@ -1975,12 +1975,17 @@ FUNC water_flood, 64
     mov rdi, rbx
     call footprint_size
     mov [rbp-84], eax
+    ; every network in reach is a candidate: take the one with the most
+    ; water (a dead stub left after removing pipes must not capture the
+    ; building when a live pipe is just as close)
+    mov dword [rbp-92], 0           ; best component
+    mov dword [rbp-96], -1          ; its supply
     mov r12d, -3
 .sy:
     mov eax, [rbp-84]
     add eax, 2
     cmp r12d, eax
-    jg .cn
+    jg .attach
     mov r13d, -3
 .sx:
     mov eax, [rbp-84]
@@ -2002,18 +2007,26 @@ FUNC water_flood, 64
     movzx eax, word [comp_map+rsi*2]
     test eax, eax
     jz .sxn
-    mov [cons_comp+r15*2], ax
-    mov ecx, [rbp-80]
-    add [comp_demand+rax*4], ecx
-    add [water_demand], ecx
-    add [sewage_demand], ecx
-    jmp .cn
+    mov ecx, [comp_supply+rax*4]
+    cmp ecx, [rbp-96]
+    jle .sxn
+    mov [rbp-96], ecx
+    mov [rbp-92], eax
 .sxn:
     inc r13d
     jmp .sx
 .syn:
     inc r12d
     jmp .sy
+.attach:
+    mov eax, [rbp-92]
+    test eax, eax
+    jz .cn
+    mov [cons_comp+r15*2], ax
+    mov ecx, [rbp-80]
+    add [comp_demand+rax*4], ecx
+    add [water_demand], ecx
+    add [sewage_demand], ecx
 .cn:
     inc r15d
     jmp .cl
