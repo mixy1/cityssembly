@@ -240,105 +240,81 @@ def digital_ticks(b, vel=0.15):
             hit("fx", "rim", B(b, e * 0.25), vel * rng.uniform(0.4, 1.0), rng.uniform(-0.8, 0.8), rate=rng.choice([1.0, 1.5, 2.0]))
 
 # ================================================================ arrangement
-# 1-4 intro: code on screen
-for b in range(1, 5):
-    pad_bar(b, 0.4)
-    digital_ticks(b, 0.12 + 0.03 * b)
-    if b >= 2:
-        arp_bar(b, 0.18 + 0.05 * b, every=1.0 if b < 4 else 0.5)
+# 1-2 cold open: plucks and ticks over the valley, riser into the drop
+for b in (1, 2):
+    pad_bar(b, 0.35)
+    arp_bar(b, 0.3 if b == 1 else 0.4, inst="marimba", every=0.5)
+    digital_ticks(b, 0.1)
 note("lead", "bell", B(1), 74, 0.35, 0.3, dur=BAR * 2)
-note("lead", "bell", B(3), 72, 0.35, -0.3, dur=BAR * 2)
-s0, x = riser(B(5), BAR * 1.5)
+s0, x = riser(B(3), BAR * 1.2)
 place("fx", s0, x, 0.9)
-s0, x = reverse_cymbal(B(5))
+s0, x = reverse_cymbal(B(3), 1.4)
 place("fx", s0, x, 0.8)
 
-# 5-8 build: the valley and the first roads
-impact(B(5), 0.55)
-for b in range(5, 9):
-    pad_bar(b, 0.45)
-    arp_bar(b, 0.35)
-    bass_bar(b, "long" if b < 7 else "pump", 0.65)
-    rhodes_chord(b, 0, 3.5, 0.45)
-    drums_bar(b, "four", 0.55 if b < 7 else 0.8)
-snare_roll(8, 1, 0.7)
-s0, x = riser(B(9), BAR * 2)
-place("fx", s0, x, 1.0)
-s0, x = reverse_cymbal(B(9), 2.0)
-place("fx", s0, x, 1.0)
-
-# 9-18 drop A: the city grows, cars, districts, info views
-impact(B(9), 1.0)
-for b in range(9, 19):
+# 3-8 drop: build, zone, grow, the city comes alive
+impact(B(3), 1.0)
+for b in range(3, 9):
     drums_bar(b, "full", 1.0)
-    bass_bar(b, "sync" if b % 2 else "pump", 0.8)
-    rhodes_chord(b, 0.5, 0.9, 0.5)
-    rhodes_chord(b, 2.5, 0.9, 0.42)
+    bass_bar(b, "sync" if b % 2 else "pump", 0.85)
+    rhodes_chord(b, 0.5, 0.9, 0.45)
+    rhodes_chord(b, 2.5, 0.9, 0.4)
     pad_bar(b, 0.25)
     hook_bar(b, 0.55)
-    if b % 4 == 1 and b > 9:
-        hit("fx", "ride", B(b), 0.35, 0.3)
-# info view cuts every half bar
-for hb in (17, 17.5, 18, 18.5):
-    glitch(B(hb), 0.3)
-    whoosh(B(hb), 0.35, 0.3)
-s0, x = reverse_cymbal(B(19), 1.2)
+impact(B(4), 0.6)
+for q in range(4):                     # icon stamps on each beat of bar 7
+    glitch(B(7, q), 0.25)
+    hit("fx", "rim", B(7, q), 0.5, 0.2 * (q - 1.5))
+s0, x = reverse_cymbal(B(9), 1.0)
 place("fx", s0, x, 0.6)
 
-# 19-22 breakdown: sunset and night
-for b in range(19, 23):
+# 9-10 after dark: half-time, drums thin out
+for b in (9, 10):
     pad_bar(b, 0.55)
     rhodes_chord(b, 0, 4, 0.45)
-    bass_bar(b, "long", 0.45)
-    arp_bar(b, 0.22, inst="marimba", every=0.5)
-    if b >= 21:
-        hook_bar(b, 0.35, inst="vibes", octave=-12)
-drums_bar(21, "ride", 0.5)
-drums_bar(22, "ride", 0.6)
+    bass_bar(b, "long", 0.5)
+    hook_bar(b, 0.35, inst="vibes", octave=-12)
+    hit("drums", "kick", B(b), 0.8)
+    hit("drums", "kick", B(b, 2.5), 0.5)
+    hit("drums", "tap", B(b, 2), 0.7)
+    drums_bar(b, "ride", 0.5)
 
-# 23-24 build: the seasons turn
-for b in (23, 24):
-    pad_bar(b, 0.5)
+# 11-12 seasons turn: rising arps, snare roll, riser
+for b in (11, 12):
+    pad_bar(b, 0.45)
     arp_bar(b, 0.4, every=0.25)
     bass_bar(b, "pump", 0.7)
     drums_bar(b, "four", 0.8)
-snare_roll(23, 2, 0.9)
-s0, x = riser(B(25) - BEAT, BAR * 2 - BEAT)
+snare_roll(12, 1, 0.9)
+s0, x = riser(B(13), BAR * 1.5)
 place("fx", s0, x, 1.1)
-s0, x = reverse_cymbal(B(25) - BEAT * 0.5, 2.2)
+s0, x = reverse_cymbal(B(13), 1.8)
 place("fx", s0, x, 1.0)
 
-# 25-30 drop B: meteor, interface, finale
-impact(B(25), 1.3)
-hit("fx", "rumble", B(25), 0.9)
-for b in range(25, 31):
+# 13-14 the meteor: biggest hit, full band + horn
+impact(B(13), 1.4)
+hit("fx", "rumble", B(13), 0.9)
+for b in (13, 14):
     drums_bar(b, "full", 1.05)
     bass_bar(b, "sync", 0.85)
     rhodes_chord(b, 0.5, 0.9, 0.45)
-    rhodes_chord(b, 2.5, 0.9, 0.4)
     pad_bar(b, 0.3)
     horn_bar(b, 0.55)
     hook_bar(b, 0.35, octave=12)
-for t in (27, 27.66, 28.33):
-    whoosh(B(t), 0.3, 0.3)
-    glitch(B(t), 0.25)
-snare_roll(30, 1, 0.8)
-s0, x = riser(B(31), BAR)
-place("fx", s0, x, 1.0)
+snare_roll(14.5, 0.5, 0.8)
+s0, x = riser(B(15), BAR * 0.6)
+place("fx", s0, x, 0.9)
 
-# 31-33 logo: final hit and ring out
-impact(B(31), 1.4)
+# 15-16 logo: final hit and ring out
+impact(B(15), 1.3)
 for n in PROG[0]:
-    note("music", "pad", B(31), n + 12, 0.45, rng.uniform(-0.6, 0.6), dur=BAR * 2.5)
-    note("music", "rhodes_lo", B(31), n, 0.3, 0, dur=BAR * 2)
-note("lead", "bell", B(31), 74, 0.5, 0.2, dur=BAR * 2)
-note("lead", "bell", B(31, 0.5), 81, 0.35, -0.2, dur=BAR * 2)
-note("lead", "vibes", B(31, 1), 86, 0.35, 0.4, dur=BAR * 2)
-note("music", "bass", B(31), 38, 0.8, 0, dur=BAR * 1.5)
+    note("music", "pad", B(15), n + 12, 0.45, rng.uniform(-0.6, 0.6), dur=BAR * 2.5)
+    note("music", "rhodes_lo", B(15), n, 0.3, 0, dur=BAR * 2)
+note("lead", "bell", B(15), 74, 0.5, 0.2, dur=BAR * 2)
+note("music", "bass", B(15), 38, 0.8, 0, dur=BAR * 1.5)
 for k, n in enumerate([62, 65, 69, 72, 74, 77, 81]):
-    note("lead", "vibes", B(32) + k * BEAT / 3, n, 0.3, (k - 3) / 4, dur=BAR)
-hit("fx", "kick", B(32, 2), 0.6)
-hit("fx", "boom", B(32, 2), 0.4)
+    note("lead", "vibes", B(15, 2) + k * BEAT / 3, n, 0.3, (k - 3) / 4, dur=BAR)
+hit("fx", "rim", B(16, 1), 0.6)          # the cursor click on the logo
+hit("lead", "bell", B(16, 1), 0.3)
 
 # ================================================================ mix
 # sidechain the music bus to the kicks in the drops
@@ -375,7 +351,7 @@ mix += reverb(verb_in, 2.6, np.max(np.abs(mix)) * 0.22)
 mix = np.tanh(mix / (np.max(np.abs(mix)) * 0.55))
 mix = mix / np.max(np.abs(mix)) * 0.89
 # fade tail
-end = int((DURATION + 3.5) * SR)
+end = int((DURATION + 0.4) * SR)
 mix = mix[:end]
 mix[-int(1.5 * SR):] *= np.linspace(1, 0, int(1.5 * SR))[:, None]
 
