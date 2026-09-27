@@ -783,6 +783,11 @@ FUNC draw_pipes, 32
     mov dword [pipe_col], RAMP(R_GREY, 5)
     mov dword [pipe_col2], RAMP(R_GREY, 1)
 .live:
+    test byte [map_waterarea+rax], 4
+    jz .sewok
+    mov dword [pipe_col], RAMP(R_ORANGE, 7)
+    mov dword [pipe_col2], RAMP(R_ORANGE, 2)
+.sewok:
     xor r14d, r14d
 .d:
     mov edi, r12d
@@ -1001,10 +1006,17 @@ FUNC overlay_tint
     mov eax, TINT_RED
     test byte [rbx+T_FLAGS], F_WATER
     jz .ret
-    mov eax, TINT_BLUE
-    test byte [rbx+T_FLAGS2], F2_DIRTY
-    jz .ret
     mov eax, TINT_BROWN
+    test byte [rbx+T_FLAGS2], F2_DIRTY
+    jnz .ret
+    ; water in, but nowhere for the sewage to go
+    mov eax, TINT_ORANGE
+    cmp byte [rbx+T_OBJ], OBJ_ZONEBLD
+    jne .wok
+    test byte [rbx+T_FLAGS2], F2_SEWAGE
+    jz .ret
+.wok:
+    mov eax, TINT_BLUE
 .ret:
     RETURN
 .tr:

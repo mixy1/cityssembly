@@ -34,6 +34,8 @@ SI_ZONE     equ 110        ; + zone type
 SI_DEZONE   equ 117
 SI_POWERLN  equ 120
 SI_PIPE     equ 121
+SI_UNPIPE   equ 122
+SI_UNPOWER  equ 123
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -121,8 +123,8 @@ submenu_lists:
 sm_roads    dd SI_STREET, SI_AVENUE, SI_HIGHWAY, SI_BUSSTOP, -1
 sm_zones    dd SI_ZONE+ZONE_R, SI_ZONE+ZONE_RH, SI_ZONE+ZONE_C, SI_ZONE+ZONE_CH
             dd SI_ZONE+ZONE_I, SI_ZONE+ZONE_O, SI_DEZONE, -1
-sm_power    dd SI_POWERLN, BK_WIND, BK_COAL, BK_SOLAR, BK_NUCLEAR, -1
-sm_water    dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, -1
+sm_power    dd SI_POWERLN, BK_WIND, BK_COAL, BK_SOLAR, BK_NUCLEAR, SI_UNPOWER, -1
+sm_water    dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_UNPIPE, -1
 sm_garbage  dd BK_LANDFILL, BK_INCIN, -1
 sm_safety   dd BK_POLICE, BK_FIRE, -1
 sm_health   dd BK_CLINIC, BK_HOSPITAL, -1
@@ -164,7 +166,7 @@ ov_hint:
     dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20
 oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
-oh2  db 7, "served area  ", 3, "no water  ", 6, "dead pipe  ", 4, "polluted", 0
+oh2  db 7, "served  ", 3, "no water  ", 4, "no sewage outlet  ", 6, "no pump  ", 5, "polluted", 0
 oh7  db 2, "flowing  ", 4, "busy  ", 3, "jammed", 0
 oh15 db 2, "fertile  ", 7, "forest  ", 4, "ore", 0
 
@@ -199,6 +201,15 @@ ti_stop    db "Bus stop", 0
 ti_dezone  db "De-zone", 0
 ti_line    db "Power line", 0
 ti_pipe    db "Water pipe", 0
+ti_unpipe  db "Remove pipes", 0
+ti_unpower db "Remove power lines", 0
+hx_unpipe  db "Drag over pipes to dig them up.", 10
+           db "Roads and buildings stay put.", 10
+           db 6, "(The bulldozer does this in the", 10
+           db 6, "water view too.)", 0
+hx_unpower db "Drag over pylons to take them", 10
+           db "down, wires and all. Nothing", 10
+           db "else is touched.", 0
 ti_tile    db "/tile", 0
 
 s_welcome1  db "Welcome, Mayor!", 0
@@ -230,6 +241,7 @@ s_goaldone  db "Goal complete! +", 0
 s_nomoney   db "Not enough money!", 0
 s_locked    db "Unlocks at ", 0
 s_lockpeop  db " people)", 0
+s_people    db " people", 0
 s_notowned  db "You don't own this land yet - buy it with the Land tool (K).", 0
 ht_land     db "Buy land", 0
 s_lh1       db "Your city can only grow on land", 10
@@ -544,9 +556,11 @@ pf1  db "Build a power plant, then drag", 10
 pf2  db "Lay water pipes within 3 tiles", 10
      db "(under roads is fine), joined", 10
      db "to a Water Pump or Tower.", 0
-pf3  db "Waste goes back through the", 10
-     db "same pipes. Join them to a", 10
-     db "Sewage Outlet on the shore.", 0
+pf3  db "Its water comes from pipes (or", 10
+     db "a lone water tower) with no", 10
+     db "Sewage Outlet big enough on the", 10
+     db "same network - orange in the", 10
+     db "water view. Pipe it to an outlet.", 0
 pf4  db "Build a Landfill or Incinerator", 10
      db "that its trucks can reach.", 0
 pf5  db "Shops need deliveries. Zone", 10
@@ -1811,6 +1825,17 @@ FUNC compute_eff_overlay
     mov eax, OV_WATER
     jmp .have
 .t3:
+    cmp ecx, T_BULLDOZE
+    jne .t4
+    mov eax, [bz_filter]
+    test eax, eax
+    jz .have
+    mov eax, OV_WATER
+    cmp dword [bz_filter], 1
+    je .have
+    mov eax, OV_POWER
+    jmp .have
+.t4:
     cmp ecx, T_BUSSTOP
     jne .t6
     mov eax, OV_TRANSIT
@@ -2059,6 +2084,21 @@ pylon_spot_ok:
 .n: xor eax, eax
     ret
 
+; bulldozer mode -> eax: 0 everything, 1 pipes only, 2 power lines only
+; (an explicit choice, else whatever the water / power view shows)
+bz_mode:
+    mov eax, [bz_filter]
+    test eax, eax
+    jnz .o
+    cmp dword [eff_overlay], OV_WATER
+    jne .p
+    mov eax, 1
+    ret
+.p: cmp dword [eff_overlay], OV_POWER
+    jne .o
+    mov eax, 2
+.o: ret
+
 ; tile index of tl entry ebx -> eax
 tl_index:
     mov eax, [tl_y+rbx*4]
@@ -2213,6 +2253,22 @@ FUNC tool_evaluate, 32
 .t4:
     cmp eax, T_BULLDOZE
     jne .t5
+    call bz_mode
+    cmp eax, 1
+    jne .bzp
+    ; pipes only
+    test byte [r12+T_FLAGS2], F2_PIPE
+    jz .n
+    mov r13d, 2
+    jmp .set
+.bzp:
+    cmp eax, 2
+    jne .bzall
+    cmp ecx, OBJ_POWER
+    jne .n
+    mov r13d, 5
+    jmp .set
+.bzall:
     test byte [r12+T_FLAGS], F_HIGHWAY
     jnz .n
     cmp ecx, OBJ_NONE
@@ -2442,6 +2498,12 @@ FUNC tool_apply
 .a4:
     cmp eax, T_BULLDOZE
     jne .a5
+    call bz_mode
+    cmp eax, 1
+    jne .bzq
+    and byte [r12+T_FLAGS2], ~F2_PIPE
+    jmp .n                          ; underground: no dust
+.bzq:
     mov cl, [r12+T_OBJ]
     cmp cl, OBJ_NONE
     jne .bz0
@@ -2955,6 +3017,7 @@ FUNC draw_topbar, 16
     call tb_draw
     lea r12d, [rax+8]
     call ms_progress_bar
+    mov [tt_date], r12d
     call tb_reset
     call tb_date
     mov edi, r12d
@@ -3094,6 +3157,7 @@ FUNC draw_topbar, 16
     call tb_draw
     lea r12d, [rax+8]
     ; power and water: use as a share of supply
+    mov [tt_pow], r12d
     lea rdi, [s_bolt]
     mov esi, [power_demand]
     mov edx, [power_supply]
@@ -3101,12 +3165,15 @@ FUNC draw_topbar, 16
     mov r8d, UI_GOOD
     call hud_usage
     lea r12d, [rax+8]
+    mov [tt_wat], r12d
     lea rdi, [s_drop]
     mov esi, [water_demand]
     mov edx, [water_supply]
     mov ecx, r12d
     mov r8d, UI_ACCENT
     call hud_usage
+    mov [tt_end], eax
+    call topbar_tips
     ; speed buttons
     xor ebx, ebx
 .sp:
@@ -3121,6 +3188,23 @@ FUNC draw_topbar, 16
     cmp ebx, [sim_speed]
     sete r8b
     call button
+    push rax
+    push rax
+    mov edi, [ui_w]
+    sub edi, 90
+    imul eax, ebx, 22
+    add edi, eax
+    mov esi, 2
+    mov edx, 20
+    mov ecx, 14
+    call ui_over
+    test eax, eax
+    jz .spt
+    mov rax, [speed_tips+rbx*8]
+    mov [tooltip], rax
+.spt:
+    pop rax
+    pop rax
     test eax, eax
     jz .spn
     mov [sim_speed], ebx
@@ -3189,7 +3273,200 @@ FUNC hud_usage
 
 section .data
 rci_cols db UI_GOOD, UI_ACCENT, UI_WARN, RAMP(R_TEAL,6)
+speed_tips dq spt0, spt1, spt2, spt3
+spt0 db "Pause (Space)", 0
+spt1 db "Normal speed", 0
+spt2 db "Fast ( ] )", 0
+spt3 db "Fastest", 0
+s_tdate  db "Date. The budget settles at the end of each month.", 10
+         db 6, "Space pauses, [ and ] change the speed.", 0
+s_tmoney db "Treasury", 10, 0
+s_tinc   db "Last month: ", 2, "+", 0
+s_texp   db 1, " income, ", 3, "-", 0
+s_tnet   db 1, " costs", 10, "Net: ", 0
+s_tclick db 10, 6, "Click for the budget and loans (F2)", 0
+s_tpop   db "Population ", 0
+s_tjobs  db 10, "Jobs ", 0
+s_tunemp db "   unemployed ", 0
+s_tdem   db "Zone demand - bars up: people want more of it", 10, 0
+s_tdemn  dq s_tdr, s_tdc, s_tdi, s_tdo
+s_tdr    db 2, "Residential ", 0
+s_tdc    db 7, "Commercial ", 0
+s_tdi    db 4, "Industrial ", 0
+s_tdo    db 1, "Office ", 0
+s_thap   db "Average happiness ", 0
+s_thap2  db 10, 6, "Unhappy people move out and pay less tax.", 10
+         db 6, "Services, parks and clean air help.", 0
+s_tflow  db "Traffic flow ", 0
+s_tflow2 db 10, 6, "How freely cars move. Jams make workers late", 10
+         db 6, "and shops run out of goods.", 0
+s_tpow   db "Electricity: using ", 0
+s_tof    db " of ", 0
+s_tpow2  db " MW", 10, 6, "Over 100% the grid browns out.", 0
+s_twat   db "Water: using ", 0
+s_tsew   db 10, "Sewage: ", 0
+s_tsew2  db " of outlet capacity", 10, 6, "Build more pumps or outlets before 100%.", 0
+section .bss
+tt_date  resd 1
+tt_pow   resd 1
+tt_wat   resd 1
+tt_end   resd 1
+tt_buf   resb 320
 section .text
+
+; hover tips for the top bar (built fresh each frame)
+FUNC topbar_tips
+    mov eax, [umy]
+    cmp eax, 18
+    jge .out
+    mov r12d, [umx]
+    call tb_reset
+    cmp r12d, [tt_date]
+    jl .out                         ; the milestone has its own tip
+    cmp r12d, 146
+    jge .money
+    lea rdi, [s_tdate]
+    call tb_str
+    jmp .show
+.money:
+    cmp r12d, 220
+    jge .pop
+    lea rdi, [s_tmoney]
+    call tb_str
+    lea rdi, [s_tinc]
+    call tb_str
+    movsxd rdi, dword [income_last]
+    call tb_money
+    lea rdi, [s_texp]
+    call tb_str
+    movsxd rdi, dword [expense_last]
+    call tb_money
+    lea rdi, [s_tnet]
+    call tb_str
+    mov eax, [income_last]
+    sub eax, [expense_last]
+    movsxd rdi, eax
+    call tb_money
+    lea rdi, [s_tclick]
+    call tb_str
+    cmp dword [click_pending], 0
+    je .show
+    mov dword [click_pending], 0
+    mov dword [panel], PANEL_BUDGET
+    jmp .show
+.pop:
+    cmp r12d, 282
+    jge .dem
+    lea rdi, [s_tpop]
+    call tb_str
+    movsxd rdi, dword [population]
+    call tb_num
+    lea rdi, [s_tjobs]
+    call tb_str
+    mov eax, [jobs]
+    add eax, [jobs+4]
+    add eax, [jobs+8]
+    add eax, [jobs+12]
+    movsxd rdi, eax
+    call tb_num
+    lea rdi, [s_tunemp]
+    call tb_str
+    movsxd rdi, dword [unemployed]
+    call tb_num
+    jmp .show
+.dem:
+    cmp r12d, 348
+    jge .hap
+    lea rdi, [s_tdem]
+    call tb_str
+    xor ebx, ebx
+.dl:
+    mov rdi, [s_tdemn+rbx*8]
+    call tb_str
+    movsxd rdi, dword [demand+rbx*4]
+    call tb_num
+    mov edi, ' '
+    call tb_char
+    mov edi, ' '
+    call tb_char
+    inc ebx
+    cmp ebx, 4
+    jl .dl
+    jmp .show
+.hap:
+    cmp r12d, 388
+    jge .flow
+    lea rdi, [s_thap]
+    call tb_str
+    movsxd rdi, dword [happy_avg]
+    call tb_pct
+    lea rdi, [s_thap2]
+    call tb_str
+    jmp .show
+.flow:
+    cmp r12d, [tt_pow]
+    jge .pw
+    lea rdi, [s_tflow]
+    call tb_str
+    movsxd rdi, dword [flow_pct]
+    call tb_pct
+    lea rdi, [s_tflow2]
+    call tb_str
+    jmp .show
+.pw:
+    cmp r12d, [tt_wat]
+    jge .wt
+    lea rdi, [s_tpow]
+    call tb_str
+    movsxd rdi, dword [power_demand]
+    call tb_num
+    lea rdi, [s_tof]
+    call tb_str
+    movsxd rdi, dword [power_supply]
+    call tb_num
+    lea rdi, [s_tpow2]
+    call tb_str
+    jmp .show
+.wt:
+    cmp r12d, [tt_end]
+    jg .out
+    lea rdi, [s_twat]
+    call tb_str
+    movsxd rdi, dword [water_demand]
+    call tb_num
+    lea rdi, [s_tof]
+    call tb_str
+    movsxd rdi, dword [water_supply]
+    call tb_num
+    lea rdi, [s_tsew]
+    call tb_str
+    movsxd rdi, dword [sewage_demand]
+    call tb_num
+    lea rdi, [s_tof]
+    call tb_str
+    movsxd rdi, dword [sewage_cap]
+    call tb_num
+    lea rdi, [s_tsew2]
+    call tb_str
+.show:
+    lea rsi, [textbuf]
+    lea rdi, [tt_buf]
+    mov ecx, 319
+.cp:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .cpd
+    inc rsi
+    inc rdi
+    dec ecx
+    jnz .cp
+    mov byte [rdi], 0
+.cpd:
+    lea rax, [tt_buf]
+    mov [tooltip], rax
+.out:
+    RETURN
 
 ; ---------------------------------------------------------------------
 FUNC draw_dock, 32
@@ -3229,7 +3506,7 @@ FUNC draw_dock, 32
     sete r8b
     jmp .sb
 .pn:
-    sub eax, 199
+    sub eax, 200
     cmp eax, [panel]
     sete r8b
 .sb:
@@ -3259,6 +3536,7 @@ FUNC draw_dock, 32
     cmp eax, 100
     jge .c1
     mov [tool], eax
+    mov dword [bz_filter], 0
     mov dword [submenu], -1
     mov dword [drag_active], 0
     jmp .bn
@@ -3276,7 +3554,7 @@ FUNC draw_dock, 32
     mov [submenu_x], eax
     jmp .bn
 .c2:
-    sub eax, 199
+    sub eax, 200
     cmp eax, [panel]
     jne .c2o
     xor eax, eax
@@ -3354,6 +3632,14 @@ FUNC submenu_item_info
     cmp ebx, SI_POWERLN
     je .uu
     lea rax, [ti_pipe]
+    cmp ebx, SI_PIPE
+    je .uu
+    mov edx, 2
+    lea rax, [ti_unpipe]
+    cmp ebx, SI_UNPIPE
+    je .uu
+    mov edx, 5
+    lea rax, [ti_unpower]
 .uu:
     RETURN
 .b:
@@ -3416,10 +3702,18 @@ FUNC submenu_select
     mov dword [tool], T_ZONETOOL
     jmp .close
 .u:
+    mov dword [bz_filter], 0
     mov dword [tool], T_POWERLN
     cmp ebx, SI_POWERLN
     je .close
     mov dword [tool], T_PIPE
+    cmp ebx, SI_PIPE
+    je .close
+    mov dword [tool], T_BULLDOZE
+    mov dword [bz_filter], 1
+    cmp ebx, SI_UNPIPE
+    je .close
+    mov dword [bz_filter], 2
     jmp .close
 .b:
     mov [build_kind], ebx
@@ -3477,7 +3771,20 @@ FUNC submenu_is_active
     sete al
     RETURN
 .p:
+    cmp ebx, SI_PIPE
+    jne .p2
     cmp dword [tool], T_PIPE
+    sete al
+    RETURN
+.p2:
+    cmp dword [tool], T_BULLDOZE
+    jne .o
+    mov ecx, 1
+    cmp ebx, SI_UNPIPE
+    je .p3
+    mov ecx, 2
+.p3:
+    cmp ecx, [bz_filter]
     sete al
     RETURN
 .b:
@@ -4077,6 +4384,7 @@ FUNC draw_inspect, 32
     RETURN
 section .bss
 fight_request resd 1
+bz_filter     resd 1
 rect_col      resd 1
 ms_tipbuf     resb 96
 insp_h        resd 1
@@ -4618,9 +4926,14 @@ FUNC draw_overlay_legend, 16
     mov r14, [ov_hint+rax*8]
     mov r13d, [ui_w]
     shr r13d, 1
-    lea edi, [r13-120]
+    ; keep clear of the tool hint panel on the left
+    cmp r13d, 368
+    jge .lx
+    mov r13d, 368
+.lx:
+    lea edi, [r13-160]
     mov esi, 38
-    mov edx, 240
+    mov edx, 320
     mov ecx, 26
     call draw_panel
     mov edi, r13d
@@ -4633,13 +4946,13 @@ FUNC draw_overlay_legend, 16
     jne .hint
     cmp dword [auto_view], 0
     je .hint
-    lea edi, [r13+86]
+    lea edi, [r13+126]
     mov esi, 39
     mov edx, 32
     mov ecx, 11
     call ui_over
     mov [rbp-48], eax
-    lea edi, [r13+86]
+    lea edi, [r13+126]
     mov esi, 39
     mov edx, 32
     mov ecx, 11
@@ -4651,7 +4964,7 @@ FUNC draw_overlay_legend, 16
     mov [tooltip], rax
 .hb:
     call draw_box
-    lea edi, [r13+89]
+    lea edi, [r13+129]
     mov esi, 41
     lea rdx, [s_hide]
     mov ecx, UI_DIM
@@ -4701,6 +5014,18 @@ FUNC draw_tool_hint, 16
     je .bld
     cmp eax, T_LAND
     je .land
+    cmp eax, T_BULLDOZE
+    jne .nbz
+    cmp dword [bz_filter], 0
+    je .nbz
+    lea r12, [ti_unpipe]
+    lea r13, [hx_unpipe]
+    cmp dword [bz_filter], 1
+    je .draw
+    lea r12, [ti_unpower]
+    lea r13, [hx_unpower]
+    jmp .draw
+.nbz:
     cmp eax, T_ZONETOOL
     jne .t
     lea r14, [hz_zone]
@@ -5309,7 +5634,7 @@ FUNC ms_progress_bar
     call tb_str
     movsxd rdi, r13d
     call tb_num
-    lea rdi, [s_lockpeop+1]
+    lea rdi, [s_people]
     call tb_str
     lea rax, [ms_tipbuf]
     lea rsi, [textbuf]
@@ -5546,14 +5871,29 @@ FUNC render_ui
     mov edi, eax
 .tx:
     mov r13d, edi
+    ; multi-line tips grow upward; near the top they hang below the cursor
+    push rdx
+    push rdx
+    mov rdi, r12
+    call count_lines
+    pop rdx
+    pop rdx
+    imul ecx, eax, 10
+    add ecx, 3
     mov esi, [umy]
-    sub esi, 18
-    mov ecx, 13
+    sub esi, ecx
+    sub esi, 5
+    cmp esi, 20
+    jge .ty
+    mov esi, [umy]
+    add esi, 24
+.ty:
+    mov r14d, esi
+    mov edi, r13d
     mov r8d, UI_BG2
     call draw_box
     lea edi, [r13+4]
-    mov esi, [umy]
-    sub esi, 15
+    lea esi, [r14+3]
     mov rdx, r12
     mov ecx, UI_TEXT
     call draw_text
@@ -5792,6 +6132,7 @@ FUNC ui_key
     jmp .out
 .settool:
     mov [tool], ecx
+    mov dword [bz_filter], 0
     mov dword [drag_active], 0
     mov dword [submenu], -1
 .out:

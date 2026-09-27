@@ -179,6 +179,7 @@ TINT_CYAN    equ 20
 TINT_GREY    equ 21
 TINT_BROWN   equ 22
 TINT_GREEN   equ 23
+TINT_ORANGE  equ 24
 TINT_KEEP    equ 31     ; drawn untouched (vehicles, wires, ui helpers)
 
 PR_NONE      equ 0

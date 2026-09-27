@@ -165,7 +165,10 @@ FUNC main
     mov eax, [trailer_mode]
     or eax, [demo_mode]
     cmp dword [demo_view], 'T'
+    je .sbx0
+    cmp dword [demo_view], 'L'
     jne .sbx
+.sbx0:
     xor eax, eax
 .sbx:
     mov [sandbox], eax
@@ -194,8 +197,16 @@ FUNC main
     cmp dword [demo_mode], 0
     je .nodemo
     cmp dword [demo_view], 'T'
-    jne .realdemo
+    jne .ld
     call playtest_build
+    jmp .nodemo
+.ld:
+    cmp dword [demo_view], 'L'
+    jne .realdemo
+    call load_city
+    call pt_diagnose
+    call pt_diag_view
+    mov dword [welcome], 0
     jmp .nodemo
 .realdemo:
     call demo_build

@@ -2229,6 +2229,12 @@ FUNC water_area_update
     cmp dword [comp_supply+rax*4], 0
     je .n
     or byte [map_waterarea+r15], 2
+    ; not enough outlet capacity on this network
+    mov ecx, [comp_sewcap+rax*4]
+    cmp ecx, [comp_demand+rax*4]
+    jge .sok
+    or byte [map_waterarea+r15], 4
+.sok:
     mov r12d, r15d
     and r12d, MAP_W-1
     mov r13d, r15d

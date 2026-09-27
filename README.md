@@ -41,8 +41,14 @@ Power and water tools open their **info view** automatically:
 
 - power tools show where power reaches (yellow), buildings without power (red)
   and the glowing wires
-- water tools show the underground **pipe network** (grey = not connected to a
-  pump), the area it serves (blue) and dry buildings (red)
+- water tools show the underground **pipe network** (grey = no pump, orange =
+  no sewage outlet big enough), the area it serves (blue), dry buildings (red)
+  and buildings with water but no sewage (orange)
+
+The bulldozer follows the view. In the water view it only digs up pipes, and
+in the power view it only takes down power lines. The water and power menus
+also have *Remove pipes* / *Remove power lines*. Hover anything on the top
+bar for details, and click the money to open the budget.
 
 Info views are tinted over the city, so you can still see every building
 underneath. For any tool that has a view (services too), a chip at the top
@@ -218,5 +224,6 @@ cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, 
                                         #       s water menu, w/p/z/t/o info views, n night,
                                         #       q/Q pylons, F placing a service, I problem inspector,
                                         #       T scripted new-player playtest (prints a report)
+cityssembly --demo 1 out.bmp L          # load city.sav, print a water/sewage report
 cityssembly --wav SECONDS out.wav       # render the soundtrack offline
 ```

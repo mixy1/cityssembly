@@ -389,3 +389,170 @@ FUNC playtest_build
     mov esi, 64
     call camera_center_tile
     RETURN
+
+; ---------------------------------------------------------------------
+;  --demo 1 out.bmp L : load city.sav and explain its water / sewage
+; ---------------------------------------------------------------------
+section .data
+dg_fmt1 db "DIAG pop=%d money=%d milestone=%d plots=%d", 10, 0
+dg_fmt2 db "DIAG net %d: tiles=%d supply=%d sewcap=%d demand=%d users=%d (water %d, sewage %d)", 10, 0
+dg_fmt3 db "DIAG buildings=%d water=%d sewage=%d nopipe=%d", 10, 0
+dg_fmt4 db "DIAG %s at %d,%d net=%d powered=%d", 10, 0
+dg_pump db "pump", 0
+dg_out  db "outlet", 0
+dg_tow  db "tower", 0
+section .bss
+dg_tiles resd 512
+dg_users resd 512
+dg_wat   resd 512
+dg_sew   resd 512
+section .text
+
+FUNC pt_diagnose, 32
+    call water_flood
+    call plots_owned
+    mov r8d, eax
+    lea rdi, [dg_fmt1]
+    mov esi, [population]
+    mov rdx, [money]
+    mov ecx, [milestone]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [dg_tiles]
+    xor eax, eax
+    mov ecx, 512*4
+    rep stosd
+    xor ebx, ebx
+    xor r12d, r12d          ; buildings
+    xor r13d, r13d          ; water
+    xor r14d, r14d          ; sewage
+    xor r15d, r15d          ; no pipe
+.l:
+    movzx eax, word [comp_map+rbx*2]
+    cmp eax, 511
+    ja .nt
+    inc dword [dg_tiles+rax*4]
+.nt:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    lea rdi, [tiles+rax]
+    ; water buildings
+    cmp byte [rdi+T_OBJ], OBJ_SERVICE
+    jne .z
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .z
+    movzx eax, byte [rdi+T_SUB]
+    lea rsi, [dg_pump]
+    cmp eax, BK_PUMP
+    je .svc
+    lea rsi, [dg_out]
+    cmp eax, BK_SEWAGE
+    je .svc
+    lea rsi, [dg_tow]
+    cmp eax, BK_WTOWER
+    jne .z
+.svc:
+    push rdi
+    push rdi
+    movzx r9d, byte [rdi+T_FLAGS]
+    and r9d, F_POWER
+    movzx r8d, word [comp_map+rbx*2]
+    mov edx, ebx
+    and edx, MAP_W-1
+    mov ecx, ebx
+    shr ecx, MAP_SHIFT
+    lea rdi, [dg_fmt4]
+    xor eax, eax
+    CALLC printf
+    pop rdi
+    pop rdi
+.z:
+    cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    test byte [rdi+T_FLAGS], F_ANCHOR
+    jz .n
+    inc r12d
+    movzx eax, word [cons_comp+rbx*2]
+    test eax, eax
+    jnz .has
+    inc r15d
+.has:
+    cmp eax, 511
+    ja .n
+    inc dword [dg_users+rax*4]
+    test byte [rdi+T_FLAGS], F_WATER
+    jz .a
+    inc r13d
+    inc dword [dg_wat+rax*4]
+.a: test byte [rdi+T_FLAGS2], F2_SEWAGE
+    jz .n
+    inc r14d
+    inc dword [dg_sew+rax*4]
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    lea rdi, [dg_fmt3]
+    mov esi, r12d
+    mov edx, r13d
+    mov ecx, r14d
+    mov r8d, r15d
+    xor eax, eax
+    CALLC printf
+    mov ebx, 1
+.c:
+    cmp dword [dg_tiles+rbx*4], 0
+    je .cn
+    lea rdi, [dg_fmt2]
+    mov esi, ebx
+    mov edx, [dg_tiles+rbx*4]
+    mov ecx, [comp_supply+rbx*4]
+    mov r8d, [comp_sewcap+rbx*4]
+    mov r9d, [comp_demand+rbx*4]
+    mov eax, [dg_sew+rbx*4]
+    push rax
+    mov eax, [dg_wat+rbx*4]
+    push rax
+    mov eax, [dg_users+rbx*4]
+    push rax
+    xor eax, eax
+%ifdef WIN64
+    sub rsp, 8
+%endif
+    call pt_printf8
+%ifdef WIN64
+    add rsp, 8
+%endif
+    add rsp, 24
+.cn:
+    inc ebx
+    cmp ebx, 512
+    jl .c
+    RETURN
+
+; printf with 3 extra stack args already pushed (SysV) - Linux only helper
+pt_printf8:
+%ifdef WIN64
+    ret
+%else
+    sub rsp, 8
+    push qword [rsp+32]
+    push qword [rsp+32]
+    push qword [rsp+32]
+    call printf
+    add rsp, 32
+    ret
+%endif
+
+; after loading: look at the water view over the town
+FUNC pt_diag_view
+    mov dword [tool], T_PIPE
+    mov edi, 2
+    call video_set_zoom
+    mov edi, 38
+    mov esi, 64
+    call camera_center_tile
+    ; hover the treasury so its tooltip shows in the shot
+    mov dword [mouse_x], 360
+    mov dword [mouse_y], 12
+    RETURN
