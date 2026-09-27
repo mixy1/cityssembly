@@ -1829,6 +1829,8 @@ FUNC draw_settings, 16
 FUNC autosave_tick
     cmp dword [set_autosave], 0
     je .out
+    cmp dword [tut_bubble], 0
+    jne .out
     cmp dword [sandbox], 0
     jne .out
     cmp dword [welcome], 0
@@ -2232,6 +2234,16 @@ save_city:
     mov eax, [current_slot]
     mov rdi, [slot_files+rax*8]
 FUNC save_city_to, 16
+    ; the practice village of the tour is never saved
+    cmp dword [tut_bubble], 0
+    je .ok
+    lea rdi, [s_tut_nosave]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp .out
+.ok:
     push rdi
     push rdi
     call save_prepare
@@ -2430,6 +2442,7 @@ FUNC load_city_from, 32
 .nocam:
     mov dword [welcome], 0
     mov dword [slots_start], 0
+    call tut_abort
     call agents_init
     call scenic_init
     call style_existing
@@ -2493,6 +2506,7 @@ section .text
 
 
 FUNC new_city
+    call tut_abort
     mov dword [sandbox], 0
     CALLC SDL_GetPerformanceCounter
     mov [world_seed], eax

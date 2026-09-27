@@ -13,7 +13,7 @@ import numpy as np
 
 OPS = ["end", "terrain", "road", "zone", "place", "pline", "stop", "nets", "ff", "mark",
        "cam", "zoom", "vel", "tod", "season", "film", "roadanim", "follow", "overlay", "meteor",
-       "fire", "speed", "year", "confetti", "trees", "clear", "load", "light", "money", "lock", "save", "drag", "stat", "lforce", "bench", "out", "todspeed2", "seasonspeed"]
+       "fire", "speed", "year", "confetti", "trees", "clear", "load", "light", "money", "lock", "save", "drag", "stat", "lforce", "bench", "out", "todspeed2", "seasonspeed", "ui", "tut"]
 OP = {n: i for i, n in enumerate(OPS)}
 
 # game constants

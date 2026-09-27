@@ -35,6 +35,7 @@ str_shotfmt      db "SHOT %d %d", 10, 0
 str_tilefmt      db "TILE %d %d %d", 10, 0
 str_carfmt       db "CAR %d %d %d", 10, 0
 str_opfmt        db "bad trailer op %d", 10, 0
+str_tutfmt       db "TUT step %d bubble %d money %d pop %d year %d rubble %d", 10, 0
 str_outfmt       db "OUT %s %d", 10, 0
 str_benchfmt     db "BENCH us/frame: palette %d world %d agents %d light %d present-copy %d", 10, 0
 str_statfmt      db "STAT pop %d power %d/%d water %d/%d sewage %d/%d", 10, 0
@@ -570,7 +571,7 @@ tr_ops:
     dq tr_op_fire, tr_op_speed, tr_op_year, tr_op_confetti, tr_op_trees
     dq tr_op_clear, tr_op_load, tr_op_light, tr_op_money, tr_op_lock
     dq tr_op_save, tr_op_drag, tr_op_stat, tr_op_lforce, tr_op_bench
-    dq tr_op_out, tr_op_todspeed2, tr_op_seasonspeed
+    dq tr_op_out, tr_op_todspeed2, tr_op_seasonspeed, tr_op_ui, tr_op_tut
 TR_NOPS equ ($-tr_ops)/8
 section .text
 
@@ -1027,4 +1028,36 @@ tr_op_todspeed2:
 ; seasons advance while filming (per tick, 1/16 of a step)
 tr_op_seasonspeed:
     TRARGS [tr_seasonspeed]
+    jmp trailer_run.next
+; draw the interface while filming (arg)
+tr_op_ui:
+    TRARGS [tr_ui]
+    jmp trailer_run.next
+; the tour: 0 start, 1 next, 2 report
+tr_op_tut:
+    TRARGS [rbp-48]
+    cmp dword [rbp-48], 0
+    jne .t1
+    mov dword [welcome], 0
+    call tut_start
+    jmp trailer_run.next
+.t1:
+    cmp dword [rbp-48], 1
+    jne .t2
+    call tut_next
+    jmp trailer_run.next
+.t2:
+    mov edi, KD_RUBBLE
+    call tut_more
+    push rax
+    push rax
+    lea rdi, [str_tutfmt]
+    mov esi, [tut_step]
+    mov edx, [tut_bubble]
+    mov ecx, [money]
+    mov r8d, [population]
+    mov r9d, [year]
+    xor eax, eax
+    call printf
+    add rsp, 16
     jmp trailer_run.next

@@ -100,16 +100,16 @@ Then chase the advisor goals shown in the top-left.
 
 ### Quality of life
 
-- **First-time tour:** a new city opens a guided tour. It highlights each
-  thing on screen (the roads menu, the end of the highway, zoning, power,
-  water, the speed buttons, demand, info views and goals), dims the rest,
-  and shows a card with Next and Skip. Steps that ask you to do something
-  move on by themselves once you've done it. It runs once; replay it from
-  Help (F1) → Take the tour.
-
-- **Settings** (Esc → Settings) cover music and sound volume sliders,
-  see-through buildings, lighting, edge scrolling, autosave (every 3 months), disasters,
-  day/night and fullscreen. They're remembered in `cityssembly.cfg`.
+- **First-time tour:** a new city starts with a practice village. The
+  tour walks through every mechanic: roads, homes, shops and industry,
+  power and power lines, water and sewage, time and demand, fire, health,
+  schools, garbage, parks, info views, the inspector and the budget. Money
+  is free, all land is yours and everything is unlocked. Each step
+  highlights what to use, dims the rest and moves on once you've done it.
+  Then meteors wipe out the village, you bulldoze the rubble, and your real
+  city begins on fresh land with the real budget and date. The practice
+  village is never saved. Skip tour starts the real game at any point;
+  Help (F1) → Take the tour replays it.
 - **Several cities:** Save and Load (menu, F9) show seven city slots plus
   the autosave as cards, each with a picture of the city, the date,
   population and money. The latest save is marked; overwriting a city asks
