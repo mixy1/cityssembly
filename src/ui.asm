@@ -1863,8 +1863,8 @@ align 4
 f_music_scale dd 0.008
 f_sfx_scale   dd 0.01
 music_fade    dd 0          ; 0..256
-set_music     dd 45
-set_sfx       dd 55
+set_music     dd 5
+set_sfx       dd 5
 set_xray      dd 1          ; 0 off, 1 near the cursor, 2 all
 set_edge      dd 0
 set_autosave  dd 1
@@ -2462,7 +2462,7 @@ AUTO_ON_N equ 20
 SET_N     equ 5
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
-settings_magic db "CSC2"
+settings_magic db "CSC3"
 section .bss
 auto_view resd 1
 settings_buf resb 64
