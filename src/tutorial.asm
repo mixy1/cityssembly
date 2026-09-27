@@ -2,9 +2,8 @@
 ;  TUTORIAL - the first-time tour: build a practice village, lose it,
 ;  clean up, then start for real
 ;
-;  When a new city begins (until the tour has been finished or skipped
-;  once, remembered in the settings; Help replays it) the map and the
-;  whole sim state are set aside, and the player builds a small village
+;  Every new city begins with the offer of a tour (Help also starts it).
+;  Once the player takes it, the map and the whole sim state are set aside, and the player builds a small village
 ;  with every mechanic: roads, zones, power and lines, water and sewage,
 ;  time and demand, services, info views, the inspector and the budget.
 ;  Money is topped up, all land is owned and everything is unlocked.
@@ -100,10 +99,10 @@ tut_steps:
     TSTEP tt23, tx23, TK_GOAL, 0,   DK_NEXT, 0, 0
 TUT_COUNT equ ($-tut_steps)/TSTEP_BYTES
 
-tt0  db "Welcome, Mayor!", 0
-tx0  db "Let's build a practice village together. For", 10
-     db "the tour, money is free, all the land is yours", 10
-     db "and everything is unlocked.", 0
+tt0  db "Welcome, Mayor! Take the tour?", 0
+tx0  db "We'll build a practice village together, with", 10
+     db "free money, all the land and everything", 10
+     db "unlocked. Then your real city begins.", 0
 tt1  db "Look around", 0
 tx1  db "Right-drag or use WASD to move the view.", 10
      db "Scroll the mouse wheel to zoom in and out.", 0
@@ -176,6 +175,8 @@ tx23 db "That was practice. Now your real city starts on", 10
      db "your own land with $30,000. Follow the goals", 10
      db "up here for rewards. Good luck, Mayor!", 0
 s_tut_next   db "Next", 0
+s_tut_take   db "Take the tour", 0
+s_tut_no     db "No thanks", 0
 s_tut_done   db "Start!", 0
 s_tut_skip   db "Skip tour", 0
 s_tut_do     db "Do it, or press Next", 0
@@ -195,6 +196,10 @@ FUNC tut_start
     mov dword [tut_step], 0
     mov dword [tut_anim], 0
     mov dword [tut_freeze], 0
+    RETURN
+
+; the offer was taken: set up the practice village
+FUNC tut_begin
     cmp dword [tut_bubble], 0
     jne .o
     ; set the world and the sim state aside
@@ -220,10 +225,8 @@ FUNC tut_start
 .o:
     RETURN
 
-; a new city begins: the tour, if it hasn't been seen yet
+; a new city begins: offer the tour
 tut_maybe_start:
-    cmp dword [set_tutdone], 0
-    jne .o
     cmp dword [sandbox], 0
     jne .o
     jmp tut_start
@@ -286,6 +289,10 @@ tut_abort:
     ret
 
 FUNC tut_next
+    cmp dword [tut_step], 0
+    jne .n
+    call tut_begin
+.n:
     inc dword [tut_step]
     cmp dword [tut_step], TUT_COUNT
     jl .go
@@ -996,6 +1003,10 @@ FUNC draw_tutorial, 48
     lea edi, [r12+8]
     mov edx, 66
     lea rcx, [s_tut_skip]
+    cmp dword [tut_step], 0
+    jne .sk
+    lea rcx, [s_tut_no]
+.sk:
     xor r8d, r8d
     call text_button
     test eax, eax
@@ -1045,8 +1056,14 @@ FUNC draw_tutorial, 48
     lea rcx, [s_tut_done]
 .nl:
     lea edi, [r12+TUT_W-66]
-    mov esi, [rbp-68]
     mov edx, 58
+    cmp dword [tut_step], 0
+    jne .nw
+    lea rcx, [s_tut_take]
+    lea edi, [r12+TUT_W-96]
+    mov edx, 88
+.nw:
+    mov esi, [rbp-68]
     mov r8d, 1
     call text_button
     test eax, eax

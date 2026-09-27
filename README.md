@@ -100,7 +100,8 @@ Then chase the advisor goals shown in the top-left.
 
 ### Quality of life
 
-- **First-time tour:** a new city starts with a practice village. The
+- **Tour:** every new city offers a tour (Take the tour / No thanks) that
+  builds a practice village. The
   tour walks through every mechanic: roads, homes, shops and industry,
   power and power lines, water and sewage, time and demand, fire, health,
   schools, garbage, parks, info views, the inspector and the budget. Money
