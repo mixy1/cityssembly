@@ -1888,6 +1888,7 @@ set_xray      dd 1          ; 0 off, 1 near the cursor, 2 all
 set_edge      dd 0
 set_autosave  dd 1
 set_light     dd 1          ; sun shadows, clouds and night glow
+set_tutdone   dd 0          ; the first-time tour was finished or skipped
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
@@ -1914,6 +1915,18 @@ FUNC draw_help
     mov edx, 330
     mov ecx, 196
     call draw_panel
+    lea edi, [r12+330-120]
+    lea esi, [r13+196-22]
+    mov edx, 110
+    lea rcx, [s_tut_replay]
+    mov r8d, 1
+    call text_button
+    test eax, eax
+    jz .nt
+    mov dword [panel], PANEL_NONE
+    call tut_start
+    jmp .d
+.nt:
     mov edi, r12d
     mov esi, r13d
     mov edx, 330
@@ -2641,7 +2654,7 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
-SET_N     equ 6                 ; append new settings at the end
+SET_N     equ 7                 ; append new settings at the end
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
@@ -4141,6 +4154,7 @@ FUNC world_input
     mov dword [welcome], 0
     mov edi, SFX_CHIME
     call sfx_play
+    call tut_maybe_start
     jmp .out
 .play:
     cmp dword [click_pending], 0
@@ -7313,6 +7327,7 @@ FUNC render_ui
     call draw_ms_card
     call draw_overlay_legend
     call draw_cursor_cost
+    call draw_tutorial
     mov rdx, [tooltip]
     test rdx, rdx
     jz .cursor
@@ -7412,6 +7427,7 @@ FUNC ui_key
     cmp dword [welcome], 0
     je .e1
     mov dword [welcome], 0
+    call tut_maybe_start
     jmp .out
 .e1:
     cmp dword [drag_active], 0

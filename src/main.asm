@@ -1011,6 +1011,15 @@ FUNC demo_build, 16
     jne .v16
     mov dword [panel], PANEL_SETTINGS
 .v16:
+    cmp eax, 'k'
+    jne .vtut
+    ; the tour at step (frames - 1), frozen for screenshots
+    mov eax, [shot_frames]
+    dec eax
+    mov [tut_step], eax
+    mov dword [tut_freeze], 1
+    mov dword [sel_x], -1
+.vtut:
     cmp eax, 'X'
     jne .v17
     mov dword [tool], T_ROAD
@@ -1229,6 +1238,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "music.asm"
 %include "tunes.asm"
 %include "ui.asm"
+%include "tutorial.asm"
 %ifndef WEB
 %include "trailer.asm"
 %endif

@@ -100,6 +100,13 @@ Then chase the advisor goals shown in the top-left.
 
 ### Quality of life
 
+- **First-time tour:** a new city opens a guided tour. It highlights each
+  thing on screen (the roads menu, the end of the highway, zoning, power,
+  water, the speed buttons, demand, info views and goals), dims the rest,
+  and shows a card with Next and Skip. Steps that ask you to do something
+  move on by themselves once you've done it. It runs once; replay it from
+  Help (F1) → Take the tour.
+
 - **Settings** (Esc → Settings) cover music and sound volume sliders,
   see-through buildings, lighting, edge scrolling, autosave (every 3 months), disasters,
   day/night and fullscreen. They're remembered in `cityssembly.cfg`.
@@ -353,6 +360,7 @@ frame.
 | `src/tunes.asm` | the songbook: chord charts and melodies |
 | `src/music.asm` | the "Five Boroughs" band: arranging, form, solos |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
+| `src/tutorial.asm` | the first-time guided tour |
 | `src/buildings.asm` | service building stats |
 
 `tools/icons_to_asm.py` only validates the 16×16 ASCII-art icons and emits

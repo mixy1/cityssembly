@@ -165,6 +165,7 @@ RES_ORE      equ 3
 
 ; problem icons
 MAX_WIRES    equ 2048
+TH_MAX       equ 16    ; worker threads at most (src/threads.asm)
 PLOTS        equ 5
 START_PLOT   equ 2*PLOTS+1
 PYLON_COST   equ 20

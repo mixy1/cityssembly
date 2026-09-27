@@ -9,8 +9,6 @@
 ;  the one thread.
 ; =====================================================================
 
-TH_MAX      equ 16
-
 section .bss
 th_count    resd 1              ; worker threads (not counting the caller)
 th_fn       resq 1
