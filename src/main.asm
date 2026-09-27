@@ -121,6 +121,18 @@ FUNC main
     mov [wav_seconds], eax
     mov rax, [r13+24]
     mov [shot_file], rax
+    ; optional: pin the music style (0..4) for listening tests
+    cmp r12d, 5
+    jl .noargs
+    mov rdi, [r13+32]
+    CALLC atoi
+    mov [force_style], eax
+    ; and optionally solo one instrument (mixing tests)
+    cmp r12d, 6
+    jl .noargs
+    mov rdi, [r13+40]
+    CALLC atoi
+    mov [solo_inst], eax
     jmp .noargs
 .notwav:
     cmp r12d, 4
@@ -163,6 +175,8 @@ FUNC main
     call font_init
     mov dword [world_seed], 1234567
     cmp dword [shot_frames], 0
+    jne .fixed
+    cmp dword [wav_seconds], 0      ; audio renders are reproducible too
     jne .fixed
     CALLC SDL_GetPerformanceCounter
     mov [world_seed], eax
@@ -954,6 +968,11 @@ FUNC wav_dump
     CALLC SDL_RWwrite
     mov dword [population], 1500    ; a mid-size town band
     mov dword [welcome], 0
+    ; render at a fixed reference level, no launch fade
+    mov dword [set_music], 75
+    mov dword [set_sfx], 30
+    mov dword [music_fade], 256
+    call apply_volumes
     mov eax, [wav_seconds]
     imul eax, 44100/CHUNK
     mov ebx, eax
@@ -964,7 +983,9 @@ FUNC wav_dump
     jl .nb
     call compose_bar
 .nb:
-    ; a few sound effects along the way
+    ; a few sound effects along the way (not in pinned-style listening tests)
+    cmp dword [force_style], 0
+    jge .nsfx
     mov rax, [audio_time]
     and eax, 0x7FFFF
     cmp eax, CHUNK
@@ -1090,6 +1111,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "traffic.asm"
 %include "agents.asm"
 %include "audio.asm"
+%include "music.asm"
 %include "ui.asm"
 %include "trailer.asm"
 %include "undo.asm"

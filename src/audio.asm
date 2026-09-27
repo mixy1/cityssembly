@@ -17,7 +17,7 @@
 SR          equ 44100
 NVOICES     equ 32
 CHUNK       equ 256
-POOL_FLOATS equ 3500000
+POOL_FLOATS equ 6000000
 MAX_EVENTS  equ 512
 
 ; sample ids
@@ -39,7 +39,8 @@ S_RIM       equ 14
 S_RUMBLE    equ 15
 S_BOOM      equ 16
 S_BELL      equ 17
-S_COUNT     equ 18
+S_COUNT     equ 18                  ; synthesised; recorded zones follow
+S_NYC       equ S_COUNT
 
 ; instruments (what the composer / sfx ask for)
 I_RHODES    equ 0
@@ -59,7 +60,34 @@ I_RIM       equ 13
 I_RUMBLE    equ 14
 I_BOOM      equ 15
 I_BELL      equ 16
-I_COUNT     equ 17
+; recorded instruments (music v2, "Five Boroughs")
+I_PIANO     equ 17
+I_UBASS     equ 18
+I_HARMON    equ 19
+I_SAX       equ 20
+I_CLAR      equ 21
+I_STR       equ 22
+I_TBN       equ 23
+I_TPT       equ 24
+I_KICK2     equ 25
+I_SNARE     equ 26
+I_HATC      equ 27
+I_HATO      equ 28
+I_HATF      equ 29
+I_RIDE2     equ 30
+I_RBELL     equ 31
+I_CLAP      equ 32
+I_CONGA     equ 33
+I_SLAP      equ 34
+I_TUMBA     equ 35
+I_BONGOH    equ 36
+I_BONGOL    equ 37
+I_COWBELL   equ 38
+I_CLAVES    equ 39
+I_GUIRO     equ 40
+I_SIREN     equ 41
+I_VINYL     equ 42
+I_COUNT     equ 43
 
 ; sfx ids
 SFX_CLICK    equ 0
@@ -77,11 +105,6 @@ SFX_BOOM     equ 11
 SFX_CRUMBLE  equ 12
 SFX_COUNT    equ 13
 
-; styles
-ST_SWING    equ 0
-ST_LOFI     equ 1
-ST_BOSSA    equ 2
-ST_TENSION  equ 3
 
 ; voice record (64 bytes)
 V_DATA  equ 0    ; q float*
@@ -109,16 +132,19 @@ E_PAN   equ 24   ; f -1..1
 E_USED  equ 28   ; d
 E_SIZE  equ 32
 
+%include "nyc_samples.inc"
+S_ALL       equ S_COUNT + NZ_COUNT
+
 section .bss
 alignb 16
 smp_pool        resd POOL_FLOATS
 pool_used       resd 1
-smp_ptr         resq S_COUNT
-smp_len         resd S_COUNT
-smp_ls          resd S_COUNT
-smp_le          resd S_COUNT
-smp_root        resd S_COUNT
-smp_rate        resd S_COUNT         ; float: source rate / SR
+smp_ptr         resq S_ALL
+smp_len         resd S_ALL
+smp_ls          resd S_ALL
+smp_le          resd S_ALL
+smp_root        resd S_ALL
+smp_rate        resd S_ALL         ; float: source rate / SR
 alignb 16
 voices          resb NVOICES*V_SIZE
 events          resb MAX_EVENTS*E_SIZE
@@ -204,93 +230,56 @@ f_revout    dd 0.22
 comb_len    dd 1116, 1188, 1277, 1356, 1139, 1211, 1300, 1379
 ap_len      dd 556, 441, 579, 464
 
-; chord qualities: chord tones and rootless voicings
-Q_MAJ7 equ 0
-Q_M7   equ 1
-Q_DOM7 equ 2
-Q_M7B5 equ 3
-chord_tones db 0,4,7,11,  0,3,7,10,  0,4,7,10,  0,3,6,10
-voicings    db 4,7,11,14, 3,7,10,14, 4,9,10,14, 3,6,10,12
-major_scale db 0,2,4,5,7,9,11
-minor_scale db 0,2,3,5,7,8,10
-
-; progressions: 16 half-bars of (semitone above key, quality)
-prog_sunny:     ; I vi ii V iii VI ii V
-    db 0,0, 0,0, 9,1, 9,1, 2,1, 2,1, 7,2, 7,2
-    db 4,1, 4,1, 9,2, 9,2, 2,1, 2,1, 7,2, 7,2
-prog_downtown:  ; ii-V | I | IV | iii-VI | ii | V | I-vi | ii-V
-    db 2,1, 7,2, 0,0, 0,0, 5,0, 5,0, 4,1, 9,2
-    db 2,1, 2,1, 7,2, 7,2, 0,0, 9,1, 2,1, 7,2
-prog_night:     ; IV iii ii I  (lo-fi)
-    db 5,0, 5,0, 4,1, 4,1, 2,1, 2,1, 0,0, 0,0
-    db 5,0, 5,0, 4,1, 9,2, 2,1, 7,2, 0,0, 0,0
-prog_bossa:     ; I I ii V iii VI ii V
-    db 0,0, 0,0, 0,0, 0,0, 2,1, 2,1, 7,2, 7,2
-    db 4,1, 4,1, 9,2, 9,2, 2,1, 2,1, 7,2, 7,2
-prog_tension:   ; i iv bVII bIII bVI ii-dim V i  (minor)
-    db 0,1, 0,1, 5,1, 5,1, 10,2, 10,2, 3,0, 3,0
-    db 8,0, 8,0, 2,3, 2,3, 7,2, 7,2, 0,1, 0,1
-
-; drum patterns: tick (0..47), instrument, velocity (0..127); 255 ends
-drums_swing:
-    db 0,I_RIDE,70, 12,I_RIDE,80, 20,I_RIDE,50, 24,I_RIDE,72, 36,I_RIDE,82, 44,I_RIDE,52
-    db 12,I_HAT,60, 36,I_HAT,60, 12,I_BRUSH,70, 36,I_BRUSH,74, 0,I_KICK,40
-    db 255
-drums_lofi:
-    db 0,I_KICK,110, 22,I_KICK,70, 30,I_KICK,95, 12,I_TAP,100, 36,I_TAP,104
-    db 0,I_HAT,60, 8,I_HAT,40, 12,I_HAT,62, 20,I_HAT,38, 24,I_HAT,58, 32,I_HAT,40
-    db 36,I_HAT,62, 44,I_HAT,45, 12,I_BRUSH,40, 36,I_BRUSH,40
-    db 255
-drums_bossa:
-    db 0,I_KICK,70, 18,I_KICK,50, 24,I_KICK,70, 42,I_KICK,50
-    db 0,I_RIM,80, 18,I_RIM,76, 36,I_RIM,80
-    db 0,I_SHAKER,60, 6,I_SHAKER,40, 12,I_SHAKER,55, 18,I_SHAKER,40
-    db 24,I_SHAKER,60, 30,I_SHAKER,40, 36,I_SHAKER,55, 42,I_SHAKER,40
-    db 255
-drums_tension:
-    db 0,I_KICK,110, 24,I_KICK,100, 30,I_KICK,70, 12,I_TAP,110, 36,I_TAP,110
-    db 0,I_RIDE,60, 6,I_RIDE,40, 12,I_RIDE,60, 18,I_RIDE,40
-    db 24,I_RIDE,60, 30,I_RIDE,40, 36,I_RIDE,60, 42,I_RIDE,40
-    db 255
-drums_sparse:   ; tiny town: just a shaker and a soft kick
-    db 0,I_KICK,35, 12,I_SHAKER,35, 24,I_SHAKER,30, 36,I_SHAKER,35
-    db 255
-
-; comping rhythms (ticks) for rhodes in swing; 255 ends
-comp_patterns:
-    db 0, 20, 255, 0,0,0,0,0
-    db 8, 32, 255, 0,0,0,0,0
-    db 20, 44, 255, 0,0,0,0,0
-    db 0, 28, 44, 255, 0,0,0,0
-    db 14, 36, 255, 0,0,0,0,0
-    db 0, 255, 0,0,0,0,0,0
-bossa_comp  db 6, 12, 30, 36, 42, 255
-; melody rhythm candidates (swung eighths across 2 bars)
-mel_slots   db 0,8,12,20,24,32,36,44, 48,56,60,68,72,80,84,92
-
 ; per instrument: sample, gain, pan, send, release (fast/slow), trem
 ; gain/pan/send as floats
 align 4
 inst_table:
-    ;   sample,     gain,  pan,  send, rel(0 fast,1 slow), trem
-    dd S_RHODES_LO, 0.30, -0.30, 0.30, 1, 1
-    dd S_BASS,      0.85,  0.00, 0.10, 0, 0
-    dd S_GUITAR,    0.42, -0.35, 0.25, 1, 0
-    dd S_VIBES,     0.40,  0.35, 0.40, 1, 1
-    dd S_MARIMBA,   0.50,  0.25, 0.30, 0, 0
-    dd S_HORN,      0.30,  0.18, 0.45, 0, 0
-    dd S_PAD,       0.16,  0.00, 0.60, 1, 0
-    dd S_KICK,      0.75,  0.00, 0.05, 0, 0
-    dd S_BRUSH,     0.30, -0.10, 0.20, 0, 0
-    dd S_TAP,       0.40, -0.10, 0.20, 0, 0
-    dd S_RIDE,      0.20,  0.40, 0.25, 1, 0
-    dd S_HAT,       0.22,  0.30, 0.15, 0, 0
-    dd S_SHAKER,    0.16,  0.45, 0.15, 0, 0
-    dd S_RIM,       0.28, -0.25, 0.20, 0, 0
-    dd S_RUMBLE,    0.55,  0.00, 0.05, 0, 0
-    dd S_BOOM,      0.90,  0.00, 0.30, 1, 0
-    dd S_BELL,      0.35,  0.20, 0.45, 1, 0
-INST_REC equ 24
+    ;   sample,     gain,  pan,  send, rel(0 fast,1 slow), trem, zones
+    dd S_RHODES_LO, 0.30, -0.30, 0.30, 1, 1, 2
+    dd S_BASS,      0.85,  0.00, 0.10, 0, 0, 1
+    dd S_GUITAR,    0.42, -0.35, 0.25, 1, 0, 1
+    dd S_VIBES,     0.40,  0.35, 0.40, 1, 1, 1
+    dd S_MARIMBA,   0.50,  0.25, 0.30, 0, 0, 1
+    dd S_HORN,      0.30,  0.18, 0.45, 0, 0, 1
+    dd S_PAD,       0.16,  0.00, 0.60, 1, 0, 1
+    dd S_KICK,      0.75,  0.00, 0.05, 0, 0, 1
+    dd S_BRUSH,     0.30, -0.10, 0.20, 0, 0, 1
+    dd S_TAP,       0.40, -0.10, 0.20, 0, 0, 1
+    dd S_RIDE,      0.20,  0.40, 0.25, 1, 0, 1
+    dd S_HAT,       0.22,  0.30, 0.15, 0, 0, 1
+    dd S_SHAKER,    0.16,  0.45, 0.15, 0, 0, 1
+    dd S_RIM,       0.28, -0.25, 0.20, 0, 0, 1
+    dd S_RUMBLE,    0.55,  0.00, 0.05, 0, 0, 1
+    dd S_BOOM,      0.90,  0.00, 0.30, 1, 0, 1
+    dd S_BELL,      0.35,  0.20, 0.45, 1, 0, 1
+    ; recorded (CC0, Versilian Studios)
+    dd S_NYC+NZ_PIANO,     0.42, -0.18, 0.28, 1, 0, NZ_PIANO_N
+    dd S_NYC+NZ_BASS,      0.70,  0.02, 0.10, 0, 0, NZ_BASS_N
+    dd S_NYC+NZ_HARMON,    0.55,  0.20, 0.42, 0, 0, NZ_HARMON_N
+    dd S_NYC+NZ_SAX,       0.34,  0.16, 0.40, 0, 0, NZ_SAX_N
+    dd S_NYC+NZ_CLARINET,  0.30,  0.22, 0.42, 0, 0, NZ_CLARINET_N
+    dd S_NYC+NZ_STRINGS,   0.28,  0.00, 0.55, 1, 0, NZ_STRINGS_N
+    dd S_NYC+NZ_TROMBONE,  0.32, -0.30, 0.30, 0, 0, NZ_TROMBONE_N
+    dd S_NYC+NZ_TRUMPET,   0.28,  0.30, 0.30, 0, 0, NZ_TRUMPET_N
+    dd S_NYC+NZ_KICK,      0.80,  0.00, 0.05, 0, 0, 1
+    dd S_NYC+NZ_SNARE,     0.62, -0.06, 0.18, 0, 0, 1
+    dd S_NYC+NZ_HAT,       0.48,  0.28, 0.10, 0, 0, 1
+    dd S_NYC+NZ_HATOPEN,   0.36,  0.28, 0.14, 0, 0, 1
+    dd S_NYC+NZ_HATFOOT,   0.36,  0.24, 0.10, 0, 0, 1
+    dd S_NYC+NZ_RIDE,      0.45,  0.36, 0.20, 1, 0, 1
+    dd S_NYC+NZ_RIDEBELL,  0.16,  0.36, 0.20, 1, 0, 1
+    dd S_NYC+NZ_CLAP,      0.30,  0.00, 0.22, 0, 0, 1
+    dd S_NYC+NZ_CONGA,     0.40,  0.30, 0.16, 0, 0, 1
+    dd S_NYC+NZ_CONGASLAP, 0.34,  0.34, 0.16, 0, 0, 1
+    dd S_NYC+NZ_TUMBA,     0.42,  0.40, 0.16, 0, 0, 1
+    dd S_NYC+NZ_BONGOHI,   0.40, -0.34, 0.14, 0, 0, 1
+    dd S_NYC+NZ_BONGOLO,   0.30, -0.28, 0.14, 0, 0, 1
+    dd S_NYC+NZ_COWBELL,   0.32, -0.12, 0.14, 0, 0, 1
+    dd S_NYC+NZ_CLAVES,    0.55,  0.10, 0.16, 0, 0, 1
+    dd S_NYC+NZ_GUIRO,     0.45, -0.40, 0.14, 0, 0, 1
+    dd S_NYC+NZ_SIREN,     0.10,  0.50, 0.60, 1, 0, 1
+    dd S_NYC+NZ_VINYL,     0.10,  0.00, 0.00, 0, 0, 1
+INST_REC equ 28
 
 ; wav override file names (samples/<name>.wav) and root notes
 wav_names:
@@ -420,7 +409,7 @@ frand:
     call rand
     sar eax, 16
     cvtsi2ss xmm0, eax
-    mulss xmm0, [f_inv32k]
+    mulss xmm0, [f_inv32k_s]
     ret
 section .data
 f_inv32k dd 0.0000305176
@@ -1314,6 +1303,9 @@ FUNC audio_init, 64
     lea rdi, [perc_boom]
     call gen_perc
     call loading_tick
+    ; the recorded instruments
+    call nyc_load
+    call loading_tick
     ; user overrides
     xor ebx, ebx
 .ov:
@@ -1336,12 +1328,7 @@ FUNC audio_init, 64
     mov dword [music_on], 1
     mov dword [music_vol], 0x3F19999A   ; 0.6
     mov dword [sfx_vol], 0x3F4CCCCD     ; 0.8
-    mov dword [mus_key], 53
-    mov dword [mus_style], ST_SWING
-    lea rax, [prog_sunny]
-    mov [mus_prog], rax
-    mov qword [mus_next_bar], SR/2
-    call music_set_tempo
+    call music_init
 
     ; open device: 44.1k stereo s16
     lea rdi, [wav_spec]
@@ -1372,11 +1359,67 @@ f_ks_bass dd 0.9995
 f_ks_gtr  dd 0.9992
 section .text
 
+; ---------------------------------------------------------------------
+;  nyc_load: turn the embedded 16-bit recordings into pool samples
+; ---------------------------------------------------------------------
+section .data
+f_inv32k_s dd 0.000030517578
+section .text
+FUNC nyc_load, 16
+    xor ebx, ebx
+.z:
+    cmp ebx, NZ_COUNT
+    jge .out
+    imul eax, ebx, 24
+    lea r12, [nyc_zones+rax]
+    lea r13d, [rbx+S_NYC]           ; sample id
+    mov edi, r13d
+    mov esi, [r12+4]                ; length
+    call smp_new
+    mov r14, rax
+    ; int16 -> float
+    mov eax, [r12]
+    lea rsi, [nyc_pcm+rax*2]
+    xor ecx, ecx
+.c:
+    cmp ecx, [r12+4]
+    jge .cd
+    movsx eax, word [rsi+rcx*2]
+    cvtsi2ss xmm0, eax
+    mulss xmm0, [f_inv32k]
+    movss [r14+rcx*4], xmm0
+    inc ecx
+    jmp .c
+.cd:
+    mov eax, [r12+8]
+    test eax, eax
+    jnz .r
+    mov eax, 60                     ; unpitched: note 60 = as recorded
+.r:
+    mov [smp_root+r13*4], eax
+    mov eax, [r12+12]
+    mov [smp_ls+r13*4], eax
+    mov eax, [r12+16]
+    mov [smp_le+r13*4], eax
+    cvtsi2ss xmm0, dword [r12+20]
+    mulss xmm0, [f_invsr]
+    movss [smp_rate+r13*4], xmm0
+    inc ebx
+    jmp .z
+.out:
+    RETURN
+
 ; =====================================================================
 ;  voices
 ; =====================================================================
 ; voice_start(edi inst, esi midi note, xmm0 velocity, edx dur samples, xmm1 pan)
 FUNC voice_start, 32
+    mov eax, [solo_inst]
+    test eax, eax
+    js .all
+    cmp eax, edi
+    jne .quiet
+.all:
     movss [rbp-48], xmm0
     movss [rbp-52], xmm1
     mov r12d, edi
@@ -1384,13 +1427,29 @@ FUNC voice_start, 32
     mov r14d, edx
     imul eax, r12d, INST_REC
     lea r15, [inst_table+rax]
-    mov ebx, [r15]                  ; sample
-    ; rhodes: choose the nearer of two roots
-    cmp ebx, S_RHODES_LO
-    jne .ns
-    cmp r13d, 60
-    jl .ns
-    mov ebx, S_RHODES_HI
+    mov ebx, [r15]                  ; first zone
+    ; several zones: take the one recorded nearest this note
+    mov ecx, [r15+24]
+    cmp ecx, 1
+    jle .ns
+    lea r8d, [rbx+rcx]              ; end
+    mov r9d, 0x7fffffff             ; best distance
+    mov r10d, ebx                   ; best zone
+.z:
+    mov eax, r13d
+    sub eax, [smp_root+rbx*4]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    cmp eax, r9d
+    jge .zn
+    mov r9d, eax
+    mov r10d, ebx
+.zn:
+    inc ebx
+    cmp ebx, r8d
+    jl .z
+    mov ebx, r10d
 .ns:
     cmp qword [smp_ptr+rbx*8], 0
     je .out
@@ -1471,6 +1530,7 @@ FUNC voice_start, 32
     mov eax, [r15+20]
     mov [rdi+V_TREM], eax
 .out:
+.quiet:
     RETURN
 section .data
 f_2p24   dd 16777216.0
@@ -1824,777 +1884,8 @@ section .text
 ; =====================================================================
 ;  composer
 ; =====================================================================
-FUNC music_set_tempo
-    mov eax, [mus_style]
-    mov ecx, [style_tempo+rax*4]
-    mov [mus_tempo], ecx
-    ; samples per tick = SR*60 / (tempo*12)
-    mov eax, SR*60
-    xor edx, edx
-    imul ecx, ecx, 12
-    div ecx
-    mov [mus_tick], eax
-    RETURN
-section .data
-style_tempo dd 104, 80, 124, 112
-style_progs dq prog_sunny, prog_night, prog_bossa, prog_tension
-style_drums dq drums_swing, drums_lofi, drums_bossa, drums_tension
-section .text
+; (the composer lives in music.asm)
 
-; schedule a music note: (edi inst, esi note, edx tick in bar, ecx dur ticks, xmm0 vel)
-FUNC mnote, 16
-    movss [rbp-48], xmm0
-    mov r12d, edi
-    mov r13d, esi
-    mov eax, edx
-    imul eax, [mus_tick]
-    movsxd r14, eax
-    add r14, [mus_next_bar]
-    ; humanise pitched parts by a few ms
-    cmp r12d, I_KICK
-    jae .nh
-    call rand
-    and eax, 255
-    sub eax, 128
-    movsxd rax, eax
-    add r14, rax
-.nh:
-    mov eax, ecx
-    imul eax, [mus_tick]
-    mov ecx, eax
-    movss xmm0, [rbp-48]
-    mulss xmm0, [music_vol]
-    ; slight velocity variation
-    push rcx
-    push rcx
-    call rand
-    and eax, 31
-    cvtsi2ss xmm1, eax
-    mulss xmm1, [f_velvar]
-    addss xmm1, [f_velbase]
-    pop rcx
-    pop rcx
-    movss xmm0, [rbp-48]
-    mulss xmm0, [music_vol]
-    mulss xmm0, xmm1
-    xorps xmm1, xmm1
-    mov rsi, r14
-    mov edi, r12d
-    mov edx, r13d
-    call ev_add
-    RETURN
-section .data
-f_velvar  dd 0.008
-f_velbase dd 0.88
-section .text
-
-; chord helpers for half-bar h (0/1): chord tone i -> absolute midi near base
-; chord_note(edi half, esi index into voicing, edx base octave midi) -> eax
-chord_voicing_note:
-    mov eax, [chord_root+rdi*4]
-    add eax, [mus_key]
-    mov ecx, [chord_q+rdi*4]
-    lea rcx, [voicings+rcx*4]
-    movzx esi, byte [rcx+rsi]
-    add eax, esi
-    ; move into range [base, base+12) for the root, voicing stacks upward
-    ret
-
-; pick style from the city
-FUNC music_pick_style
-    mov ebx, ST_SWING
-    ; night -> lofi
-    mov eax, [tod]
-    shr eax, 8
-    cmp eax, 200
-    jg .night
-    cmp eax, 48
-    jl .night
-    ; bossa sometimes during the day, more with parks
-    call rand
-    and eax, 3
-    jnz .fire
-    mov ebx, ST_BOSSA
-    jmp .fire
-.night:
-    mov ebx, ST_LOFI
-.fire:
-    cmp dword [cnt_fire], 0
-    je .set
-    mov ebx, ST_TENSION
-.set:
-    mov [mus_style], ebx
-    mov rax, [style_progs+rbx*8]
-    cmp ebx, ST_SWING
-    jne .sp
-    call rand
-    test eax, 1
-    lea rax, [prog_sunny]
-    jz .sp
-    lea rax, [prog_downtown]
-.sp:
-    mov [mus_prog], rax
-    call music_set_tempo
-    ; intensity from population
-    xor eax, eax
-    mov ecx, [population]
-    cmp ecx, 80
-    jl .i
-    inc eax
-    cmp ecx, 700
-    jl .i
-    inc eax
-    cmp ecx, 3000
-    jl .i
-    inc eax
-.i:
-    mov [mus_intensity], eax
-    ; lead voice
-    mov ecx, I_VIBES
-    cmp ebx, ST_BOSSA
-    jne .l1
-    mov ecx, I_GUITAR
-.l1:
-    cmp ebx, ST_LOFI
-    jne .l2
-    mov ecx, I_RHODES
-.l2:
-    cmp ebx, ST_TENSION
-    jne .l3
-    mov ecx, I_HORN
-.l3:
-    cmp eax, 3
-    jl .l4
-    call rand
-    test eax, 1
-    jz .l4
-    mov ecx, I_HORN
-.l4:
-    mov [mus_lead], ecx
-    call make_motif
-    RETURN
-
-; motif: 4-7 notes over two bars, stored as tick, step, duration
-FUNC make_motif
-    mov edi, 4
-    call rand_range
-    lea r12d, [rax+4]               ; notes
-    mov [motif_len], r12d
-    ; choose ascending slots
-    xor ebx, ebx                    ; slot cursor
-    xor r13d, r13d                  ; note
-.n:
-    cmp r13d, r12d
-    jge .out
-    mov eax, 16
-    sub eax, ebx
-    mov ecx, r12d
-    sub ecx, r13d
-    sub eax, ecx
-    jle .take
-    lea edi, [rax+1]
-    cmp edi, 3
-    jle .r
-    mov edi, 3
-.r:
-    call rand_range
-    add ebx, eax
-.take:
-    CLAMP ebx, 0, 15
-    movzx eax, byte [mel_slots+rbx]
-    mov [motif_pos+r13], al
-    call rand
-    and eax, 3
-    sub eax, 1                      ; -1..2
-    test r13d, r13d
-    jnz .st
-    xor eax, eax
-.st:
-    mov [motif_step+r13], al
-    ; duration until next slot (filled later), default 6 ticks
-    mov byte [motif_dur+r13], 7
-    inc ebx
-    inc r13d
-    jmp .n
-.out:
-    RETURN
-
-; melody degree -> midi. (edi degree) -> eax
-degree_midi:
-    mov eax, edi
-    add eax, 70                     ; keep positive, 70 = 10 octaves of 7
-    xor edx, edx
-    mov ecx, 7
-    div ecx
-    ; eax = octave+10, edx = scale index
-    sub eax, 10
-    imul eax, 12
-    movzx ecx, byte [major_scale+rdx]
-    cmp dword [mus_style], ST_TENSION
-    jne .mj
-    movzx ecx, byte [minor_scale+rdx]
-.mj:
-    add eax, ecx
-    add eax, [mus_key]
-    add eax, 12
-    ret
-
-; snap degree edi to a chord tone of half-bar esi -> eax degree
-FUNC snap_degree
-    mov r12d, edi
-    mov r13d, esi
-    xor r14d, r14d
-.t:
-    mov edi, r12d
-    call degree_midi
-    sub eax, [mus_key]
-    sub eax, [chord_root+r13*4]
-    add eax, 120
-    xor edx, edx
-    mov ecx, 12
-    div ecx                          ; edx = interval
-    mov eax, [chord_q+r13*4]
-    lea rcx, [chord_tones+rax*4]
-    xor eax, eax
-.c:
-    cmp dl, [rcx+rax]
-    je .ok
-    inc eax
-    cmp eax, 4
-    jl .c
-    inc r12d
-    inc r14d
-    cmp r14d, 3
-    jl .t
-.ok:
-    mov eax, r12d
-    RETURN
-
-; ---------------------------------------------------------------------
-;  compose_bar: write every part for the bar starting at mus_next_bar
-; ---------------------------------------------------------------------
-FUNC compose_bar, 64
-    cmp dword [music_on], 0
-    je .advance
-    cmp dword [mus_bar], 0
-    jne .nosec
-    call music_pick_style
-    ; modulate every other section
-    inc dword [mus_sections]
-    test dword [mus_sections], 1
-    jnz .nosec
-    mov eax, [mus_key]
-    add eax, 5
-    cmp eax, 60
-    jl .k
-    sub eax, 12
-.k:
-    mov [mus_key], eax
-.nosec:
-    ; chords for both half bars
-    mov rsi, [mus_prog]
-    mov eax, [mus_bar]
-    shl eax, 2
-    movzx ecx, byte [rsi+rax]
-    mov [chord_root], ecx
-    movzx ecx, byte [rsi+rax+1]
-    mov [chord_q], ecx
-    movzx ecx, byte [rsi+rax+2]
-    mov [chord_root+4], ecx
-    movzx ecx, byte [rsi+rax+3]
-    mov [chord_q+4], ecx
-    ; next bar root for bass approach
-    mov eax, [mus_bar]
-    inc eax
-    and eax, 7
-    shl eax, 2
-    movzx ecx, byte [rsi+rax]
-    mov [next_root], ecx
-
-    ; paused game: only a soft pad
-    cmp dword [sim_speed], 0
-    jne .play
-    xor edi, edi
-    call part_pad
-    jmp .advance
-.play:
-    call part_drums
-    call part_bass
-    call part_chords
-    cmp dword [mus_intensity], 2
-    jl .nomel
-    call part_melody
-.nomel:
-    cmp dword [mus_style], ST_LOFI
-    jne .advance
-    xor edi, edi
-    call part_pad
-.advance:
-    ; bar length = 48 ticks
-    mov eax, [mus_tick]
-    imul eax, 48
-    add [mus_next_bar], rax
-    mov eax, [mus_bar]
-    inc eax
-    and eax, 7
-    mov [mus_bar], eax
-    RETURN
-
-FUNC part_drums
-    mov eax, [mus_style]
-    mov r12, [style_drums+rax*8]
-    cmp dword [mus_intensity], 0
-    jne .d
-    lea r12, [drums_sparse]
-.d:
-    movzx edx, byte [r12]
-    cmp edx, 255
-    je .fills
-    movzx edi, byte [r12+1]
-    movzx eax, byte [r12+2]
-    cvtsi2ss xmm0, eax
-    mulss xmm0, [f_inv127]
-    mov esi, 60
-    mov ecx, 24
-    call mnote
-    add r12, 3
-    jmp .d
-.fills:
-    ; swing: random snare comping, bar 8: a little fill
-    cmp dword [mus_intensity], 0
-    je .out
-    xor ebx, ebx
-.g:
-    call rand
-    and eax, 15
-    jnz .gn
-    movzx edx, byte [mel_slots+rbx]
-    mov edi, I_TAP
-    mov esi, 60
-    mov ecx, 6
-    movss xmm0, [f_ghost]
-    call mnote
-.gn:
-    inc ebx
-    cmp ebx, 8
-    jl .g
-    cmp dword [mus_bar], 7
-    jne .out
-    mov edx, 36
-.fl:
-    push rdx
-    push rdx
-    mov edi, I_TAP
-    mov esi, 60
-    mov ecx, 3
-    movss xmm0, [f_fill]
-    call mnote
-    pop rdx
-    pop rdx
-    add edx, 4
-    cmp edx, 48
-    jl .fl
-.out:
-    RETURN
-section .data
-f_ghost dd 0.35
-f_fill  dd 0.6
-section .text
-
-; bass: walking in swing, patterns elsewhere
-FUNC part_bass
-    mov r15d, [mus_style]
-    mov r12d, [chord_root]
-    add r12d, [mus_key]
-    ; bass register ~ 36..47
-.lo:
-    cmp r12d, 36
-    jge .hi
-    add r12d, 12
-    jmp .lo
-.hi:
-    cmp r12d, 48
-    jl .ok
-    sub r12d, 12
-    jmp .hi
-.ok:
-    cmp r15d, ST_SWING
-    jne .notwalk
-    cmp dword [mus_intensity], 0
-    je .notwalk
-    ; beat 1 root
-    mov edi, I_BASS
-    mov esi, r12d
-    xor edx, edx
-    mov ecx, 11
-    movss xmm0, [f_bass1]
-    call mnote
-    ; beats 2, 3: chord tones of the relevant half bar
-    mov ebx, 1
-.walk:
-    mov edi, 0
-    cmp ebx, 2
-    jl .h
-    mov edi, 1
-.h:
-    call rand
-    and eax, 3
-    mov ecx, [chord_q+rdi*4]
-    lea rcx, [chord_tones+rcx*4]
-    movzx esi, byte [rcx+rax]
-    add esi, [chord_root+rdi*4]
-    add esi, [mus_key]
-.lo2:
-    cmp esi, 36
-    jge .hi2
-    add esi, 12
-    jmp .lo2
-.hi2:
-    cmp esi, 52
-    jl .ok2
-    sub esi, 12
-    jmp .hi2
-.ok2:
-    mov edi, I_BASS
-    imul edx, ebx, 12
-    mov ecx, 11
-    movss xmm0, [f_bass2]
-    call mnote
-    inc ebx
-    cmp ebx, 3
-    jl .walk
-    ; beat 4: chromatic approach to the next root
-    mov esi, [next_root]
-    add esi, [mus_key]
-.lo3:
-    cmp esi, 37
-    jge .hi3
-    add esi, 12
-    jmp .lo3
-.hi3:
-    cmp esi, 49
-    jl .ok3
-    sub esi, 12
-    jmp .hi3
-.ok3:
-    call rand
-    test eax, 1
-    jz .up
-    inc esi
-    jmp .ap
-.up:
-    dec esi
-.ap:
-    mov edi, I_BASS
-    mov edx, 36
-    mov ecx, 11
-    movss xmm0, [f_bass2]
-    call mnote
-    RETURN
-.notwalk:
-    ; root on one, fifth later, root again
-    mov edi, I_BASS
-    mov esi, r12d
-    xor edx, edx
-    mov ecx, 16
-    movss xmm0, [f_bass1]
-    call mnote
-    lea esi, [r12+7]
-    mov edx, 18
-    cmp r15d, ST_LOFI
-    jne .b2
-    mov edx, 30
-    mov esi, r12d
-.b2:
-    mov edi, I_BASS
-    mov ecx, 8
-    movss xmm0, [f_bass2]
-    call mnote
-    cmp r15d, ST_LOFI
-    je .out
-    mov esi, [chord_root+4]
-    add esi, [mus_key]
-.lo4:
-    cmp esi, 36
-    jge .hi4
-    add esi, 12
-    jmp .lo4
-.hi4:
-    cmp esi, 48
-    jl .ok4
-    sub esi, 12
-    jmp .hi4
-.ok4:
-    mov r13d, esi
-    mov edi, I_BASS
-    mov edx, 24
-    mov ecx, 16
-    movss xmm0, [f_bass1]
-    call mnote
-    lea esi, [r13+7]
-    mov edi, I_BASS
-    mov edx, 42
-    mov ecx, 6
-    movss xmm0, [f_bass2]
-    call mnote
-.out:
-    RETURN
-section .data
-f_bass1 dd 0.95
-f_bass2 dd 0.8
-section .text
-
-; play a voiced chord for half bar (edi half) at tick edx, dur ecx, inst r8d, vel xmm0
-FUNC play_chord, 32
-    movss [rbp-48], xmm0
-    mov r12d, edi
-    mov r13d, edx
-    mov r14d, ecx
-    mov r15d, r8d
-    ; voicing base: root placed in 50..61 then voicing added
-    mov ebx, [chord_root+r12*4]
-    add ebx, [mus_key]
-.lo:
-    cmp ebx, 50
-    jge .hi
-    add ebx, 12
-    jmp .lo
-.hi:
-    cmp ebx, 62
-    jl .ok
-    sub ebx, 12
-    jmp .hi
-.ok:
-    xor ecx, ecx
-.n:
-    mov [rbp-52], ecx
-    mov eax, [chord_q+r12*4]
-    lea rax, [voicings+rax*4]
-    movzx esi, byte [rax+rcx]
-    add esi, ebx
-    mov edi, r15d
-    mov edx, r13d
-    ; strum: guitar / lofi rhodes spread a little
-    cmp r15d, I_GUITAR
-    je .strum
-    cmp dword [mus_style], ST_LOFI
-    jne .ns
-.strum:
-    ; (can't subdivide ticks; just stagger by one tick on the top note)
-    cmp ecx, 3
-    jne .ns
-    inc edx
-.ns:
-    mov ecx, r14d
-    movss xmm0, [rbp-48]
-    call mnote
-    mov ecx, [rbp-52]
-    inc ecx
-    cmp ecx, 4
-    jl .n
-    RETURN
-
-FUNC part_chords
-    mov eax, [mus_style]
-    cmp eax, ST_BOSSA
-    je .bossa
-    cmp eax, ST_LOFI
-    je .lofi
-    ; swing / tension: pick a comping rhythm per bar
-    mov edi, 6
-    call rand_range
-    lea r12, [comp_patterns+rax*8]
-.c:
-    movzx edx, byte [r12]
-    cmp edx, 255
-    je .out
-    xor edi, edi
-    cmp edx, 24
-    jl .h
-    mov edi, 1
-.h:
-    mov ecx, 10
-    mov r8d, I_RHODES
-    movss xmm0, [f_comp]
-    call play_chord
-    inc r12
-    jmp .c
-.lofi:
-    xor edi, edi
-    xor edx, edx
-    mov ecx, 22
-    mov r8d, I_RHODES
-    movss xmm0, [f_lofi_ch]
-    call play_chord
-    mov edi, 1
-    mov edx, 24
-    mov ecx, 22
-    mov r8d, I_RHODES
-    movss xmm0, [f_lofi_ch]
-    call play_chord
-    jmp .out
-.bossa:
-    lea r12, [bossa_comp]
-.b:
-    movzx edx, byte [r12]
-    cmp edx, 255
-    je .out
-    xor edi, edi
-    cmp edx, 24
-    jl .bh
-    mov edi, 1
-.bh:
-    mov ecx, 5
-    mov r8d, I_GUITAR
-    movss xmm0, [f_comp]
-    call play_chord
-    inc r12
-    jmp .b
-.out:
-    RETURN
-section .data
-f_comp    dd 0.55
-f_lofi_ch dd 0.5
-section .text
-
-FUNC part_pad
-    ; sustained chord tones on the pad
-    mov ebx, [chord_root]
-    add ebx, [mus_key]
-.lo:
-    cmp ebx, 55
-    jge .ok
-    add ebx, 12
-    jmp .lo
-.ok:
-    xor r12d, r12d
-.n:
-    mov eax, [chord_q]
-    lea rax, [chord_tones+rax*4]
-    movzx esi, byte [rax+r12]
-    add esi, ebx
-    mov edi, I_PAD
-    xor edx, edx
-    mov ecx, 46
-    movss xmm0, [f_padv]
-    call mnote
-    inc r12d
-    cmp r12d, 3
-    jl .n
-    RETURN
-section .data
-f_padv dd 0.6
-section .text
-
-; melody: motif development over 2-bar phrases
-FUNC part_melody, 32
-    mov eax, [mus_bar]
-    mov r15d, eax
-    shr r15d, 1                     ; phrase 0..3
-    and eax, 1                      ; which bar of the phrase
-    imul eax, 48
-    mov [rbp-48], eax               ; phrase tick offset of this bar
-    ; phrase start degree: chord-tone near the top of the range
-    test dword [mus_bar], 1
-    jnz .cont
-    mov edi, 2
-    call rand_range
-    lea edi, [rax*2+2]              ; degree 2 or 4
-    cmp r15d, 1
-    jne .d
-    inc edi                         ; sequence up a step
-.d:
-    xor esi, esi
-    call snap_degree
-    mov [mus_mel_deg], eax
-.cont:
-    ; phrase 2 = answer: sparse, fresh random notes
-    cmp r15d, 2
-    je .answer
-    xor ebx, ebx
-.n:
-    cmp ebx, [motif_len]
-    jge .out
-    movzx eax, byte [motif_pos+rbx]
-    sub eax, [rbp-48]
-    jl .skip
-    cmp eax, 48
-    jge .out
-    mov r12d, eax                   ; tick in bar
-    movsx ecx, byte [motif_step+rbx]
-    add [mus_mel_deg], ecx
-    ; last phrase resolves: final note long on a chord tone
-    mov edi, [mus_mel_deg]
-    xor esi, esi
-    cmp r12d, 24
-    jl .hs
-    mov esi, 1
-.hs:
-    ; strong beats snap to chord tones
-    mov eax, r12d
-    xor edx, edx
-    mov ecx, 12
-    div ecx
-    test edx, edx
-    jnz .nosnap
-    call snap_degree
-    mov edi, eax
-.nosnap:
-    mov [mus_mel_deg], edi
-    ; keep in range
-    cmp edi, -2
-    jge .r1
-    add dword [mus_mel_deg], 7
-.r1:
-    cmp edi, 11
-    jle .r2
-    sub dword [mus_mel_deg], 7
-.r2:
-    mov edi, [mus_mel_deg]
-    call degree_midi
-    mov esi, eax
-    mov ecx, 7
-    cmp r15d, 3
-    jne .dur
-    lea eax, [rbx+1]
-    cmp eax, [motif_len]
-    jne .dur
-    mov ecx, 30
-.dur:
-    mov edi, [mus_lead]
-    mov edx, r12d
-    movss xmm0, [f_mel]
-    call mnote
-.skip:
-    inc ebx
-    jmp .n
-.answer:
-    ; call-and-response: two or three notes descending to the 3rd
-    call rand
-    and eax, 1
-    add eax, 2
-    mov ebx, eax
-    mov r12d, 8
-.a:
-    dec dword [mus_mel_deg]
-    mov edi, [mus_mel_deg]
-    call degree_midi
-    mov esi, eax
-    mov edi, [mus_lead]
-    mov edx, r12d
-    mov ecx, 8
-    movss xmm0, [f_mel]
-    call mnote
-    add r12d, 12
-    dec ebx
-    jnz .a
-.out:
-    RETURN
-section .data
-f_mel dd 0.7
-section .text
-
-; toggle music on/off (keyboard M)
 music_toggle:
     xor dword [music_on], 1
     ret

@@ -13,8 +13,8 @@ rest is hand-written assembly:
   glowing windows, neon and shimmering water
 - the **city simulation**: utility networks, services, pollution, crime, land
   value, traffic, growth, fires and disasters, budget, demand and milestones
-- an **audio engine**: physically modelled instruments, a 32-voice sampler with
-  reverb, and a **generative jazz score** that follows your city
+- an **audio engine**: a 32-voice sampler with reverb, real recorded
+  instruments, and a **generative New York score** that follows your city
 - the **UI**: immediate-mode widgets, tools, overlays, minimap, advisor goals
 
 ## Building
@@ -234,16 +234,33 @@ recreation.
 **Hazards.** Fires spread and meteors strike big cities (disasters can be
 turned off).
 
-### Music
+### Music: "Five Boroughs"
 
-The soundtrack is composed live: jazz chord progressions (ii–V–I, rootless
-voicings), a walking bass, swung ride cymbal and brushes, and motif-based melodies
-that develop over 8-bar phrases. The style follows the city: swing by day, lo-fi
-at night, bossa nova some afternoons, and a minor-key tension mode while fires
-burn. The band grows with your population. Sound effects are played on the same
-instruments, in the current key.
+The soundtrack is composed live, one bar at a time, on real recorded
+instruments. The style follows the city:
 
-The instruments are synthesized at start-up (FM electric piano, Karplus-Strong
+| When | Style | Band |
+|---|---|---|
+| night | **Village Vanguard** swing | ride and brushes, walking upright bass, Steinway comping in rootless voicings, harmon-muted trumpet or tenor sax |
+| day | **Brooklyn boom bap** | dusty kick and snare, swung 16th hats, lo-fi piano chops over vinyl crackle, upright bass, sax phrases |
+| day | **Nuyorican salsa** | 2-3 son clave, conga tumbao, bongo martillo, cowbell, guiro, piano montuno, tumbao bass, trumpet and trombone mambos |
+| morning | **Broadway** | two-feel with stride piano, strings and clarinet |
+| fires | **Noir** | a slow minor ballad for tenor sax and strings, with sirens across the city |
+
+Sections alternate between the band and a featured lead. Motifs are answered
+and resolved over 8 bars, the last bar gets a fill, and the key moves around
+the cycle of fourths. The band grows with your population. At night in New
+York you'll hear the odd siren anyway.
+
+The recordings are CC0 (public domain) from Versilian Studios' **VCSL** and
+**VSCO-2 Community Edition**: a Steinway B, an upright bass, harmon-muted and
+open trumpet, tenor sax, clarinet, violin section, trombone, a drum kit,
+congas, bongos, cowbell, claves and guiro. `tools/samples/build_samples.py`
+downloads them, detects each zone's real pitch and retunes it, trims, levels,
+loops the sustained ones, and packs 48 zones (3.8 MB) into
+`src/nyc_samples.bin`, which the game embeds with `incbin`.
+
+Sound effects use instruments synthesized at start-up (FM electric piano, Karplus-Strong
 upright bass and nylon guitar, modal vibraphone, marimba and bells, FM muted
 horn, string pad, noise-shaped drums). To use **your own recordings**, drop
 16-bit PCM `.wav` files into a `samples/` folder next to the executable. They
@@ -268,7 +285,8 @@ replace the built-in instruments:
 | `src/sim.asm` | growth, utilities (power / pipes / sewage), services, workforce, budget |
 | `src/traffic.asm` | pathfinding, vehicles, trips, buses, service dispatch |
 | `src/agents.asm` | cars, pedestrians, particles, floating text |
-| `src/audio.asm` | instrument synthesis, sampler, reverb, composer, sound effects |
+| `src/audio.asm` | instrument synthesis, recorded zones, sampler, reverb, sound effects |
+| `src/music.asm` | the generative "Five Boroughs" score |
 | `src/ui.asm`, `src/icons_data.asm` | interface, tools, panels, goals, save/load |
 | `src/buildings.asm` | service building stats |
 
@@ -285,5 +303,5 @@ cityssembly --demo N out.bmp [view]     # auto-build a town, simulate ~2 years, 
                                         #       q/Q pylons, F placing a service, I problem inspector,
                                         #       T scripted new-player playtest (prints a report)
 cityssembly --demo 1 out.bmp L          # load city.sav, print a water/sewage report
-cityssembly --wav SECONDS out.wav       # render the soundtrack offline
+cityssembly --wav SECONDS out.wav [STYLE [INST]]  # render the soundtrack (STYLE 0-4, INST solo)
 ```
