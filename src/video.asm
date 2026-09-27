@@ -21,6 +21,10 @@ str_wb          db "wb", 0
 str_rb          db "rb", 0
 str_sdlfail     db "SDL error: %s", 10, 0
 
+section .data
+init_w          dd 1280
+init_h          dd 720
+
 section .bss
 alignb 16
 fb              resb MAX_FB_W*MAX_FB_H
@@ -76,8 +80,8 @@ FUNC video_init
     lea rdi, [str_title]
     mov esi, SDL_WINDOWPOS_CENTERED
     mov edx, SDL_WINDOWPOS_CENTERED
-    mov ecx, 1280
-    mov r8d, 720
+    mov ecx, [init_w]
+    mov r8d, [init_h]
     mov r9d, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
     CALLC SDL_CreateWindow
     test rax, rax
@@ -319,6 +323,11 @@ FUNC video_present
 ; ---------------------------------------------------------------------
 FUNC video_screenshot
     mov [rbp-48], rdi
+    call compose_frame
+    jmp save_shot
+
+; compose both layers at window resolution into shotbuf
+FUNC compose_frame
     lea rdi, [shotbuf]
     xor r12d, r12d                 ; y
 .y:
@@ -382,6 +391,10 @@ FUNC video_screenshot
     inc r12d
     jmp .y
 .done:
+    RETURN
+
+; (continuation of video_screenshot: [rbp-48] = file name)
+save_shot:
     lea rdi, [shotbuf]
     mov esi, [win_w]
     mov edx, [win_h]

@@ -4,3 +4,15 @@ third_party/
 /cityssembly
 *.sav
 *.bmp
+trailer_work/*.mkv
+trailer_work/*.mp4
+trailer_work/*.wav
+trailer_work/*.png
+trailer_work/seg/
+trailer_work/samples/
+trailer_work/shots.txt
+trailer_work/ts.txt
+trailer_work/cap.fifo
+trailer_work/dump.gdb
+trailer_work/__pycache__/
+*.mp4

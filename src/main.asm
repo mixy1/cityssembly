@@ -23,6 +23,8 @@ shot_frames     resd 1
 shot_file       resq 1
 demo_mode       resd 1
 demo_view       resd 1
+demo_no_ff      resd 1
+trailer_mode    resd 1
 wav_seconds     resd 1
 event_buf       resb 64
 last_ticks      resd 1
@@ -89,13 +91,28 @@ FUNC main
 %endif
     mov r12d, edi                   ; argc
     mov r13, rsi                    ; argv
-    cmp r12d, 4
+    cmp r12d, 3
     jl .noargs
+    mov rdi, [r13+8]
+    lea rsi, [str_trailer_flag]
+    CALLC strcmp
+    test eax, eax
+    jnz .nottrailer
+    mov dword [trailer_mode], 1
+    mov rax, [r13+16]
+    mov [shot_file], rax
+    mov dword [shot_frames], 1          ; fixed seed
+    mov dword [init_w], 960
+    mov dword [init_h], 540
+    jmp .noargs
+.nottrailer:
     mov rdi, [r13+8]
     lea rsi, [str_wav_flag]
     CALLC strcmp
     test eax, eax
     jnz .notwav
+    cmp r12d, 4
+    jl .noargs
     mov rdi, [r13+16]
     CALLC atoi
     mov [wav_seconds], eax
@@ -103,6 +120,8 @@ FUNC main
     mov [shot_file], rax
     jmp .noargs
 .notwav:
+    cmp r12d, 4
+    jl .noargs
     mov rdi, [r13+8]
     lea rsi, [str_demo_flag]
     CALLC strcmp
@@ -148,6 +167,11 @@ FUNC main
     mov edi, 30
     mov esi, [hwy_row]
     call camera_center_tile
+    cmp dword [trailer_mode], 0
+    je .notr
+    call trailer_run
+    jmp .quit
+.notr:
     cmp dword [wav_seconds], 0
     je .nowav
     call wav_dump
@@ -569,6 +593,8 @@ FUNC demo_build, 16
     call networks_update
     call coverage_update
     call stats_update
+    cmp dword [demo_no_ff], 0
+    jne .noff
     ; fast-forward: full ticks so traffic and deliveries run too
     mov dword [sim_speed], 3
     mov ebx, 700*5
@@ -634,6 +660,7 @@ FUNC demo_build, 16
     mov dword [tool], T_ZONETOOL
     mov dword [zone_type], ZONE_RH
 .v11:
+.noff:
     RETURN
 
 ; offline render of the soundtrack into a wav (for testing)
@@ -778,3 +805,4 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "agents.asm"
 %include "audio.asm"
 %include "ui.asm"
+%include "trailer.asm"
