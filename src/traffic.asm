@@ -116,13 +116,16 @@ FUNC traffic_init
     mov ecx, MAP_TILES/2
     rep stosd
     ; no vehicles means no one on the roads: saves stored the lane counts
-    ; of cars that no longer exist, which blocked roads after loading
+    ; of cars that no longer exist, which blocked roads after loading.
+    ; Likewise the "truck on the way" marks: a building whose truck was
+    ; lost with a save was never served again
     xor ebx, ebx
 .o:
     mov eax, ebx
     shl eax, TILE_SHIFT
     mov dword [tiles+rax+T_OCC], 0
     mov byte [tiles+rax+T_JAM], 0
+    and byte [tiles+rax+T_MISC], ~(MISC_FTRUCK | MISC_GTRUCK)
     inc ebx
     cmp ebx, MAP_TILES
     jl .o
@@ -1639,6 +1642,8 @@ FUNC dispatch_services, 32
     jl .fire
 
     ; depots: garbage trucks, police patrols, buses
+    call garb_list_make
+    call garb_dispatch
     xor r14d, r14d
 .dep:
     cmp r14d, [n_svc]
@@ -1671,94 +1676,10 @@ FUNC dispatch_services, 32
     je .dn
     mov r13d, eax                   ; depot road
     mov eax, [rbp-48]
-    cmp eax, BK_LANDFILL
-    je .garb
-    cmp eax, BK_INCIN
-    je .garb
     cmp eax, BK_POLICE
     je .police
     cmp eax, BK_BUSDEPOT
     je .bus
-    jmp .dn
-.garb:
-    cmp dword [rbp-48], BK_LANDFILL
-    jne .gok
-    mov eax, [landfill_used]
-    cmp eax, [landfill_cap]
-    jb .gok
-    jmp .dn
-.gok:
-    ; look for full bins within the service radius (a few per day)
-    movzx eax, byte [r15+BI_RADIUS]
-    mov [rbp-56], eax
-    mov dword [rbp-60], 60          ; tries
-    mov dword [rbp-72], 3           ; trucks to send
-.gt0:
-.gt:
-    dec dword [rbp-60]
-    js .dn
-    mov edi, [rbp-56]
-    lea edi, [rdi*2+1]
-    call rand_range
-    sub eax, [rbp-56]
-    mov ecx, r12d
-    and ecx, MAP_W-1
-    add eax, ecx
-    mov [rbp-64], eax
-    mov edi, [rbp-56]
-    lea edi, [rdi*2+1]
-    call rand_range
-    sub eax, [rbp-56]
-    mov ecx, r12d
-    shr ecx, MAP_SHIFT
-    add eax, ecx
-    mov esi, eax
-    mov edi, [rbp-64]
-    call tile_at
-    test rax, rax
-    jz .gt
-    cmp byte [rax+T_OBJ], OBJ_ZONEBLD
-    jne .gt
-    test byte [rax+T_FLAGS], F_ANCHOR
-    jz .gt
-    cmp byte [rax+T_GARBAGE], 90
-    jb .gt
-    test byte [rax+T_MISC], MISC_GTRUCK
-    jnz .gt
-    mov r15, rax
-    sub rax, tiles
-    shr eax, TILE_SHIFT
-    mov [rbp-68], eax
-    mov edi, eax
-    call access_road
-    cmp eax, -1
-    je .dn
-    mov edi, r13d
-    mov esi, eax
-    mov edx, VT_GARBAGE
-    mov ecx, PU_GARB
-    mov r8d, [rbp-68]
-    mov r9d, r12d
-    call vehicle_spawn
-    cmp eax, -1
-    je .dn
-    or byte [r15+T_MISC], MISC_GTRUCK
-    dec dword [rbp-72]
-    jz .dn
-    mov edi, r12d
-    call count_home
-    mov ecx, r12d
-    shl ecx, TILE_SHIFT
-    movzx edi, byte [tiles+rcx+T_SUB]
-    push rax
-    push rax
-    call bld_rec
-    mov r15, rax
-    pop rax
-    pop rax
-    movzx ecx, byte [r15+BI_VEHICLES]
-    cmp eax, ecx
-    jl .gt
     jmp .dn
 .police:
     ; patrol to a random road nearby
@@ -1818,6 +1739,199 @@ FUNC dispatch_services, 32
     inc r14d
     jmp .dep
 .out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  garbage: once a day, the bins that need a truck; each depot then
+;  takes the fullest in its reach.  (Depots used to probe random tiles,
+;  which in a big city found a full bin a few times in a thousand tries:
+;  trucks sat at home while garbage piled up.)
+; ---------------------------------------------------------------------
+GARB_CALL   equ 80              ; a bin this full calls for a truck
+GARB_MAX    equ 4096
+section .bss
+garb_cand   resd GARB_MAX       ; building tiles, -1 once taken
+garb_n      resd 1
+section .text
+
+FUNC garb_list_make
+    xor r12d, r12d
+    mov r13d, 255                   ; pass 1: overflowing bins first
+    mov r14d, 190
+.pass:
+    xor ebx, ebx
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ZONEBLD
+    jne .n
+    test byte [tiles+rax+T_FLAGS], F_ANCHOR
+    jz .n
+    movzx ecx, byte [tiles+rax+T_GARBAGE]
+    cmp ecx, r14d
+    jb .n
+    cmp ecx, r13d
+    ja .n
+    test byte [tiles+rax+T_MISC], MISC_GTRUCK
+    jnz .n
+    cmp r12d, GARB_MAX
+    jge .o
+    mov [garb_cand+r12*4], ebx
+    inc r12d
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    cmp r14d, GARB_CALL
+    je .o
+    mov r13d, 189                   ; pass 2: the rest that call for a truck
+    mov r14d, GARB_CALL
+    jmp .pass
+.o:
+    mov [garb_n], r12d
+    RETURN
+
+; each bin on the list, fullest first, gets a truck from the nearest depot
+; that has one in (a few a day from each), so trucks don't drive across
+; the city past a closer depot
+GARB_DEPOTS equ 256
+section .bss
+gd_tile     resd GARB_DEPOTS
+gd_road     resd GARB_DEPOTS
+gd_free     resd GARB_DEPOTS
+gd_rad      resd GARB_DEPOTS
+gd_n        resd 1
+section .text
+
+FUNC garb_dispatch, 32
+    ; the depots with trucks in and a road out
+    mov dword [gd_n], 0
+    xor r14d, r14d
+.dl:
+    cmp r14d, [n_svc]
+    jge .bins
+    movzx r12d, word [list_svc+r14*2]
+    mov eax, r12d
+    shl eax, TILE_SHIFT
+    movzx edi, byte [tiles+rax+T_SUB]
+    cmp edi, BK_LANDFILL
+    je .lf
+    cmp edi, BK_INCIN
+    jne .dn
+    test byte [tiles+rax+T_FLAGS], F_POWER
+    jz .dn
+    jmp .ok
+.lf:
+    mov ecx, [landfill_used]
+    cmp ecx, [landfill_cap]
+    jae .dn
+.ok:
+    call bld_rec
+    movzx ecx, byte [rax+BI_VEHICLES]
+    mov [rbp-48], ecx
+    movzx ecx, byte [rax+BI_RADIUS]
+    mov [rbp-52], ecx
+    mov edi, r12d
+    call count_home
+    mov ecx, [rbp-48]
+    sub ecx, eax
+    jle .dn
+    CLAMP ecx, 0, 3                 ; a few a day
+    mov [rbp-56], ecx
+    mov edi, r12d
+    call access_road
+    cmp eax, -1
+    je .dn
+    mov ecx, [gd_n]
+    cmp ecx, GARB_DEPOTS
+    jge .bins
+    mov [gd_tile+rcx*4], r12d
+    mov [gd_road+rcx*4], eax
+    mov edx, [rbp-56]
+    mov [gd_free+rcx*4], edx
+    mov edx, [rbp-52]
+    mov [gd_rad+rcx*4], edx
+    inc dword [gd_n]
+.dn:
+    inc r14d
+    jmp .dl
+.bins:
+    xor r15d, r15d
+.b:
+    cmp r15d, [garb_n]
+    jge .o
+    mov r12d, [garb_cand+r15*4]
+.search:
+    ; the nearest depot in reach with a truck in
+    mov r13d, -1
+    mov dword [rbp-60], 0x7fffffff
+    xor ecx, ecx
+.k:
+    cmp ecx, [gd_n]
+    jge .kd
+    cmp dword [gd_free+rcx*4], 0
+    jle .kn
+    mov eax, [gd_tile+rcx*4]
+    mov edx, eax
+    and edx, MAP_W-1
+    mov r8d, r12d
+    and r8d, MAP_W-1
+    sub edx, r8d
+    mov r8d, edx
+    sar r8d, 31
+    xor edx, r8d
+    sub edx, r8d                    ; |dx|
+    cmp edx, [gd_rad+rcx*4]
+    jg .kn
+    shr eax, MAP_SHIFT
+    mov r9d, r12d
+    shr r9d, MAP_SHIFT
+    sub eax, r9d
+    mov r8d, eax
+    sar r8d, 31
+    xor eax, r8d
+    sub eax, r8d                    ; |dy|
+    cmp eax, [gd_rad+rcx*4]
+    jg .kn
+    add eax, edx
+    cmp eax, [rbp-60]
+    jge .kn
+    mov [rbp-60], eax
+    mov r13d, ecx
+.kn:
+    inc ecx
+    jmp .k
+.kd:
+    cmp r13d, -1
+    je .next                        ; nothing in reach has a truck
+    mov edi, r12d
+    call access_road
+    cmp eax, -1
+    jne .road
+    jmp .next
+.road:
+    mov esi, eax
+    mov edi, [gd_road+r13*4]
+    mov edx, VT_GARBAGE
+    mov ecx, PU_GARB
+    mov r8d, r12d
+    mov r9d, [gd_tile+r13*4]
+    call vehicle_spawn
+    cmp eax, -1
+    jne .sent
+    ; this depot can't send one today (a jammed road, no way there): try
+    ; the next nearest
+    mov dword [gd_free+r13*4], 0
+    jmp .search
+.sent:
+    dec dword [gd_free+r13*4]
+    mov eax, r12d
+    shl eax, TILE_SHIFT
+    or byte [tiles+rax+T_MISC], MISC_GTRUCK
+.next:
+    inc r15d
+    jmp .b
+.o:
     RETURN
 
 ; nearest powered service of a kind within its radius (x1.5)

@@ -242,7 +242,7 @@ month_names db "Jan",0,"Feb",0,"Mar",0,"Apr",0,"May",0,"Jun",0
 msg_brownout db "Brownout! Your city needs more power.", 0
 msg_nowater  db "Not enough water - build pumps and pipes.", 0
 msg_nosewage db "Sewage is backing up - build a sewage outlet.", 0
-msg_garbage  db "Garbage is piling up - build a landfill.", 0
+msg_garbage  db "Garbage is piling up - build a landfill or incinerator nearby.", 0
 msg_fire     db "Fire! A building is burning.", 0
 msg_fire_out db "Firefighters put out a blaze.", 0
 msg_burned   db "A building burned down.", 0
