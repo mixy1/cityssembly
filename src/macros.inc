@@ -166,6 +166,7 @@ RES_ORE      equ 3
 ; problem icons
 MAX_WIRES    equ 2048
 TH_MAX       equ 16    ; worker threads at most (src/threads.asm)
+PAR_BANDS    equ 4*(TH_MAX+1)  ; bands of a par_rows job at most
 PLOTS        equ 5
 START_PLOT   equ 2*PLOTS+1
 PYLON_COST   equ 20

@@ -6,6 +6,7 @@ section .bss
 alignb 16
 tiles           resb MAP_TILES*TILE_BYTES
 rng_state       resd 1
+music_rng       resd 1          ; the music's own (see music_rand)
 world_seed      resd 1
 hwy_row         resd 1          ; y row where the highway enters (west edge)
 hwy_col         resd 1          ; x column where the 2nd highway enters (north)
@@ -27,6 +28,27 @@ rand:
     shl edx, 5
     xor eax, edx
     mov [rng_state], eax
+    ret
+
+; the music's random numbers, apart from the city's: the music is made as
+; the sound card plays it, so drawing from rand made the city's future
+; depend on frame timing
+music_rand:
+    mov eax, [music_rng]
+    test eax, eax
+    jnz .s
+    mov eax, 0x9E3779B9
+.s:
+    mov edx, eax
+    shl edx, 13
+    xor eax, edx
+    mov edx, eax
+    shr edx, 17
+    xor eax, edx
+    mov edx, eax
+    shl edx, 5
+    xor eax, edx
+    mov [music_rng], eax
     ret
 
 ; rand_range(edi n) -> eax in [0,n)

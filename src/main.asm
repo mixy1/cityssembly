@@ -532,7 +532,7 @@ FUNC perf_report
 .fm:
     mov qword [perf_cur+rcx*8], 0
     inc ecx
-    cmp ecx, 20
+    cmp ecx, 32
     jl .f
     inc dword [perf_n]
     cmp dword [perf_n], 120
@@ -557,7 +557,7 @@ FUNC perf_report
     mov [perf_mx+rcx*4], eax
     mov qword [perf_max+rcx*8], 0
     inc ecx
-    cmp ecx, 20
+    cmp ecx, 32
     jl .c
     mov dword [perf_n], 0
     lea rdi, [str_perf]
@@ -612,6 +612,21 @@ FUNC perf_report
     call printf
 %endif
     add rsp, 24
+    ; the simulation day, part by part (slowest frame of each)
+    lea rdi, [str_perfday]
+    mov esi, [perf_mx+80]
+    mov edx, [perf_mx+84]
+    mov ecx, [perf_mx+88]
+    mov r8d, [perf_mx+92]
+    mov r9d, [perf_mx+96]
+    sub rsp, 8
+    push qword [perf_mx+104]
+    push qword [perf_mx+100]
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 24
     ; the slowest frame of each part
     lea rdi, [str_perfmx]
     mov esi, [perf_mx]
@@ -639,17 +654,18 @@ FUNC perf_report
 section .data
 str_perf2 db "PERF2 world: list %d bands %d pipes %d | light: prep %d lut %d rows %d bloom %d", 10, 0
 str_perf3 db "PERF3 list: tiles %d wires %d agents %d | zoom %d world %dx%d pop %d", 10, 0
+str_perfday db "PERFDAY max x0.1ms tiles %d zones %d networks %d coverage %d stats %d dispatch %d goals+month %d", 10, 0
 str_perfmx db "PERFMAX sim %d list %d bands %d prep %d rows %d | ui %d tex %d audio %d", 10, 0
 str_perf db "PERF x0.1ms sim %d world %d agents %d ui %d light %d | tex world %d ui %d | present %d audio %d", 10, 0
 section .bss
 perf_on     resd 1
 perf_n      resd 1
 perf_t      resq 1
-perf_acc    resq 20
-perf_cur    resq 20
-perf_max    resq 20
-perf_mx     resd 20
-perf_out    resd 20
+perf_acc    resq 32
+perf_cur    resq 32
+perf_max    resq 32
+perf_mx     resd 32
+perf_out    resd 32
 section .text
 
 ; ---------------------------------------------------------------------

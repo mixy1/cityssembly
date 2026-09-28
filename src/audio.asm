@@ -406,7 +406,7 @@ decay_mult:
 
 ; frand: xmm0 = random in [-1, 1)
 frand:
-    call rand
+    call music_rand
     sar eax, 16
     cvtsi2ss xmm0, eax
     mulss xmm0, [f_inv32k_s]
@@ -892,7 +892,7 @@ FUNC gen_pad, 64
     movss xmm0, [rbp-48]
     mulss xmm0, [pad_detune+r14*4]
     movss [rbp-60], xmm0
-    call rand
+    call music_rand
     and eax, 1023
     cvtsi2ss xmm0, eax
     mulss xmm0, [f_1_1024]

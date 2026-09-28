@@ -1,10 +1,13 @@
 ; =====================================================================
 ;  THREADS - a small pool of worker threads for per-pixel passes
 ;
-;  par_rows(rdi fn, esi rows, edx align) splits [0, rows) into one band
-;  per core (band starts are multiples of align) and runs fn(y0, y1) on
-;  each band at once, the calling thread taking the first.  Jobs must
-;  only write their own rows.  In the browser the pool needs shared
+;  par_rows(rdi fn, esi rows, edx align) splits [0, rows) into bands
+;  (their starts are multiples of align) and runs fn(y0, y1) on every
+;  band, the workers and the calling thread each taking the next band
+;  left until none are.  Tall jobs get about four bands per core, so the
+;  cores that land on light rows (open land) help with the heavy ones
+;  (downtown, water) instead of waiting.  Jobs must only write their own
+;  rows.  In the browser the pool needs shared
 ;  memory (a cross-origin isolated page); without it everything runs on
 ;  the one thread.
 ; =====================================================================
@@ -15,9 +18,9 @@ th_fn       resq 1
 th_quit     resd 1
 th_done     resq 1              ; semaphore: a worker finished its band
 th_start    resq TH_MAX         ; semaphore per worker
-th_y0       resd TH_MAX
-th_y1       resd TH_MAX
 th_band     resd 1              ; rows per band of the current job
+th_rows     resd 1              ; rows of the current job
+th_next     resd 1              ; the next band to take
 
 section .data
 th_name     db "cityssembly-worker", 0
@@ -88,11 +91,7 @@ FUNC th_main
     CALLC SDL_SemWait
     cmp dword [th_quit], 0
     jne .out
-    mov edi, [th_y0+rbx*4]
-    mov esi, [th_y1+rbx*4]
-    cmp edi, esi
-    jge .done
-    call [th_fn]
+    call par_take
 .done:
     mov rdi, [th_done]
     CALLC SDL_SemPost
@@ -111,8 +110,14 @@ FUNC par_rows, 16
     jz .single
     cmp r13d, 64
     jl .single
-    ; band = ceil(rows / (workers + 1)), rounded up to align
+    ; bands per core: four for tall jobs, one for short ones (their
+    ; bands would be too thin to be worth the setup)
     lea ecx, [r15+1]
+    cmp r13d, 256
+    jl .one
+    shl ecx, 2
+.one:
+    ; band = ceil(rows / bands), rounded up to align
     mov eax, r13d
     add eax, ecx
     dec eax
@@ -123,29 +128,20 @@ FUNC par_rows, 16
     xor edx, edx
     div r14d
     imul eax, r14d
-    mov [rbp-48], eax               ; band
     mov [th_band], eax
+    mov [th_rows], r13d
     mov [th_fn], r12
+    mov dword [th_next], 0
     xor ebx, ebx
 .post:
     cmp ebx, r15d
     jge .mine
-    lea eax, [rbx+1]
-    imul eax, [rbp-48]
-    CLAMP eax, 0, r13d
-    mov [th_y0+rbx*4], eax
-    add eax, [rbp-48]
-    CLAMP eax, 0, r13d
-    mov [th_y1+rbx*4], eax
     mov rdi, [th_start+rbx*8]
     CALLC SDL_SemPost
     inc ebx
     jmp .post
 .mine:
-    xor edi, edi
-    mov esi, [rbp-48]
-    CLAMP esi, 0, r13d
-    call r12
+    call par_take
     xor ebx, ebx
 .join:
     cmp ebx, r15d
@@ -159,5 +155,25 @@ FUNC par_rows, 16
     xor edi, edi
     mov esi, r13d
     call r12
+.out:
+    RETURN
+
+; take bands of the current job until none are left
+FUNC par_take
+.l:
+    mov eax, 1
+    lock xadd [th_next], eax        ; eax = this band
+    imul eax, [th_band]             ; its first row
+    cmp eax, [th_rows]
+    jge .out
+    mov edi, eax
+    mov esi, eax
+    add esi, [th_band]
+    cmp esi, [th_rows]
+    jle .ok
+    mov esi, [th_rows]
+.ok:
+    call [th_fn]
+    jmp .l
 .out:
     RETURN

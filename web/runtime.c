@@ -322,7 +322,8 @@ void ext_SDL_GetCPUCount(void) {
 // ?bench: the game prints a frame profile every 120 frames
 void ext_web_bench(void) {
 #ifdef __EMSCRIPTEN__
-    RET((uint32_t)EM_ASM_INT({ return /[?&]bench/.test(location.search) ? 1 : 0; }));
+    // (?bench&nomarks: frame times only, without the per-part timers)
+    RET((uint32_t)EM_ASM_INT({ return /[?&]bench/.test(location.search) && !/[?&]nomarks/.test(location.search) ? 1 : 0; }));
 #else
     RET(0);
 #endif

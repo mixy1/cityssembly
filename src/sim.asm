@@ -371,14 +371,17 @@ FUNC sim_tick
     RETURN
 
 FUNC sim_day
+    PERF_MARK -1
     inc dword [day_count]
     call daily_tiles
+    PERF_MARK 20
     mov eax, [day_count]
     and eax, 7
     shl eax, 4
     mov edi, eax
     mov esi, 16
     call zone_slice
+    PERF_MARK 21
     mov eax, [day_count]
     and eax, 3
     jnz .nn
@@ -389,9 +392,13 @@ FUNC sim_day
     je .nd
     call networks_update
 .nd:
+    PERF_MARK 22
+    ; coverage every 8 days, never on the same day as the networks (both
+    ; on one day made the slowest frame at top speed)
     mov eax, [day_count]
     and eax, 7
-    jnz .nc
+    cmp eax, 2
+    jne .nc
     call coverage_update
     jmp .ncd
 .nc:
@@ -399,9 +406,12 @@ FUNC sim_day
     je .ncd
     call coverage_update
 .ncd:
+    PERF_MARK 23
     mov dword [cov_dirty], 0
     call stats_update
+    PERF_MARK 24
     call dispatch_services
+    PERF_MARK 25
     call check_goals
     inc dword [day]
     cmp dword [day], 30
@@ -409,6 +419,7 @@ FUNC sim_day
     mov dword [day], 0
     call month_end
 .out:
+    PERF_MARK 26
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -2610,12 +2621,18 @@ FUNC networks_update
 ;  map stamping
 ; =====================================================================
 ; stamp(rdi map, esi cx, edx cy, ecx radius, r8d strength)
-FUNC stamp, 32
+stamp:
+    mov r9, MAP_W << 32
+; stamp_rows: the same, only into rows [r9d, r9 >> 32) (a band's rows)
+FUNC stamp_rows, 32
     mov [rbp-56], rdi
     mov r12d, esi
     mov r13d, edx
     mov r14d, ecx
     mov r15d, r8d
+    mov [rbp-60], r9d               ; first row
+    shr r9, 32
+    mov [rbp-64], r9d               ; end row
     mov eax, ecx
     imul eax, eax
     test eax, eax
@@ -2625,10 +2642,17 @@ FUNC stamp, 32
     mov [rbp-48], eax
     mov ebx, r14d
     neg ebx
+    mov eax, [rbp-60]
+    sub eax, r13d
+    cmp ebx, eax
+    jge .dy
+    mov ebx, eax                    ; from the first row of the clip
 .dy:
     cmp ebx, r14d
     jg .out
     lea eax, [r13+rbx]
+    cmp eax, [rbp-64]
+    jge .out                        ; past its end
     cmp eax, MAP_W
     jae .dyn
     mov ecx, r14d
@@ -2675,19 +2699,29 @@ FUNC stamp, 32
 .out:
     RETURN
 
-; subtract version (clamped at 0)
-FUNC stamp_sub, 32
+; subtract version (clamped at 0), rows [r9d, r9 >> 32)
+FUNC stamp_sub_rows, 32
     mov [rbp-56], rdi
     mov r12d, esi
     mov r13d, edx
     mov r14d, ecx
     mov r15d, r8d
+    mov [rbp-60], r9d
+    shr r9, 32
+    mov [rbp-64], r9d
     mov ebx, r14d
     neg ebx
+    mov eax, [rbp-60]
+    sub eax, r13d
+    cmp ebx, eax
+    jge .dy
+    mov ebx, eax
 .dy:
     cmp ebx, r14d
     jg .out
     lea eax, [r13+rbx]
+    cmp eax, [rbp-64]
+    jge .out
     cmp eax, MAP_W
     jae .dyn
     mov ecx, r14d
@@ -2726,15 +2760,41 @@ section .text
 ; ---------------------------------------------------------------------
 ;  coverage_update: services, pollution, noise, traffic, crime, value
 ; ---------------------------------------------------------------------
-FUNC coverage_update, 48
-    ; clear map_pol .. map_traffic (13 consecutive maps)
-    lea rdi, [map_pol]
+; coverage stamps into map rows [edi, esi): clear them, then stamp from
+; every source that can reach them
+FUNC cov_rows, 48
+    mov [rbp-64], edi
+    mov [rbp-68], esi
+    mov eax, esi
+    shl rax, 32
+    mov ecx, edi
+    or rax, rcx
+    mov [rbp-80], rax               ; the rows, as stamp_rows takes them
+    ; clear map_pol .. map_traffic (13 consecutive maps) in these rows
+    xor ebx, ebx
+.clr:
+    mov eax, ebx
+    imul eax, MAP_TILES
+    mov edi, [rbp-64]
+    shl edi, MAP_SHIFT
+    add edi, eax
+    lea rdi, [map_pol+rdi]
+    mov ecx, [rbp-68]
+    sub ecx, [rbp-64]
+    shl ecx, MAP_SHIFT
     xor eax, eax
-    mov ecx, MAP_TILES*13/4
-    rep stosd
-
-    xor r13d, r13d
+    rep stosb
+    inc ebx
+    cmp ebx, 13
+    jl .clr
+    mov r13d, [rbp-64]
+    sub r13d, 52
+    CLAMP r13d, 0, MAP_W
 .y:
+    mov eax, [rbp-68]
+    add eax, 52
+    cmp r13d, eax
+    jge .done
     xor r12d, r12d
 .x:
     mov edi, r12d
@@ -2760,7 +2820,8 @@ FUNC coverage_update, 48
     mov esi, r12d
     mov edx, r13d
     mov ecx, 2
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
 .bus:
     test byte [rbx+T_FLAGS2], F2_BUSSTOP
     jz .next
@@ -2775,7 +2836,8 @@ FUNC coverage_update, 48
     jz .bs
     mov r8d, 255
 .bs:
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
     jmp .next
 .svc:
     test byte [rbx+T_FLAGS], F_ANCHOR
@@ -2796,7 +2858,8 @@ FUNC coverage_update, 48
     mov edx, r13d
     add edx, [rbp-48]
     mov ecx, 9
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
 .nopol:
     movzx r8d, byte [r15+BI_NOISE]
     test r8d, r8d
@@ -2807,7 +2870,8 @@ FUNC coverage_update, 48
     mov edx, r13d
     add edx, [rbp-48]
     mov ecx, 4
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
 .nonoise:
     movzx eax, byte [r15+BI_COV]
     test eax, eax
@@ -2845,7 +2909,8 @@ FUNC coverage_update, 48
     mov edx, r13d
     add edx, [rbp-48]
     movzx ecx, byte [r15+BI_RADIUS]
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
     jmp .next
 .zb:
     test byte [rbx+T_FLAGS], F_ANCHOR
@@ -2860,7 +2925,8 @@ FUNC coverage_update, 48
     mov edx, r13d
     mov ecx, 3
     mov r8d, 50
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
     jmp .next
 .zi:
     cmp eax, ZONE_I
@@ -2891,13 +2957,15 @@ FUNC coverage_update, 48
     jne .zs
     add ecx, 2
 .zs:
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
     lea rdi, [map_noise]
     mov esi, r12d
     mov edx, r13d
     mov ecx, 3
     mov r8d, [rbp-56]
-    call stamp
+    mov r9, [rbp-80]
+    call stamp_rows
     jmp .next
 .tree:
     lea rdi, [map_pol]
@@ -2905,13 +2973,15 @@ FUNC coverage_update, 48
     mov edx, r13d
     mov ecx, 1
     mov r8d, 4
-    call stamp_sub
+    mov r9, [rbp-80]
+    call stamp_sub_rows
     lea rdi, [map_noise]
     mov esi, r12d
     mov edx, r13d
     mov ecx, 1
     mov r8d, 6
-    call stamp_sub
+    mov r9, [rbp-80]
+    call stamp_sub_rows
 .next:
     inc r12d
     cmp r12d, MAP_W
@@ -2919,6 +2989,17 @@ FUNC coverage_update, 48
     inc r13d
     cmp r13d, MAP_W
     jl .y
+.done:
+    RETURN
+
+
+FUNC coverage_update, 48
+    ; the stamps: every core takes a band of map rows (each cell still
+    ; gets its stamps in the same order, so the result is the same)
+    lea rdi, [cov_rows]
+    mov esi, MAP_W
+    mov edx, 1
+    call par_rows
 
     ; per-tile: traffic fumes, land value, crime, education drift
     xor r15d, r15d

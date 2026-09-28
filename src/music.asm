@@ -188,7 +188,7 @@ FUNC mnote, 16
     movsxd r14, eax
     add r14, [mus_next_bar]
     ; a little human looseness (a millisecond or two)
-    call rand
+    call music_rand
     and eax, 127
     sub eax, 64
     movsxd rax, eax
@@ -199,7 +199,7 @@ FUNC mnote, 16
     mov eax, ecx
     imul eax, [mus_tick]
     mov r15d, eax
-    call rand
+    call music_rand
     and eax, 31
     cvtsi2ss xmm1, eax
     mulss xmm1, [f_velvar]
@@ -278,7 +278,7 @@ FUNC music_pick_style
     jl .day
     jmp .fire
 .night:
-    call rand
+    call music_rand
     and eax, 7
     jnz .fire
     mov ebx, ST_NOIR                ; now and then, a darker night
@@ -295,11 +295,11 @@ FUNC music_pick_style
     je .dk
     jmp .dp
 .dk:
-    call rand
+    call music_rand
     and eax, 3
     jnz .fire
 .dp:
-    call rand
+    call music_rand
     and eax, 1
     mov ebx, ST_BOOMBAP
     jz .fire
@@ -498,7 +498,7 @@ FUNC play_drums
     cmp eax, 255
     je .go
     mov ebx, eax
-    call rand
+    call music_rand
     and eax, 255
     cmp eax, ebx
     jae .n
@@ -547,13 +547,13 @@ FUNC part_drums
     jne .fill
     xor r12d, r12d
 .g:
-    call rand
+    call music_rand
     and eax, 7
     jnz .gn
     lea edi, [r12*4+2]              ; the "and"s
     call step_tick
     mov r13d, eax
-    call rand
+    call music_rand
     and eax, 31
     lea edi, [rax+26]
     call vel_f
@@ -657,7 +657,7 @@ FUNC part_bass, 16
     xor edx, edx
     mov ecx, 11
     call mnote
-    call rand
+    call music_rand
     and eax, 1
     lea esi, [rax+1]                ; 3rd or 5th
     xor edi, edi
@@ -683,7 +683,7 @@ FUNC part_bass, 16
     mov ecx, 11
     call mnote
     ; beat 4: a semitone above or below the next root
-    call rand
+    call music_rand
     and eax, 1
     lea eax, [rax*2-1]
     lea esi, [r14+rax]
@@ -866,7 +866,7 @@ FUNC part_keys, 16
     mov edi, 1
 .h:
     mov edx, 7
-    call rand
+    call music_rand
     and eax, 15
     lea ecx, [rax+52]
     mov edx, 8
@@ -1081,13 +1081,13 @@ FUNC part_lead, 48
 .var:
     cmp dword [mus_bar], 7          ; the cadence stays as written
     je .play
-    call rand
+    call music_rand
     and eax, 3
     jz .play
     cmp eax, 1
     jne .v2
     ; a neighbouring chord tone
-    call rand
+    call music_rand
     and eax, 1
     lea eax, [rax*2+rax-1]          ; -1 or +2
     lea edi, [r14+rax]
@@ -1168,7 +1168,7 @@ FUNC part_lead, 48
 FUNC part_city
     cmp dword [cnt_fire], 0
     je .night
-    call rand
+    call music_rand
     and eax, 3
     jnz .out
     jmp .siren
@@ -1180,11 +1180,11 @@ FUNC part_city
     cmp eax, 210
     jl .out
 .n2:
-    call rand
+    call music_rand
     and eax, 63
     jnz .out
 .siren:
-    call rand
+    call music_rand
     and eax, 3
     lea esi, [rax+58]               ; different sirens, different pitches
     mov edi, 70

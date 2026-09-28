@@ -403,6 +403,16 @@ class Translator:
         if m == 'xchg':
             a = self.rd(ins, o0); b = self.rd(ins, o1)
             return f'{{ uint64_t _a = {a}, _b = {b}; {self.wr(ins, o0, "_b")} {self.wr(ins, o1, "_a")} }}'
+        if m in ('xadd', 'lock xadd'):
+            # (the thread pool's band counter) an atomic fetch-and-add
+            w = sz(o0)
+            if o0.type != X.X86_OP_MEM or o1.type != X.X86_OP_REG:
+                raise TranslateError('xadd form')
+            addr = self.mem_addr(ins, o0)
+            b = self.rd(ins, o1)
+            return (f'{{ {UT[w]} _b = ({UT[w]}){b}; {UT[w]} _a = __atomic_fetch_add(({UT[w]}*)(uintptr_t){addr}, _b, __ATOMIC_SEQ_CST); '
+                    f'uint64_t _r = ({UT[w]})(_a + _b); ' + self.flags('F_ADD', w, '_a', '_b', '_r') + ' '
+                    + self.wr(ins, o1, '_a') + ' }')
         if m == 'cdq':
             self.implicit(0, 2)
             return 'r2 = (uint32_t)((int32_t)(uint32_t)r0 >> 31);'

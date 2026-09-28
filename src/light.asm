@@ -58,7 +58,7 @@ sh_mul      resd 3              ; shadow colour multipliers (b, g, r) 0..256
 lit_mul     resd 3              ; sunlight multipliers (b, g, r), 256 = 1
 alignb 16
 lut_shade   resd 33*256         ; lut_world shaded from full sun (0) to full shade (32)
-lcache      resd MAX_FB_W/2*(TH_MAX+1)+16   ; per band: shade of each pixel pair on the row above
+lcache      resd MAX_FB_W/2*PAR_BANDS+16    ; per band: shade of each pixel pair on the row above
 glint_n     resd 1              ; water glints per 1024 pixels
 cloud_str   resd 1
 cloud_ox    resd 1
@@ -1131,14 +1131,14 @@ FUNC light_lut, 16
 FUNC light_rows, 96
     mov r13d, edi                   ; y
     mov [rbp-72], esi               ; end
-    ; this band's row cache: bands start at different rows; pick a slot
-    ; by the band's start (y0 * workers / rows), clamped
+    ; this band's row cache: bands start at different rows; a slot per
+    ; band (its start / the band height)
     mov eax, edi
     xor edx, edx
     mov ecx, [th_band]
     CLAMP ecx, 1, 100000
     div ecx
-    CLAMP eax, 0, TH_MAX            ; workers + the calling thread
+    CLAMP eax, 0, PAR_BANDS-1
     imul eax, eax, MAX_FB_W/2*4
     lea rcx, [lcache+rax]
     mov [rbp-88], rcx
