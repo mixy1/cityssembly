@@ -3727,10 +3727,16 @@ plots_owned:
     jl .l
     ret
 
-; plots the milestones allow -> eax
+; plots the milestones allow -> eax: one more per milestone, and all of
+; them once the city is a Megalopolis
 plots_allowed:
     mov eax, [milestone]
+    cmp eax, 9
+    jge .all
     add eax, 1
+    ret
+.all:
+    mov eax, PLOTS*PLOTS
     ret
 
 ; price of the next plot -> eax

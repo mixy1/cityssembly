@@ -286,11 +286,13 @@ s_lh1       db "Your city can only grow on land", 10
             db "you own. Click a ", 5, "gold plot", 1, " next to", 10
             db "your land to buy it.", 10
             db "Each milestone lets you own", 10
-            db "one more plot.", 10, 10, 0
+            db "one more plot; a Megalopolis", 10
+            db "can own them all.", 10, 10, 0
 s_lh2       db "Plots owned: ", 0
 s_lh3       db " of ", 0
 s_lh4       db 10, "Next plot: ", 0
 s_lh5       db 10, 3, "Grow to the next milestone", 0
+s_lh6       db 10, "The whole map is yours.", 0
 s_bought    db "New land! Your city can grow here now.", 0
 s_lnown     db "You already own this plot.", 0
 s_lnext     db "You can only buy land next to your own.", 0
@@ -299,6 +301,7 @@ s_lcash     db "Not enough money for this plot.", 0
 s_mscard    db "MILESTONE", 0
 s_msrew     db "Reward: ", 0
 s_msland    db "+1 plot of land to buy (K)", 0
+s_msland9   db "All the land is for sale (K)", 0
 s_msunl     db "Now available:", 0
 s_msok      db "Great!", 0
 s_msnext    db "Next milestone: ", 0
@@ -7054,6 +7057,10 @@ FUNC land_hint_text
     cmp ebx, eax
     jl .price
     lea rdi, [s_lh5]
+    cmp ebx, PLOTS*PLOTS
+    jl .more
+    lea rdi, [s_lh6]
+.more:
     call tb_str
     RETURN
 .price:
@@ -7182,6 +7189,10 @@ FUNC draw_ms_card, 32
     lea edi, [r12+120]
     lea esi, [r13+56]
     lea rdx, [s_msland]
+    cmp dword [ms_card], 9
+    jl .land1
+    lea rdx, [s_msland9]
+.land1:
     mov ecx, UI_TEXT
     call draw_text_centered
     lea edi, [r12+12]
