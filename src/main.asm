@@ -539,7 +539,7 @@ FUNC perf_report
     mov [perf_out+rcx*4], eax
     mov qword [perf_acc+rcx*8], 0
     inc ecx
-    cmp ecx, 10
+    cmp ecx, 20
     jl .c
     mov dword [perf_n], 0
     lea rdi, [str_perf]
@@ -563,17 +563,35 @@ FUNC perf_report
     call printf
 %endif
     add rsp, 40
+    ; the world and the light passes, step by step
+    lea rdi, [str_perf2]
+    mov esi, [perf_out+40]
+    mov edx, [perf_out+44]
+    mov ecx, [perf_out+48]
+    mov r8d, [perf_out+52]
+    mov r9d, [perf_out+56]
+    sub rsp, 8
+    mov eax, [perf_out+64]
+    push rax
+    mov eax, [perf_out+60]
+    push rax
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 24
 .out:
     RETURN
 
 section .data
+str_perf2 db "PERF2 world: list %d bands %d wires+pipes %d | light: prep %d lut %d rows %d bloom %d", 10, 0
 str_perf db "PERF x0.1ms sim %d world %d agents %d ui %d light %d | tex world %d ui %d | present %d audio %d", 10, 0
 section .bss
 perf_on     resd 1
 perf_n      resd 1
 perf_t      resq 1
-perf_acc    resq 10
-perf_out    resd 10
+perf_acc    resq 20
+perf_out    resd 20
 section .text
 
 ; ---------------------------------------------------------------------

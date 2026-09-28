@@ -891,15 +891,19 @@ FUNC light_compose
     shr ecx, 4
     mov [wv_ph2], ecx
     call light_prepare
+    PERF_MARK 13
     cmp dword [sun_on], 0
     je .nolut
     call light_lut
 .nolut:
+    PERF_MARK 14
     lea rdi, [light_rows]
     mov esi, [fb_h]
     mov edx, 2                      ; bands start on even rows (2x2 blocks)
     call par_rows
+    PERF_MARK 15
     call light_bloom
+    PERF_MARK 16
     RETURN
 
 ; lut_shade[k][i] = lut_world[i] * lerp(sunlight, shade, k/32)

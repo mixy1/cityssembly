@@ -583,18 +583,21 @@ FUNC render_world, 32
     inc r13d
     cmp r13d, MAP_W
     jl .ty
+    PERF_MARK 10
     mov dword [dl_record], 0
     mov dword [blit_dither], 0
     lea rdi, [render_band]
     mov esi, [fb_h]
     mov edx, 1
     call par_rows
+    PERF_MARK 11
     mov dword [blit_tint], TINT_KEEP
     call draw_wires
     cmp dword [eff_overlay], OV_WATER
     jne .np
     call draw_pipes
 .np:
+    PERF_MARK 12
     RETURN
 
 ; clear rows [edi, esi) of the world buffers and draw the list into them
