@@ -107,16 +107,21 @@ EM_ASYNC_JS(void, web_wait_frame, (), {
 });
 #endif
 static unsigned frames;
-static double work_ms, wait_end;
+static double work_ms, work_max, wait_end;
 void ext_SDL_RenderPresent(void) {
     SDL_RenderPresent(P(A0));
 #ifdef __EMSCRIPTEN__
-    // ?debug shows how long the game itself takes per frame
+    // ?debug shows how long the game itself takes per frame (the average
+    // and the slowest of the last 120)
     double now = emscripten_get_now();
-    if (wait_end > 0) work_ms += now - wait_end;
+    if (wait_end > 0) {
+        work_ms += now - wait_end;
+        if (now - wait_end > work_max) work_max = now - wait_end;
+    }
     if ((++frames % 120) == 0) {
-        EM_ASM({ if (window.cityPerf) window.cityPerf($0, $1); }, frames, work_ms / 120);
+        EM_ASM({ if (window.cityPerf) window.cityPerf($0, $1, $2); }, frames, work_ms / 120, work_max);
         work_ms = 0;
+        work_max = 0;
     }
     web_wait_frame();
     wait_end = emscripten_get_now();
@@ -142,8 +147,15 @@ void ext_SDL_GetKeyboardState(void) {
     RETP(k);
 }
 void ext_SDL_GetTicks(void) { RET(SDL_GetTicks()); }
+#ifdef __EMSCRIPTEN__
+// SDL's counter in the browser counts whole milliseconds: too coarse for
+// the frame profile (?bench), so microseconds from performance.now()
+void ext_SDL_GetPerformanceCounter(void) { RET((uint64_t)(emscripten_get_now() * 1000.0)); }
+void ext_SDL_GetPerformanceFrequency(void) { RET(1000000ull); }
+#else
 void ext_SDL_GetPerformanceCounter(void) { RET(SDL_GetPerformanceCounter()); }
 void ext_SDL_GetPerformanceFrequency(void) { RET(SDL_GetPerformanceFrequency()); }
+#endif
 
 // audio
 // A hidden browser tab gets throttled to ~1 frame a second, far too slow to
@@ -299,7 +311,7 @@ void ext_SDL_GetCPUCount(void) {
     // as many as the page's worker pool (and only with shared memory)
     int n = EM_ASM_INT({
         if (typeof SharedArrayBuffer === 'undefined' || !self.crossOriginIsolated) return 1;
-        return Math.min(navigator.hardwareConcurrency || 1, 8);
+        return Math.min(navigator.hardwareConcurrency || 1, 16);
     });
     RET((uint32_t)n);
 #else
@@ -322,7 +334,7 @@ void ext_web_open(void) {
     int has = EM_ASM_INT({ return Module.openedCity ? 1 : 0; });
     RETP(has ? "shared.sav" : NULL);
 #else
-    RETP(NULL);
+    RETP(getenv("CS_OPEN"));        // (test builds: open a city by path)
 #endif
 }
 
@@ -360,9 +372,17 @@ int main(void) {
         FS.mount(IDBFS, {}, '/save');
         FS.chdir('/save');
         var started = false;
+        var opened = null;
         function go(why) {
             if (started) return;
             started = true;
+            // the opened city is written only now: the saves pulled in from
+            // IndexedDB include the last one opened, and that sync can land
+            // after the download (the old city then replaced the new one)
+            if (opened) {
+                FS.writeFile('/save/shared.sav', opened);
+                Module.openedCity = true;
+            }
             out('boot: ' + why + ', starting');
             if (Module.onGameStart) Module.onGameStart();
             Module.ccall('web_start', null, [], [], { async: true });
@@ -371,11 +391,12 @@ int main(void) {
         var m = location.search.match(/[?&]load=([^&]+)/);
         var pending = m ? 1 : 0;
         if (m) {
-            fetch(decodeURIComponent(m[1])).then(function (r) { return r.arrayBuffer(); })
-                .then(function (b) {
-                    FS.writeFile('/save/shared.sav', new Uint8Array(b));
-                    Module.openedCity = true;
-                }).catch(function (e) { console.warn('open city', e); })
+            fetch(decodeURIComponent(m[1])).then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.arrayBuffer();
+                })
+                .then(function (b) { opened = new Uint8Array(b); })
+                .catch(function (e) { console.warn('open city', e); })
                 .finally(function () { pending = 0; if (synced) go('city opened'); });
         }
         var synced = false;

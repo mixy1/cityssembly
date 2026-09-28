@@ -593,6 +593,8 @@ zpixel:
     jae .o
     cmp esi, [fb_h]
     jae .o
+    cmp dword [dl_record], 0
+    jne .rec
     mov eax, esi
     imul eax, [fb_w]
     add eax, edi
@@ -603,6 +605,21 @@ zpixel:
     mov cl, [blit_tint]
     mov [tintbuf+rax], cl
 .o: ret
+.rec:
+    ; laying out the frame: a pixel entry in the draw list (id -1)
+    mov eax, [dl_n]
+    cmp eax, DL_MAX
+    jae .o
+    inc dword [dl_n]
+    shl eax, 5
+    mov dword [dl_list+rax], -1
+    mov [dl_list+rax+4], edi
+    mov [dl_list+rax+8], esi
+    mov [dl_list+rax+12], ecx
+    mov [dl_list+rax+16], dl
+    mov cl, [blit_tint]
+    mov [dl_list+rax+24], cl
+    ret
 
 FUNC draw_agents, 16
     call draw_vehicles

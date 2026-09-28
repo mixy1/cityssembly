@@ -196,7 +196,6 @@ FUNC tr_frame
     call palette_update
     call render_world
     mov dword [emit_now], 0
-    call draw_agents
     cmp dword [tr_ui], 0
     je .noui
     call render_ui
@@ -947,7 +946,6 @@ tr_op_bench:
     call render_world
     TRT 80
     mov dword [emit_now], 0
-    call draw_agents
     TRT 88
     call light_compose
     TRT 96

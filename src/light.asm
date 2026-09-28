@@ -63,14 +63,22 @@ glint_n     resd 1              ; water glints per 1024 pixels
 cloud_str   resd 1
 cloud_ox    resd 1
 cloud_oy    resd 1
-lb_x0       resd 1              ; swept region (cells)
+lb_ok       resd 1              ; 1: lb_* hold the region shown
+lb_x0       resd 1              ; region whose shadows are shown (cells)
 lb_x1       resd 1
 lb_y0       resd 1
 lb_y1       resd 1
 light_off   resd 1              ; 1 = flat lighting (settings)
 light_force resd 1              ; 1 = sweep every frame (trailer)
 lc_key      resd 6              ; view + sun of the last sweep
-lc_age      resd 1              ; frames since the last sweep
+lc_tick     resd 1              ; anim_tick of the last sweep
+ls_phase    resd 1              ; a sweep under way (see light_step), 0 none
+ls_x0       resd 1              ; its region (cells)
+ls_x1       resd 1
+ls_y0       resd 1
+ls_y1       resd 1
+ls_ty       resd 1              ; next tile row to stamp
+ls_row      resd 1              ; last cell row swept
 
 section .data
 ; shadow colour at full strength: cool blue shade (b, g, r)
@@ -506,8 +514,8 @@ FUNC light_prepare, 48
     cmp dword [sun_on], 0
     je .out
     ; the sweep is reused while the view and the sun stand still;
-    ; growth and demolition show up within half a second
-    inc dword [lc_age]
+    ; growth and demolition show up within half a second (game ticks, not
+    ; frames: at 240 Hz a frame count re-swept 8 times a second)
     xor ebx, ebx                    ; changed?
 %macro LKEY 2
     mov eax, %2
@@ -585,10 +593,23 @@ FUNC light_prepare, 48
     LCELL 56
     LCELL 60
     ; reuse the last sweep while the view stays inside it
+    ; a sweep under way goes on a slice a frame, unless the view jumped
+    ; off what's shown (then it starts over, all at once)
+    cmp dword [ls_phase], 0
+    je .idle
+    call light_view_on
+    test eax, eax
+    jz .go
+    xor edi, edi
+    call light_step
+    jmp .out
+.idle:
     cmp dword [rbp-64], 0
     jne .go
-    cmp dword [lc_age], 30
-    jge .go
+    mov eax, [anim_tick]
+    sub eax, [lc_tick]
+    cmp eax, 30
+    jae .go
     mov eax, [rbp-48]
     cmp eax, [lb_x0]
     jl .go
@@ -603,7 +624,15 @@ FUNC light_prepare, 48
     jg .go
     jmp .out
 .go:
-    mov dword [lc_age], 0
+    mov eax, [anim_tick]
+    mov [lc_tick], eax
+    ; all at once when nothing valid is on screen (the first sweep, a jump)
+    ; or the trailer wants every frame exact; else in slices over the next
+    ; frames while the old shadows stay up
+    call light_view_on
+    xor eax, 1
+    or eax, [light_force]
+    mov [rbp-68], eax
     ; sweep a margin around the view so panning can reuse it
 %macro LGROW 2
     mov eax, [rbp-%1]
@@ -619,49 +648,110 @@ FUNC light_prepare, 48
     LGROW 60, 96
 .nogrow:
     mov eax, [rbp-48]
-    mov [lb_x0], eax
+    mov [ls_x0], eax
     mov eax, [rbp-52]
-    mov [lb_x1], eax
+    mov [ls_x1], eax
     mov eax, [rbp-56]
-    mov [lb_y0], eax
+    mov [ls_y0], eax
     mov eax, [rbp-60]
-    mov [lb_y1], eax
+    mov [ls_y1], eax
+    mov dword [ls_phase], 1
+    mov edi, [rbp-68]
+    call light_step
+.out:
+    RETURN
+
+; does the view (cells [rbp-48 .. rbp-60] of light_prepare) overlap the
+; region whose shadows are shown? -> eax
+light_view_on:
+    xor eax, eax
+    cmp dword [lb_ok], 0
+    je .o
+    mov ecx, [rbp-48]
+    cmp ecx, [lb_x1]
+    jg .o
+    mov ecx, [rbp-52]
+    cmp ecx, [lb_x0]
+    jl .o
+    mov ecx, [rbp-56]
+    cmp ecx, [lb_y1]
+    jg .o
+    mov ecx, [rbp-60]
+    cmp ecx, [lb_y0]
+    jl .o
+    inc eax
+.o: ret
+
+; ---------------------------------------------------------------------
+;  one slice of a sweep (edi 1: to the end now).  The phases: clear the
+;  heights, stamp every object's column heights (a few tile rows a
+;  slice), sweep toward the sun (a band of rows a slice), then contact
+;  shade and the rotated layout on every core, and show the result.
+; ---------------------------------------------------------------------
+STAMP_ROWS  equ 16              ; tile rows stamped per slice
+SWEEP_ROWS  equ 160             ; cell rows swept per slice
+
+FUNC light_step, 48
+    mov [rbp-48], edi
+.again:
+    mov eax, [ls_phase]
+    cmp eax, 1
+    je .clear
+    cmp eax, 2
+    je .stamp
+    cmp eax, 3
+    je .sweep
+    cmp eax, 4
+    je .finish
+    RETURN
+.clear:
     ; ---- clear the height map in the region ----
-    mov r13d, [lb_y0]
+    mov r13d, [ls_y0]
 .cy:
-    cmp r13d, [lb_y1]
-    jg .stamp
+    cmp r13d, [ls_y1]
+    jg .cyd
     mov edi, r13d
     shl edi, LS_SHIFT
-    add edi, [lb_x0]
+    add edi, [ls_x0]
     lea rdi, [lhmap+rdi]
-    mov ecx, [lb_x1]
-    sub ecx, [lb_x0]
+    mov ecx, [ls_x1]
+    sub ecx, [ls_x0]
     inc ecx
     xor eax, eax
     rep stosb
     inc r13d
     jmp .cy
-.stamp:
-    ; ---- stamp every object's column heights ----
+.cyd:
     ; tiles: cells >> 3, anchors up to 3 tiles back
-    mov eax, [lb_y0]
+    mov eax, [ls_y0]
     shr eax, 3
     sub eax, 3
     CLAMP eax, 0, MAP_W-1
-    mov r13d, eax                   ; ty
+    mov [ls_ty], eax
+    mov dword [ls_phase], 2
+    jmp .next
+.stamp:
+    ; ---- stamp every object's column heights ----
+    mov r13d, [ls_ty]               ; ty
+    lea eax, [r13+STAMP_ROWS]
+    mov [rbp-52], eax               ; this slice ends here
 .ty:
-    mov eax, [lb_y1]
+    mov eax, [ls_y1]
     shr eax, 3
     cmp r13d, eax
-    jg .sweep
-    mov eax, [lb_x0]
+    jg .stampd
+    cmp dword [rbp-48], 0
+    jne .tyall
+    cmp r13d, [rbp-52]
+    jge .stamps
+.tyall:
+    mov eax, [ls_x0]
     shr eax, 3
     sub eax, 3
     CLAMP eax, 0, MAP_W-1
     mov r12d, eax                   ; tx
 .tx:
-    mov eax, [lb_x1]
+    mov eax, [ls_x1]
     shr eax, 3
     cmp r12d, eax
     jg .tyn
@@ -728,27 +818,42 @@ FUNC light_prepare, 48
     inc r13d
     cmp r13d, MAP_W
     jl .ty
-.sweep:
-    ; ---- sweep from the sun side (high Y) down ----
-    mov r13d, [lb_y1]
-    ; first row: nothing beyond it
-    mov edi, r13d
+.stampd:
+    ; the sweep's first row: nothing beyond it
+    mov edi, [ls_y1]
     shl edi, LS_SHIFT
-    add edi, [lb_x0]
+    add edi, [ls_x0]
     lea rdi, [lsmap+rdi*2]
-    mov ecx, [lb_x1]
-    sub ecx, [lb_x0]
+    mov ecx, [ls_x1]
+    sub ecx, [ls_x0]
     inc ecx
     xor eax, eax
     rep stosw
-    mov r8d, [lb_x0]
-    mov r9d, [lb_x1]
+    mov eax, [ls_y1]
+    mov [ls_row], eax
+    mov dword [ls_phase], 3
+    jmp .next
+.stamps:
+    mov [ls_ty], r13d
+    jmp .next
+.sweep:
+    ; ---- sweep from the sun side (high Y) down ----
+    mov r13d, [ls_row]              ; the last row done
+    lea eax, [r13-SWEEP_ROWS]
+    mov [rbp-52], eax
+    mov r8d, [ls_x0]
+    mov r9d, [ls_x1]
     mov r10d, [sun_f]
     mov r11d, [sun_drop]
 .row:
     dec r13d
-    cmp r13d, [lb_y0]
-    jl .aomap
+    cmp r13d, [ls_y0]
+    jl .swd
+    cmp dword [rbp-48], 0
+    jne .rowall
+    cmp r13d, [rbp-52]
+    jl .sws
+.rowall:
     mov eax, r13d
     inc eax
     shl eax, LS_SHIFT
@@ -801,19 +906,68 @@ FUNC light_prepare, 48
     mov [lsmap+rax*2], si
     inc ebx
     jmp .col
-.aomap:
-    ; ---- contact shade: ground cells next to taller things ----
-    mov r13d, [lb_y0]
+.sws:
     inc r13d
-.ay:
-    mov eax, [lb_y1]
+    mov [ls_row], r13d
+    jmp .next
+.swd:
+    mov dword [ls_phase], 4
+    jmp .next
+.finish:
+    ; ---- contact shade, then the rotated layout: rows are independent,
+    ; so every core takes a band ----
+    lea rdi, [light_ao_rows]
+    mov esi, [ls_y1]
+    sub esi, [ls_y0]
+    dec esi                         ; rows ls_y0+1 .. ls_y1-1
+    CLAMP esi, 0, LS_W
+    mov edx, 1
+    call par_rows
+    lea rdi, [light_rot_rows]
+    mov esi, [ls_y1]
+    sub esi, [ls_y0]
+    inc esi                         ; rows ls_y0 .. ls_y1
+    CLAMP esi, 0, LS_W
+    mov edx, 1
+    call par_rows
+    ; and show it
+    mov eax, [ls_x0]
+    mov [lb_x0], eax
+    mov eax, [ls_x1]
+    mov [lb_x1], eax
+    mov eax, [ls_y0]
+    mov [lb_y0], eax
+    mov eax, [ls_y1]
+    mov [lb_y1], eax
+    mov dword [lb_ok], 1
+    mov dword [ls_phase], 0
+    RETURN
+.next:
+    cmp dword [rbp-48], 0
+    jne .again
+    RETURN
+
+; contact shade for sweep rows [ls_y0+1 + edi, ls_y0+1 + esi): ground
+; cells next to taller things
+FUNC light_ao_rows
+    mov r13d, edi
+    add r13d, [ls_y0]
+    inc r13d
+    mov r14d, esi
+    add r14d, [ls_y0]
+    inc r14d
+    mov eax, [ls_y1]
     dec eax
-    cmp r13d, eax
-    jge .rot
-    mov ebx, [lb_x0]
+    cmp r14d, eax
+    jle .ay
+    mov r14d, eax
+.ay:
+    cmp r13d, r14d
+    jge .out
+    mov ebx, [ls_x0]
     inc ebx
 .axx:
-    mov eax, [lb_x1]
+    mov eax, [ls_x1]
     dec eax
     cmp ebx, eax
     jge .ayn
@@ -847,15 +1001,27 @@ FUNC light_prepare, 48
 .ayn:
     inc r13d
     jmp .ay
-.rot:
-    ; ---- rotate into the pixel-friendly layout ----
-    mov r13d, [lb_y0]
+.out:
+    RETURN
+
+; the shadow and contact maps of rows [ls_y0 + edi, ls_y0 + esi), rotated
+; into the layout the light pass reads
+FUNC light_rot_rows
+    mov r13d, edi
+    add r13d, [ls_y0]
+    mov r14d, esi
+    add r14d, [ls_y0]
+    mov eax, [ls_y1]
+    inc eax
+    cmp r14d, eax
+    jle .ry
+    mov r14d, eax
 .ry:
-    cmp r13d, [lb_y1]
-    jg .out
-    mov ebx, [lb_x0]
+    cmp r13d, r14d
+    jge .out
+    mov ebx, [ls_x0]
 .rx:
-    cmp ebx, [lb_x1]
+    cmp ebx, [ls_x1]
     jg .ryn
     mov ecx, r13d
     shl ecx, LS_SHIFT

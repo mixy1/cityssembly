@@ -354,10 +354,55 @@ FUNC render_world, 32
     mov dword [dl_n], 0
     mov dword [dl_record], 1
 
-    ; visible tile range: iterate diagonally-bounded rectangle
+    ; visible tile range: iterate diagonally-bounded rectangle.  Only the
+    ; tiles that can pass the cull below are visited: bounds on tx - ty
+    ; (screen x) and tx + ty (screen y), a tile wider than the cull
+    mov eax, [cam_x]
+    sub eax, ORIGIN_X + 56
+    sar eax, 4
+    dec eax
+    mov [rbp-64], eax               ; tx - ty >= this
+    mov eax, [cam_x]
+    sub eax, ORIGIN_X - 56
+    add eax, [fb_w]
+    sar eax, 4
+    inc eax
+    mov [rbp-68], eax               ; tx - ty <= this
+    mov eax, [cam_y]
+    sub eax, 56
+    sar eax, 3
+    dec eax
+    mov [rbp-72], eax               ; tx + ty >= this
+    mov eax, [cam_y]
+    add eax, [fb_h]
+    add eax, 200
+    sar eax, 3
+    inc eax
+    mov [rbp-76], eax               ; tx + ty <= this
     xor r13d, r13d                  ; ty
 .ty:
-    xor r12d, r12d                  ; tx
+    mov eax, [rbp-64]
+    add eax, r13d
+    mov ecx, [rbp-72]
+    sub ecx, r13d
+    cmp eax, ecx
+    cmovl eax, ecx
+    xor ecx, ecx
+    cmp eax, ecx
+    cmovl eax, ecx
+    mov r12d, eax                   ; first tx
+    mov eax, [rbp-68]
+    add eax, r13d
+    mov ecx, [rbp-76]
+    sub ecx, r13d
+    cmp eax, ecx
+    cmovg eax, ecx
+    mov ecx, MAP_W-1
+    cmp eax, ecx
+    cmovg eax, ecx
+    mov [rbp-80], eax               ; last tx
+    cmp r12d, eax
+    jg .rown
 .tx:
     mov edi, r12d
     mov esi, r13d
@@ -578,11 +623,20 @@ FUNC render_world, 32
     call blit_sprite
 .next:
     inc r12d
-    cmp r12d, MAP_W
-    jl .tx
+    cmp r12d, [rbp-80]
+    jle .tx
+.rown:
     inc r13d
     cmp r13d, MAP_W
     jl .ty
+    ; wires, cars, people and particles go in the list too (drawn over
+    ; whatever is below them, as before)
+    PERF_MARK 17
+    mov dword [blit_tint], TINT_KEEP
+    mov dword [blit_dither], 0
+    call draw_wires                 ; (wires, then agents, as they were
+    PERF_MARK 18                    ; drawn before the list had them)
+    call draw_agents
     PERF_MARK 10
     mov dword [dl_record], 0
     mov dword [blit_dither], 0
@@ -591,8 +645,8 @@ FUNC render_world, 32
     mov edx, 1
     call par_rows
     PERF_MARK 11
+    ; pipes (the water view) are drawn over the finished frame
     mov dword [blit_tint], TINT_KEEP
-    call draw_wires
     cmp dword [eff_overlay], OV_WATER
     jne .np
     call draw_pipes
@@ -686,7 +740,7 @@ FUNC draw_wires
     RETURN
 
 ; draw_wire(edi tile a, esi tile b) in [wire_col]; [wire_front] = on top
-FUNC draw_wire, 64
+FUNC draw_wire, 128
     mov [rbp-96], edi
     mov [rbp-100], esi
     mov dword [rbp-92], -1          ; side
@@ -724,6 +778,19 @@ FUNC draw_wire, 64
     add ecx, 8
     cmp eax, ecx
     jg .sn
+    ; and above or below the screen (the sag hangs below the ends)
+    mov eax, [rbp-52]
+    mov ecx, [rbp-64]
+    cmp eax, ecx
+    jle .c2
+    xchg eax, ecx
+.c2:
+    cmp ecx, -40                    ; the longest spans sag ~25 px
+    jl .sn
+    mov edx, [fb_h]
+    add edx, 48
+    cmp eax, edx
+    jg .sn
     ; steps = max(|dx|, |dy|)
     mov eax, [rbp-60]
     sub eax, [rbp-48]
@@ -743,24 +810,57 @@ FUNC draw_wire, 64
     div ecx
     add eax, 2
     mov [rbp-76], eax
+    ; x, y and depth at step k are start + (end - start) * k / n (rounded
+    ; toward zero): kept as a running quotient and remainder of |end -
+    ; start| * k / n, the sign put back after
+    mov ecx, [rbp-72]
+%macro WSTEPS 3                     ; end, start, locals base: q, r, sign
+    mov eax, [rbp-%1]
+    sub eax, [rbp-%2]
+    mov r8d, eax
+    sar r8d, 31
+    xor eax, r8d
+    sub eax, r8d
+    xor edx, edx
+    div ecx
+    mov [rbp-%3], eax               ; per step: quotient
+    mov [rbp-%3-4], edx             ;           remainder
+    mov [rbp-%3-8], r8d             ; sign mask
+    mov dword [rbp-%3-12], 0        ; running quotient
+    mov dword [rbp-%3-16], 0        ; running remainder
+%endmacro
+    WSTEPS 60, 48, 104              ; x
+    WSTEPS 64, 52, 124              ; y
+    WSTEPS 68, 56, 144              ; depth
+    imul ecx, ecx
+    inc ecx
+    mov [rbp-164], ecx              ; n^2 + 1 (the sag)
+%macro WAT 2                        ; locals base, start -> eax
+    mov eax, [rbp-%1-12]
+    mov edx, [rbp-%1-8]
+    xor eax, edx
+    sub eax, edx
+    add eax, [rbp-%2]
+%endmacro
+%macro WNEXT 1
+    mov eax, [rbp-%1]
+    add [rbp-%1-12], eax
+    mov eax, [rbp-%1-4]
+    add eax, [rbp-%1-16]
+    cmp eax, [rbp-72]
+    jb %%r
+    sub eax, [rbp-72]
+    inc dword [rbp-%1-12]
+%%r:
+    mov [rbp-%1-16], eax
+%endmacro
     xor ebx, ebx
 .px:
     cmp ebx, [rbp-72]
     jg .sn
-    ; t = ebx / n
-    mov eax, [rbp-60]
-    sub eax, [rbp-48]
-    imul eax, ebx
-    cdq
-    idiv dword [rbp-72]
-    add eax, [rbp-48]
+    WAT 104, 48
     mov r12d, eax                   ; x
-    mov eax, [rbp-64]
-    sub eax, [rbp-52]
-    imul eax, ebx
-    cdq
-    idiv dword [rbp-72]
-    add eax, [rbp-52]
+    WAT 124, 52
     mov r13d, eax                   ; y
     ; sag = 4 s t (1-t)
     mov eax, [rbp-72]
@@ -768,19 +868,14 @@ FUNC draw_wire, 64
     imul eax, ebx
     imul eax, [rbp-76]
     shl eax, 2
-    mov ecx, [rbp-72]
-    imul ecx, ecx
-    inc ecx
     cdq
-    idiv ecx
+    idiv dword [rbp-164]
     add r13d, eax
-    mov eax, [rbp-68]
-    sub eax, [rbp-56]
-    imul eax, ebx
-    cdq
-    idiv dword [rbp-72]
-    add eax, [rbp-56]
+    WAT 144, 56
     mov r14d, eax                   ; depth
+    WNEXT 104
+    WNEXT 124
+    WNEXT 144
     cmp dword [wire_front], 0
     je .col
     mov r14d, 65000

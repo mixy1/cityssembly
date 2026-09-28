@@ -260,7 +260,7 @@ UI_BLACK     equ PAL_UI+15
     sub rax, [perf_t]
     mov [perf_t], rcx
 %if %1 >= 0
-    add [perf_acc+%1*8], rax
+    add [perf_cur+%1*8], rax
 %endif
 %%skip:
 %endmacro

@@ -252,11 +252,11 @@
     animating = true; requestAnimationFrame(frame);
     setStatus('the mayor has left the building. reload to play again.', GOLD);
   };
-  window.cityPerf = function (f, ms) {
-    logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame');
+  window.cityPerf = function (f, ms, max) {
+    logLine('frame ' + f + ': ' + ms.toFixed(1) + ' ms of work per frame, slowest ' + max.toFixed(1));
     // ?bench: report to the local test server
     if (/[?&]bench/.test(location.search))
-      fetch('/bench', { method: 'POST', body: innerWidth + 'x' + innerHeight + ' frame ' + f + ' ' + ms.toFixed(2) });
+      fetch('/bench', { method: 'POST', body: innerWidth + 'x' + innerHeight + ' frame ' + f + ' ' + ms.toFixed(2) + ' max ' + max.toFixed(2) });
   };
   window.addEventListener('error', function (e) { logLine('error: ' + e.message); });
   window.addEventListener('unhandledrejection', function (e) { logLine('rejection: ' + (e.reason && (e.reason.stack || e.reason))); });

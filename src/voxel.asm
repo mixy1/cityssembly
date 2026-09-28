@@ -1329,8 +1329,10 @@ FUNC dl_draw_rows, 16
     mov eax, ebx
     shl eax, 5
     lea r12, [dl_list+rax]
-    ; rows the sprite covers
     mov eax, [r12]
+    cmp eax, -1
+    je .px
+    ; rows the sprite covers
     shl eax, 4
     movsx ecx, word [spr_table+rax+6]
     mov edx, [r12+8]
@@ -1360,6 +1362,25 @@ FUNC dl_draw_rows, 16
 .n:
     inc ebx
     jmp .l
+.px:
+    ; a single depth-tested pixel (people, particles), in this band
+    mov esi, [r12+8]
+    cmp esi, [rbp-48]
+    jl .n
+    cmp esi, [rbp-52]
+    jge .n
+    mov eax, esi
+    imul eax, [fb_w]
+    add eax, [r12+4]
+    mov ecx, [r12+12]
+    cmp cx, [zbuf+rax*2]
+    jb .n
+    mov [zbuf+rax*2], cx
+    mov cl, [r12+16]
+    mov [fb+rax], cl
+    mov cl, [r12+24]
+    mov [tintbuf+rax], cl
+    jmp .n
 .out:
     RETURN
 

@@ -24,3 +24,6 @@ trailer_work/v3/stills/
 trailer_work/v3/*.log
 trailer_work/v3/__pycache__/
 trailer_work/v3/*.wav
+__pycache__/
+.claude/
+trailer_work/alt/

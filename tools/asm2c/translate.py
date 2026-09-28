@@ -8,7 +8,11 @@ symbols and relocations - and emits C that behaves the same:
 
   * every region between two non-local .text symbols becomes a C function;
     registers live in locals (so the compiler can keep them in registers)
-    and are written back to the global CPU state around calls
+    and are written back to the global CPU state around calls - only the
+    ones the callee (or anything it calls) can read before the call, and
+    only the ones it can write after (see Translator.finish)
+  * a function's own stack locals ([rbp - n] of its frame) live in C
+    locals too when nothing else can reach them (see frame_plan)
   * flags are kept lazily (last operation + operands) and only evaluated
     by the instruction that reads them
   * the stack is an emulated byte array with the same layout as native
@@ -120,6 +124,7 @@ class Translator:
                     self.code_id(sym['st_value'] + add)
         self.externs = set()
         self.helpers = []
+        self.info = {}      # per function: registers, calls (see finish)
 
     def cname(self, n):
         return 'F_' + ''.join(c if c.isalnum() else '_' for c in n)
@@ -176,6 +181,7 @@ class Translator:
     def wr_reg(self, name, val):
         i, w, sh = self.reg(name)
         self.used.add(i)
+        self.written.add(i)
         if w == 64:
             return f'r{i} = (uint64_t)({val});'
         if w == 32:
@@ -224,6 +230,11 @@ class Translator:
         if op.type == X.X86_OP_IMM:
             return self.imm(ins, op, size)
         if op.type == X.X86_OP_MEM:
+            sl = self.slot(ins, op)
+            if sl is not None:
+                if size != sl[1]:
+                    raise TranslateError('slot size')
+                return f'({UT[size]})S{sl[0]}'
             return f'LD{size}({self.mem_addr(ins, op)})'
         raise TranslateError('operand')
 
@@ -232,6 +243,11 @@ class Translator:
         if op.type == X.X86_OP_REG:
             return self.wr_reg(ins.reg_name(op.reg), val)
         if op.type == X.X86_OP_MEM:
+            sl = self.slot(ins, op)
+            if sl is not None:
+                if size != sl[1]:
+                    raise TranslateError('slot size')
+                return f'S{sl[0]} = ({UT[size]})({val});'
             return f'ST{size}({self.mem_addr(ins, op)}, {val});'
         raise TranslateError('write operand')
 
@@ -242,6 +258,88 @@ class Translator:
         k = int(n[3:])
         self.xused.add(k)
         return f'x{k}'
+
+    def slot(self, ins, op):
+        """(name, bits) if this memory operand is a promoted frame slot"""
+        if not self.slots or not op.mem.base or op.mem.index:
+            return None
+        if ins.reg_name(op.mem.base) != 'rbp':
+            return None
+        d = op.mem.disp
+        if d in self.slots:
+            return (-d, self.slots[d])
+        return None
+
+    SLOT_OPS = {'mov', 'movzx', 'movsx', 'movsxd', 'add', 'sub', 'cmp', 'and', 'or', 'xor', 'test',
+                'inc', 'dec', 'neg', 'not', 'imul', 'shl', 'shr', 'sar', 'sal', 'div', 'idiv', 'mul',
+                'xchg', 'push', 'pop'}
+
+    def frame_plan(self, s, e):
+        """The stack slots of a function's frame that can live in C locals:
+        the function builds a frame (push rbp; mov rbp, rsp), rbp never
+        escapes (no copies, no lea of a local, no rsp-relative memory), and
+        every access to the slot is a plain read or write of one size that
+        no other access overlaps.  -> {disp: bits}, or {} for none"""
+        insns = []
+        k = self.at[s]
+        while k < len(self.insns) and self.insns[k].address < e:
+            insns.append(self.insns[k])
+            k += 1
+        if len(insns) < 2 or insns[0].mnemonic != 'push' or insns[0].op_str != 'rbp' \
+                or insns[1].mnemonic != 'mov' or insns[1].op_str != 'rbp, rsp':
+            return {}
+        acc = collections.defaultdict(set)     # disp -> {bits}
+        bad = set()
+        spans = []                              # (lo, hi) of every frame access
+        for idx, ins in enumerate(insns):
+            m = ins.mnemonic
+            for op in ins.operands:
+                if op.type == X.X86_OP_REG and ins.reg_name(op.reg) in ('rbp', 'ebp', 'bp', 'bpl'):
+                    if (idx == 0 and m == 'push') or (idx == 1 and m == 'mov') or m == 'pop':
+                        continue
+                    return {}
+                if op.type != X.X86_OP_MEM or not op.mem.base:
+                    continue
+                bn = ins.reg_name(op.mem.base)
+                if bn in ('rsp', 'esp'):
+                    return {}
+                if bn != 'rbp':
+                    continue
+                if op.mem.index:
+                    return {}
+                if m == 'lea':
+                    if ins.op_str == 'rsp, [rbp - 0x28]':
+                        continue
+                    return {}
+                d = op.mem.disp
+                spans.append((d, d + op.size))
+                if d > -44 or m not in self.SLOT_OPS:
+                    bad.add(d)
+                else:
+                    acc[d].add(op.size * 8)
+        slots = {}
+        for d, sizes in acc.items():
+            if d in bad or len(sizes) != 1:
+                continue
+            w = next(iter(sizes))
+            lo, hi = d, d + w // 8
+            if any(a != d and a < hi and b > lo for a, b in spans):
+                continue
+            if any(a == d and b != hi for a, b in spans):
+                continue
+            slots[d] = w
+        return slots
+
+    def slot_spill(self):
+        return ' '.join(f'ST{w}(r5+(uint64_t)({d}ll), S{-d});' for d, w in sorted(self.slots.items()))
+
+    def slot_reload(self):
+        return ' '.join(f'S{-d} = LD{w}(r5+(uint64_t)({d}ll));' for d, w in sorted(self.slots.items()))
+
+    def implicit(self, *regs):
+        """registers an instruction reads and writes without naming them"""
+        self.used.update(regs)
+        self.written.update(regs)
 
     # ------------------------------------------------------------ flags
     def flags(self, op, size, a, b, r):
@@ -267,6 +365,7 @@ class Translator:
             self.targets.add(target)
             return f'goto L_{target:x};'
         if target in self.entry_names:
+            self.calls.add(target)
             return f'{{ SPILL; {self.entry_names[target]}(); return; }}'
         raise TranslateError(f'jump into another function at {target:x} ({self.label_at.get(target)})')
 
@@ -296,22 +395,22 @@ class Translator:
             v = self.rd(ins, o0, 64)
             if o0.type == X.X86_OP_IMM:
                 v = f'(uint64_t)(int64_t)(int32_t)({v})'
-            self.used.add(RSP)
+            self.implicit(RSP)
             return f'{{ uint64_t _v = {v}; r4 -= 8; ST64(r4, _v); }}'
         if m == 'pop':
-            self.used.add(RSP)
+            self.implicit(RSP)
             return f'{{ uint64_t _v = LD64(r4); r4 += 8; {self.wr(ins, o0, "_v", 64)} }}'
         if m == 'xchg':
             a = self.rd(ins, o0); b = self.rd(ins, o1)
             return f'{{ uint64_t _a = {a}, _b = {b}; {self.wr(ins, o0, "_b")} {self.wr(ins, o1, "_a")} }}'
         if m == 'cdq':
-            self.used.update([0, 2])
+            self.implicit(0, 2)
             return 'r2 = (uint32_t)((int32_t)(uint32_t)r0 >> 31);'
         if m == 'cqo':
-            self.used.update([0, 2])
+            self.implicit(0, 2)
             return 'r2 = (uint64_t)((int64_t)r0 >> 63);'
         if m == 'cdqe':
-            self.used.add(0)
+            self.implicit(0)
             return 'r0 = (uint64_t)(int64_t)(int32_t)r0;'
 
         # ---- arithmetic
@@ -340,7 +439,7 @@ class Translator:
             if len(ops) == 1:
                 w = sz(o0)
                 if w == 32:
-                    self.used.update([0, 2])
+                    self.implicit(0, 2)
                     return (f'{{ int64_t _p = (int64_t)(int32_t)r0 * (int64_t)(int32_t){self.rd(ins, o0)}; '
                             f'r0 = (uint32_t)_p; r2 = (uint32_t)((uint64_t)_p >> 32); '
                             + self.flags('F_LOGIC', 32, '0', '0', '_p') + ' }')
@@ -354,14 +453,14 @@ class Translator:
                     + self.flags('F_LOGIC', w, '0', '0', '_r') + ' ' + self.wr(ins, o0, '_r') + ' }')
         if m == 'mul':
             w = sz(o0)
-            self.used.update([0, 2])
+            self.implicit(0, 2)
             if w == 32:
                 return (f'{{ uint64_t _p = (uint64_t)(uint32_t)r0 * (uint64_t)(uint32_t){self.rd(ins, o0)}; '
                         f'r0 = (uint32_t)_p; r2 = (uint32_t)(_p >> 32); }}')
             raise TranslateError('mul size')
         if m in ('div', 'idiv'):
             w = sz(o0)
-            self.used.update([0, 2])
+            self.implicit(0, 2)
             d = self.rd(ins, o0)
             if w == 32:
                 if m == 'div':
@@ -441,7 +540,7 @@ class Translator:
         # ---- strings
         if m.startswith('rep '):
             op = m[4:]
-            self.used.update([1, 6, 7, 0])
+            self.implicit(1, 6, 7, 0)
             if op.startswith('stos'):
                 w = {'stosb': 8, 'stosw': 16, 'stosd': 32, 'stosq': 64}[op]
                 return (f'{{ uint64_t _n = r1; {UT[w]} _v = ({UT[w]})r0; uint8_t *_p = (uint8_t*)(uintptr_t)r7; '
@@ -514,8 +613,13 @@ class Translator:
     def region(self, region):
         s, e, name = region
         fname = self.entry_names[s]
+        self.slots = self.frame_plan(s, e)
         self.used = set([RSP])
+        self.written = set([RSP])
         self.xused = set()
+        self.calls = set()          # functions this one calls (or tail-calls)
+        self.unknown = False        # calls through a pointer
+        self.ext = False            # calls SDL / libc
         self.targets = set()
         self.self_loop_ok = True
         body = []
@@ -541,6 +645,7 @@ class Translator:
                         rel = self.reloc_in(ins, 1, 5)
                         if rel and rel[1]['st_shndx'] == 'SHN_UNDEF':
                             self.externs.add(rel[1].name)
+                            self.ext = True
                             body.append((a, f'r4 -= 8; SPILL; ext_{rel[1].name}(); RELOAD; r4 += 8;'))
                         else:
                             t = op.imm
@@ -554,11 +659,13 @@ class Translator:
                                 self.targets.add(a + ins.size)
                                 body.append((a, f'r4 -= 8; ST64(r4, 0); lrs[lcd++] = {site}; goto L_{t:x};'))
                             elif t in self.entry_names:
-                                body.append((a, f'r4 -= 8; ST64(r4, 0); SPILL; {self.entry_names[t]}(); RELOAD;'))
+                                self.calls.add(t)
+                                body.append((a, f'r4 -= 8; ST64(r4, 0); @@CALL{t}@@'))
                             else:
                                 raise TranslateError(f'call into middle of {self.label_at.get(t)}')
                     else:
                         # indirect call through a code id
+                        self.unknown = True
                         v = self.rd(ins, op, 64)
                         body.append((a, f'{{ uint64_t _t = {v}; r4 -= 8; ST64(r4, 0); SPILL; dispatch_call(_t); RELOAD; }}'))
                 elif m == 'jmp':
@@ -568,12 +675,14 @@ class Translator:
                         rel = self.reloc_in(ins, 1, 5)
                         if rel and rel[1]['st_shndx'] == 'SHN_UNDEF':
                             self.externs.add(rel[1].name)
+                            self.ext = True
                             body.append((a, f'SPILL; ext_{rel[1].name}(); RELOAD; RET_NOW;'))
                         else:
                             body.append((a, self.goto_or_tail(t, region)))
                     else:
                         v = self.rd(ins, op, 64)
                         has_table_jump = True
+                        self.unknown = True     # the table's default dispatches
                         body.append((a, f'{{ uint64_t _t = {v}; JUMP_TABLE(_t); }}'))
                 elif m.startswith('j'):
                     c = CC[m[1:]]
@@ -581,6 +690,10 @@ class Translator:
                     body.append((a, f'if ({c}) {self.goto_or_tail(t, region)}'))
                 else:
                     body.append((a, self.insn(ins, region)))
+                    if self.slots and k == self.at[s] + 1:
+                        # after mov rbp, rsp: the frame's slots (whatever the
+                        # memory held, as the machine code would read it)
+                        body.append((a, self.slot_reload()))
             except TranslateError as ex:
                 raise TranslateError(f'{name}+{a - s:#x} ({a:#x}) {m} {ins.op_str}: {ex}')
             k += 1
@@ -591,17 +704,22 @@ class Translator:
         if self.xused:
             out.append('  ' + ' '.join(f'xmm_t x{k} = R.x[{k}];' for k in sorted(self.xused)))
         out.append('  uint32_t fop = R.fop, fsz = R.fsz; uint64_t fa = R.fa, fb = R.fb, fr = R.fr;')
+        if self.slots:
+            out.append('  ' + ' '.join(f'{UT[w]} S{-d} = 0;' for d, w in sorted(self.slots.items())))
         if local_calls:
             out.append('  int lcd = 0; int lrs[64];')
         spill = self.spill()
         reload = self.reload()
+        if self.slots:
+            spill = self.slot_spill() + ' ' + spill
+            reload = reload + ' ' + self.slot_reload()
         out.append(f'#define SPILL {spill}')
         out.append(f'#define RELOAD {reload}')
         if local_calls:
             sw = ' '.join(f'case {site}: goto L_{ret:x};' for site, ret in local_calls)
-            out.append(f'#define RET_NOW {{ if (lcd) {{ lcd--; r4 += 8; switch (lrs[lcd]) {{ {sw} }} }} r4 += 8; SPILL; return; }}')
+            out.append(f'#define RET_NOW {{ if (lcd) {{ lcd--; r4 += 8; switch (lrs[lcd]) {{ {sw} }} }} r4 += 8; @@RETSPILL@@ return; }}')
         else:
-            out.append('#define RET_NOW { r4 += 8; SPILL; return; }')
+            out.append('#define RET_NOW { r4 += 8; @@RETSPILL@@ return; }')
         if has_table_jump:
             cases = ' '.join(f'case {self.code_ids[t]}: goto L_{t:x};' for t in table_targets)
             out.append(f'#define JUMP_TABLE(t) switch (t) {{ {cases} default: {{ SPILL; dispatch_call(t); return; }} }}')
@@ -620,6 +738,7 @@ class Translator:
         # fall through into the next function
         nxt = e
         if nxt in self.entry_names:
+            self.calls.add(nxt)
             out.append(f'  SPILL; {self.entry_names[nxt]}(); return;')
         else:
             out.append('  cpu_trap("fell off the end");')
@@ -630,7 +749,124 @@ class Translator:
             out.append('#undef JUMP_TABLE')
         out.append('}')
         # silence unused-label warnings: nothing to do, labels are only emitted when targeted
+        self.info[s] = dict(used=set(self.used), written=set(self.written), xused=set(self.xused),
+                            calls=set(self.calls), unknown=self.unknown, ext=self.ext,
+                            fr=self.reads_flags_first(s, e), slots=dict(self.slots),
+                            framed=self.frame_builds(s, e), rbpmem=self.touches_rbp_mem(s, e))
         return out
+
+    def frame_builds(self, s, e):
+        k = self.at[s]
+        a = self.insns[k]
+        b = self.insns[k + 1] if k + 1 < len(self.insns) else None
+        return (a.mnemonic == 'push' and a.op_str == 'rbp' and b is not None and b.address < e
+                and b.mnemonic == 'mov' and b.op_str == 'rbp, rsp')
+
+    def touches_rbp_mem(self, s, e):
+        k = self.at[s]
+        while k < len(self.insns) and self.insns[k].address < e:
+            ins = self.insns[k]
+            for op in ins.operands:
+                if op.type == X.X86_OP_MEM and op.mem.base and ins.reg_name(op.mem.base) == 'rbp':
+                    return True
+            k += 1
+        return False
+
+    # ------------------------------------------------------------ calls
+    FLAG_WRITERS = {'add', 'sub', 'cmp', 'and', 'or', 'xor', 'test', 'inc', 'dec', 'neg', 'imul',
+                    'bt', 'bts', 'btr', 'btc', 'popcnt', 'bsf', 'bsr', 'comiss', 'ucomiss'}
+
+    def reads_flags_first(self, s, e):
+        """may the function read the flags it was called with?  Only the
+        straight run of instructions from its entry is looked at: a flag
+        write there (before any branch) means every path overwrites them"""
+        k = self.at[s]
+        while k < len(self.insns) and self.insns[k].address < e:
+            ins = self.insns[k]
+            m = ins.mnemonic
+            if m.startswith('set') or m.startswith('cmov') or m.startswith('j') or m.startswith('rep'):
+                return True
+            if m in ('call', 'ret', 'loop'):
+                return True
+            if m in self.FLAG_WRITERS:
+                return False
+            if m in ('shl', 'shr', 'sar', 'sal'):
+                ops = ins.operands
+                if len(ops) == 1 or (ops[1].type == X.X86_OP_IMM and ops[1].imm & 63):
+                    return False
+            k += 1
+        return True
+
+    def finish(self, funcs):
+        """Fill in the calls.  For every function: the registers it or
+        anything it calls may touch (U) and may change (W), over the whole
+        call graph.  A call then writes back only the caller's registers in
+        U(callee), and reads back only those in W(callee); a return writes
+        back only what the function itself changed.  Calls through
+        pointers, to SDL / libc, and tail calls keep the full exchange."""
+        ALL = set(range(16))
+        EXT_R = {0, 1, 2, 4, 6, 7, 8, 9}        # args, rsp (stack args), al (varargs)
+        EXT_X = set(range(8))
+        U, W, XU = {}, {}, {}
+        for off, inf in self.info.items():
+            if inf['unknown']:
+                U[off], W[off], XU[off] = set(ALL), set(ALL), set(ALL)
+                continue
+            U[off] = set(inf['used']) | (EXT_R if inf['ext'] else set())
+            W[off] = set(inf['written']) | ({0} if inf['ext'] else set())
+            XU[off] = set(inf['xused']) | (EXT_X if inf['ext'] else set())
+        changed = True
+        while changed:
+            changed = False
+            for off, inf in self.info.items():
+                for c in inf['calls']:
+                    for S in (U, W, XU):
+                        if not S[c] <= S[off]:
+                            S[off] |= S[c]
+                            changed = True
+        # can a call reach the caller's frame through rbp?  A function that
+        # builds its own frame can't; one that doesn't can, if it or a
+        # frameless function it calls touches [rbp + n]
+        FA = {}
+        for off, inf in self.info.items():
+            FA[off] = (not inf['framed']) and (inf['unknown'] or inf['rbpmem'])
+        changed = True
+        while changed:
+            changed = False
+            for off, inf in self.info.items():
+                if FA[off] or inf['framed']:
+                    continue
+                if any(FA[c] for c in inf['calls']):
+                    FA[off] = True
+                    changed = True
+        for (s, e, n), fn in zip(self.regions, funcs):
+            inf = self.info[s]
+            used, xused = inf['used'], inf['xused']
+            ret = ' '.join(f'R.r[{i}] = r{i};' for i in sorted(inf['written'] | {RSP}))
+            ret += ' ' + ' '.join(f'R.x[{k}] = x{k};' for k in sorted(xused))
+            ret += ' R.fop = fop; R.fsz = fsz; R.fa = fa; R.fb = fb; R.fr = fr;'
+            for li, line in enumerate(fn):
+                if '@@' not in line:
+                    continue
+                line = line.replace('@@RETSPILL@@', ret)
+                while '@@CALL' in line:
+                    a = line.index('@@CALL')
+                    b = line.index('@@', a + 2)
+                    t = int(line[a + 6:b])
+                    ti = self.info[t]
+                    sp = ' '.join(f'R.r[{i}] = r{i};' for i in sorted(used & U[t]))
+                    sp += ' ' + ' '.join(f'R.x[{k}] = x{k};' for k in sorted(xused & XU[t]))
+                    if ti['fr']:
+                        sp += ' R.fop = fop; R.fsz = fsz; R.fa = fa; R.fb = fb; R.fr = fr;'
+                    rl = ' '.join(f'r{i} = R.r[{i}];' for i in sorted(used & W[t]))
+                    rl += ' ' + ' '.join(f'x{k} = R.x[{k}];' for k in sorted(xused & XU[t]))
+                    rl += ' fop = R.fop; fsz = R.fsz; fa = R.fa; fb = R.fb; fr = R.fr;'
+                    if inf['slots'] and FA[t]:
+                        sl = sorted(inf['slots'].items())
+                        sp = ' '.join(f'ST{w}(r5+(uint64_t)({d}ll), S{-d});' for d, w in sl) + ' ' + sp
+                        rl += ' ' + ' '.join(f'S{-d} = LD{w}(r5+(uint64_t)({d}ll));' for d, w in sl)
+                    line = line[:a] + f'{sp} {self.entry_names[t]}(); {rl}' + line[b + 2:]
+                fn[li] = line
 
     # ------------------------------------------------------------ program
     def run(self, overrides):
@@ -643,6 +879,9 @@ class Translator:
             protos.append(f'static void {fname}(void);')
             if name in overrides:
                 funcs.append([f'static void {fname}(void) {{', overrides[name], '}'])
+                self.info[s] = dict(used={RSP}, written={RSP}, xused={0}, calls=set(),
+                                    unknown=False, ext=False, fr=True, slots={},
+                                    framed=False, rbpmem=False)
                 continue
             try:
                 funcs.append(self.region(region))
@@ -652,6 +891,7 @@ class Translator:
             for x in errors[:40]:
                 print('ERROR', x, file=sys.stderr)
             raise SystemExit(f'{len(errors)} translation errors')
+        self.finish(funcs)
         return protos, funcs
 
     def data_image(self):

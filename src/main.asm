@@ -480,10 +480,9 @@ FUNC main
     add [cam_y], eax
 .ns:
     PERF_MARK 1                     ; palette etc.
-    call render_world
+    call render_world               ; (the agents are drawn with it)
     PERF_MARK 2
     mov dword [emit_now], 0
-    call draw_agents
     PERF_MARK 3
     call render_ui
     call draw_tool_preview
@@ -522,6 +521,19 @@ FUNC main
 FUNC perf_report
     cmp dword [perf_on], 0
     je .out
+    ; this frame's times into the totals, and the slowest frame's
+    xor ecx, ecx
+.f:
+    mov rax, [perf_cur+rcx*8]
+    add [perf_acc+rcx*8], rax
+    cmp rax, [perf_max+rcx*8]
+    jbe .fm
+    mov [perf_max+rcx*8], rax
+.fm:
+    mov qword [perf_cur+rcx*8], 0
+    inc ecx
+    cmp ecx, 20
+    jl .f
     inc dword [perf_n]
     cmp dword [perf_n], 120
     jl .out
@@ -538,6 +550,12 @@ FUNC perf_report
     div r8                          ; 0.1 ms units per frame
     mov [perf_out+rcx*4], eax
     mov qword [perf_acc+rcx*8], 0
+    mov rax, [perf_max+rcx*8]
+    imul rax, rax, 10000
+    xor edx, edx
+    div rbx
+    mov [perf_mx+rcx*4], eax
+    mov qword [perf_max+rcx*8], 0
     inc ecx
     cmp ecx, 20
     jl .c
@@ -580,17 +598,57 @@ FUNC perf_report
     call printf
 %endif
     add rsp, 24
+    lea rdi, [str_perf3]
+    mov esi, [perf_out+68]
+    mov edx, [perf_out+72]
+    mov ecx, [perf_out+40]
+    mov r8d, [zoom]
+    mov r9d, [fb_w]
+    sub rsp, 8
+    push qword [population]
+    push qword [fb_h]
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 24
+    ; the slowest frame of each part
+    lea rdi, [str_perfmx]
+    mov esi, [perf_mx]
+    mov edx, [perf_mx+68]
+    add edx, [perf_mx+72]
+    add edx, [perf_mx+40]
+    mov ecx, [perf_mx+44]
+    mov r8d, [perf_mx+52]
+    mov r9d, [perf_mx+60]
+    sub rsp, 8
+    mov eax, [perf_mx+28]
+    push rax
+    mov eax, [perf_mx+16]
+    push rax
+    mov eax, [perf_mx+12]
+    push rax
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 32
 .out:
     RETURN
 
 section .data
-str_perf2 db "PERF2 world: list %d bands %d wires+pipes %d | light: prep %d lut %d rows %d bloom %d", 10, 0
+str_perf2 db "PERF2 world: list %d bands %d pipes %d | light: prep %d lut %d rows %d bloom %d", 10, 0
+str_perf3 db "PERF3 list: tiles %d wires %d agents %d | zoom %d world %dx%d pop %d", 10, 0
+str_perfmx db "PERFMAX sim %d list %d bands %d prep %d rows %d | ui %d tex %d audio %d", 10, 0
 str_perf db "PERF x0.1ms sim %d world %d agents %d ui %d light %d | tex world %d ui %d | present %d audio %d", 10, 0
 section .bss
 perf_on     resd 1
 perf_n      resd 1
 perf_t      resq 1
 perf_acc    resq 20
+perf_cur    resq 20
+perf_max    resq 20
+perf_mx     resd 20
 perf_out    resd 20
 section .text
 
