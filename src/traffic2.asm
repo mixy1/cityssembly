@@ -380,3 +380,331 @@ commute_too_long:
     cmp ecx, COMMUTE_L4
     seta al
 .o: ret
+
+; the traffic lights to draw on a road tile (rdi tile) -> eax sprite or 0
+signal_sprite:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .o
+    cmp byte [rdi+T_ROADTYPE], RT_AVENUE
+    jne .o
+    movzx ecx, byte [rdi+T_SUB]
+    and ecx, 15
+    popcnt ecx, ecx
+    cmp ecx, 3
+    jb .o
+    mov rcx, rdi
+    sub rcx, tiles
+    shr ecx, TILE_SHIFT
+    imul ecx, ecx, 53
+    add ecx, [traffic_step]
+    shr ecx, 6
+    and ecx, 1
+    ; phase 0: green north-south (along y), so the x-way is red
+    xor ecx, 1
+    mov eax, [spr_signal+rcx*4]
+.o: ret
+
+; =====================================================================
+;  the route viewer (beta): inspect a road and see where the cars on it
+;  come from (blue) and go to (orange), and the roads they take
+; =====================================================================
+section .bss
+route_age   resd 1
+route_n     resd 1          ; cars through the road now
+route_from  resd 1          ; places they come from
+route_to    resd 1          ; and go to
+route_cnt   resb MAP_TILES  ; cars of those on each tile's route
+route_mark  resb MAP_TILES  ; 1 where they come from, 2 where they go
+section .data
+route_sel   dd -1           ; the road tile shown (-1 none)
+s_rt_cars   db "Cars on it now: ", 0
+s_rt_from   db 7, "from ", 0
+s_rt_to     db 1, " places, ", 5, "to ", 0
+s_rt_places db 1, " places", 0
+s_rt_hint   db 6, "Their routes are marked on the map.", 0
+section .text
+
+; the tile index after moving one step along direction eax from ecx
+%macro RT_STEP 2                ; tile reg, dir reg
+    mov edx, [dir_dy+%2*4]
+    shl edx, MAP_SHIFT
+    add edx, [dir_dx+%2*4]
+    add %1, edx
+%endmacro
+
+; walk vehicle r15's whole path: calls rbx-less callback via r14d mode
+; (0: is route_sel on it? -> eax 1; 1: count it into route_cnt)
+FUNC route_walk, 16
+    mov [rbp-48], edi               ; mode
+    movzx eax, word [r15+V_TY]
+    shl eax, MAP_SHIFT
+    movzx ecx, word [r15+V_TX]
+    add eax, ecx
+    mov r12d, eax                   ; the current tile
+    ; back to the start
+    mov r13d, r12d
+    movzx ebx, word [r15+V_PPOS]
+.back:
+    mov edi, r13d
+    call .visit
+    test eax, eax
+    jnz .yes
+    test ebx, ebx
+    jz .fwd0
+    dec ebx
+    mov rdi, r15
+    mov esi, ebx
+    call path_step
+    movzx eax, byte [dir_rev_t+rax]
+    RT_STEP r13d, rax
+    cmp r13d, MAP_TILES
+    jae .fwd0
+    jmp .back
+.fwd0:
+    ; and on to the end
+    mov r13d, r12d
+    movzx ebx, word [r15+V_PPOS]
+.fwd:
+    movzx eax, word [r15+V_PLEN]
+    cmp ebx, eax
+    jge .no
+    mov rdi, r15
+    mov esi, ebx
+    call path_step
+    RT_STEP r13d, rax
+    cmp r13d, MAP_TILES
+    jae .no
+    inc ebx
+    mov edi, r13d
+    call .visit
+    test eax, eax
+    jnz .yes
+    jmp .fwd
+.yes:
+    mov eax, 1
+    RETURN
+.no:
+    xor eax, eax
+    RETURN
+; a tile on the path (edi): mode 0 looks for route_sel, mode 1 counts
+.visit:
+    cmp dword [rbp-48], 0
+    jne .cnt
+    xor eax, eax
+    cmp edi, [route_sel]
+    sete al
+    ret
+.cnt:
+    cmp byte [route_cnt+rdi], 255
+    je .cz
+    inc byte [route_cnt+rdi]
+.cz:
+    xor eax, eax
+    ret
+
+; recount the cars through route_sel
+FUNC routes_compute
+    lea rdi, [route_cnt]
+    mov ecx, MAP_TILES/4
+    xor eax, eax
+    rep stosq
+    mov dword [route_n], 0
+    mov dword [route_from], 0
+    mov dword [route_to], 0
+    xor r14d, r14d
+.v:
+    cmp r14d, MAX_VEH
+    jge .out
+    mov eax, r14d
+    shl eax, 7
+    lea r15, [vehicles+rax]
+    cmp byte [r15+V_TYPE], 255
+    je .n
+    xor edi, edi
+    call route_walk
+    test eax, eax
+    jz .n
+    inc dword [route_n]
+    mov edi, 1
+    call route_walk
+    ; where it comes from and goes to
+    mov eax, [r15+V_HOME]
+    cmp eax, MAP_TILES
+    jae .d
+    test byte [route_mark+rax], 1
+    jnz .d
+    or byte [route_mark+rax], 1
+    inc dword [route_from]
+.d:
+    mov eax, [r15+V_DST]
+    cmp eax, MAP_TILES
+    jae .n
+    test byte [route_mark+rax], 2
+    jnz .n
+    or byte [route_mark+rax], 2
+    inc dword [route_to]
+.n:
+    inc r14d
+    jmp .v
+.out:
+    RETURN
+
+; the road inspector's route lines (beta); keeps the counts fresh
+FUNC route_panel
+    cmp dword [beta_on], 0
+    je .out
+    mov eax, [sel_y]
+    shl eax, MAP_SHIFT
+    add eax, [sel_x]
+    cmp eax, [route_sel]
+    jne .new
+    dec dword [route_age]
+    jg .show
+.new:
+    mov [route_sel], eax
+    mov dword [route_age], 30
+    call routes_compute
+.show:
+    call tb_reset
+    lea rdi, [s_rt_cars]
+    call tb_str
+    movsxd rdi, dword [route_n]
+    call tb_num
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call row_text
+    call tb_reset
+    lea rdi, [s_rt_from]
+    call tb_str
+    movsxd rdi, dword [route_from]
+    call tb_num
+    lea rdi, [s_rt_to]
+    call tb_str
+    movsxd rdi, dword [route_to]
+    call tb_num
+    lea rdi, [s_rt_places]
+    call tb_str
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call row_text
+    lea rdx, [s_rt_hint]
+    mov ecx, UI_DIM
+    call row_text
+.out:
+    RETURN
+
+; the routes on the map (world layer, every frame the road is inspected)
+FUNC route_draw
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [route_sel], 0
+    jl .out
+    xor ebx, ebx
+.l:
+    movzx eax, byte [route_cnt+rbx]
+    movzx ecx, byte [route_mark+rbx]
+    or eax, ecx
+    jz .n
+    mov r12d, ebx
+    and r12d, MAP_W-1
+    mov r13d, ebx
+    shr r13d, MAP_SHIFT
+    movzx eax, byte [route_cnt+rbx]
+    test eax, eax
+    jz .mk
+    mov ecx, RAMP(R_YELLOW, 6)
+    cmp eax, 3
+    jb .c
+    mov ecx, RAMP(R_ORANGE, 6)
+    cmp eax, 8
+    jb .c
+    mov ecx, RAMP(R_RED, 6)
+.c:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 1
+    call draw_diamond
+.mk:
+    movzx eax, byte [route_mark+rbx]
+    test eax, eax
+    jz .n
+    mov ecx, RAMP(R_BLUE, 7)
+    test eax, 1
+    jnz .m2
+    mov ecx, RAMP(R_ORANGE, 7)
+.m2:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 1
+    call draw_diamond
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+.out:
+    RETURN
+
+; the routes stay shown only while a road is inspected (every frame)
+FUNC route_keep
+    cmp dword [route_sel], 0
+    jl .out
+    cmp dword [tool], T_INSPECT
+    jne .off
+    cmp dword [sel_x], 0
+    jl .off
+    mov eax, [sel_y]
+    shl eax, MAP_SHIFT
+    add eax, [sel_x]
+    cmp eax, [route_sel]
+    jne .off
+    RETURN
+.off:
+    mov dword [route_sel], -1
+.out:
+    RETURN
+
+; the routes view's tint for a tile (rdi tile, esi index) -> eax
+route_tint:
+    movzx ecx, byte [rdi+T_OBJ]
+    cmp ecx, OBJ_ROAD
+    jne .b
+    movzx ecx, byte [route_cnt+rsi]
+    xor eax, eax
+    test ecx, ecx
+    jz .o
+    mov eax, TINT_YELLOW
+    cmp ecx, 3
+    jb .o
+    mov eax, TINT_ORANGE
+    cmp ecx, 8
+    jb .o
+    mov eax, TINT_RED
+    ret
+.b:
+    cmp ecx, OBJ_ZONEBLD
+    je .bl
+    cmp ecx, OBJ_SERVICE
+    jne .z
+.bl:
+    ; the building's corner carries the mark
+    movzx ecx, byte [rdi+T_ANCHOR]
+    mov edx, ecx
+    and ecx, 15
+    shr edx, 4
+    shl edx, MAP_SHIFT
+    add ecx, edx
+    mov eax, esi
+    sub eax, ecx
+    js .z
+    movzx ecx, byte [route_mark+rax]
+    xor eax, eax
+    test ecx, ecx
+    jz .o
+    mov eax, TINT_CYAN
+    test ecx, 1
+    jnz .o
+    mov eax, TINT_GREEN
+    ret
+.z: xor eax, eax
+.o: ret

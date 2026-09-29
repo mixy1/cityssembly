@@ -494,8 +494,16 @@ FUNC render_world, 32
     jmp .next
 .road:
     test byte [rbx+T_FLAGS2], F2_BUSSTOP
-    jz .next
+    jz .sig
     mov edi, [spr_busstop]
+    jmp .blitobj
+.sig:
+    ; beta: traffic lights at avenue junctions
+    mov rdi, rbx
+    call signal_sprite
+    test eax, eax
+    jz .next
+    mov edi, eax
     jmp .blitobj
 .tree:
     movzx eax, byte [rbx+T_SUB]
@@ -1228,6 +1236,13 @@ FUNC overlay_tint
     mov eax, TINT_BROWN
     RETURN
 .p0:
+    cmp eax, OV_ROUTES
+    jne .p0r
+    mov rdi, rbx
+    mov esi, r12d
+    call route_tint
+    RETURN
+.p0r:
     cmp eax, OV_POWER
     jne .w
     ; buildings: powered or not.  ground: where power reaches

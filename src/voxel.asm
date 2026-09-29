@@ -209,7 +209,9 @@ M_CORAL_WIN equ 73
     MATDEF R_ORANGE,    6,5,4, P_WIN,4,6
 M_DECO_WIN equ 74
     MATDEF R_CREAM,     6,5,4, P_OFFICE,3,5
-M_COUNT equ 75
+M_SIGGO equ 75                  ; a green traffic light
+    MATDEF R_TEAL,      7,7,7, P_PLAIN,0,0
+M_COUNT equ 76
     times (256-M_COUNT)*8 db 0
 
 section .text

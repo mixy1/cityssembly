@@ -146,7 +146,8 @@ submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
-    dq ov16, ov17, ov18, ov19, ov20
+    dq ov16, ov17, ov18, ov19, ov20, ov21
+ov21 db "Routes through this road", 0
 ov20 db "Land", 0
 ov0  db "No info view", 0
 ov1  db "Electricity", 0
@@ -170,7 +171,8 @@ ov18 db "Industrial desirability", 0
 ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
-    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20
+    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21
+oh21 db 7, "where they come from  ", 2, "where they go  ", 4, "route  ", 3, "busy route", 0
 oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
 oh2  db 7, "served  ", 3, "no water  ", 4, "no sewage outlet  ", 6, "no pump  ", 5, "polluted", 0
@@ -2794,6 +2796,13 @@ FUNC compute_eff_overlay
 .man:
     mov eax, ecx
 .set:
+    ; beta: an inspected road shows its routes (unless a view was picked)
+    cmp dword [route_sel], 0
+    jl .set2
+    cmp dword [overlay_mode], 0
+    jne .set2
+    mov eax, OV_ROUTES
+.set2:
     mov [eff_overlay], eax
     RETURN
 
@@ -4188,6 +4197,7 @@ FUNC tool_apply
 FUNC draw_tool_preview, 16
     call set_target_world
     call freehand_track
+    call route_keep
     ; a move ends when the build tool is put down
     cmp dword [tool], T_BUILD
     je .mvk
@@ -5858,6 +5868,8 @@ FUNC draw_inspect, 32
     jnz .rdone
     call inspect_road_upgrade
 .rdone:
+    ; beta: where the cars on this road come from and go
+    call route_panel
     test byte [rbx+T_FLAGS2], F2_BUSSTOP
     jz .maps
     lea rdx, [s_stop_here]
@@ -6962,6 +6974,9 @@ count_lines:
 ;  problem icons above buildings (screen positions from the renderer)
 ; ---------------------------------------------------------------------
 FUNC draw_problem_icons, 32
+    ; beta: none while a road's routes are shown
+    cmp dword [route_sel], 0
+    jge .out
     ; beta: none over the spot a building is being placed on
     mov dword [rbp-56], -1000
     mov dword [rbp-60], -1000

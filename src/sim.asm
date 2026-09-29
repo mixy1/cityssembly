@@ -32,6 +32,7 @@ OV_DESIRE_C equ 17
 OV_DESIRE_I equ 18
 OV_DESIRE_O equ 19
 OV_LAND     equ 20
+OV_ROUTES   equ 21      ; beta: the inspected road's routes
 OV_COUNT    equ 16      ; user-cyclable overlays
 
 MISC_NET    equ 1       ; road reaches the outside

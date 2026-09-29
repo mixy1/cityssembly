@@ -298,6 +298,33 @@ FUNC gen_busstop
     call finish_model
     RETURN
 
+; traffic lights for an avenue junction (beta): a pole on the corner
+; each way faces; edi 0 = green along x (red along y), 1 = the other way
+FUNC gen_signal
+    mov r12d, edi
+    BEGIN 16, 14, 470
+    MAT M_METAL
+    BOX 15,0,0,16,1,10
+    BOX 0,15,0,1,16,10
+    MAT M_DARK
+    BOX 15,0,10,16,1,14
+    BOX 0,15,10,1,16,14
+    ; the lamps
+    mov dword [vox_mat], M_SIGGO
+    test r12d, r12d
+    jz .x
+    mov dword [vox_mat], M_BEACON
+.x:
+    BOX 15,0,11,16,1,13
+    mov dword [vox_mat], M_BEACON
+    test r12d, r12d
+    jz .y
+    mov dword [vox_mat], M_SIGGO
+.y:
+    BOX 0,15,11,1,16,13
+    call finish_model
+    RETURN
+
 ; =====================================================================
 ;  low density residential
 ; =====================================================================

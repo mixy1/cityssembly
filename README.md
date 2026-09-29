@@ -143,6 +143,11 @@ Features still in testing, off unless you ask for them:
   Every home remembers its commute: long ones make people unhappy, and
   homes on them stay at level 3 ("Needs: shorter commutes"). Routes are
   found with A*, so the extra cars cost little.
+- **Traffic lights** stand on avenue junctions and show which way is
+  green.
+- **Route viewer:** inspect a road to see how many cars are on it, where
+  they come from (cyan) and where they go (green), with their routes
+  marked yellow to red by how many share them.
 - **Zone modes** (`G`): area, fill a block (click: every lot the roads
   around it reach, up to the roads) and along a road (drag along it: both
   sides, 3 deep). Lots no road reaches are marked while you drag, and the

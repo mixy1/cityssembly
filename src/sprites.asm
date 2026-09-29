@@ -95,6 +95,7 @@ spr_dirt        resd 1
 spr_rubble      resd 1
 spr_road        resd 48            ; road type * 16 + mask
 spr_busstop     resd 1
+spr_signal      resd 2          ; traffic lights: green along x / along y
 spr_construct2  resd 1
 spr_lot         resd 8
 spr_tree        resd 8
@@ -2123,6 +2124,12 @@ FUNC sprites_init
     jl .v2
     call gen_busstop
     mov [spr_busstop], eax
+    xor edi, edi
+    call gen_signal
+    mov [spr_signal], eax
+    mov edi, 1
+    call gen_signal
+    mov [spr_signal+4], eax
     call gen_construct2
     mov [spr_construct2], eax
     mov edi, 0
