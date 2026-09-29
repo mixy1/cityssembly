@@ -2116,6 +2116,11 @@ FUNC draw_welcome
     mov esi, r13d
     mov edx, 330
     mov ecx, 150
+    ; beta: a row for the difficulty
+    cmp dword [beta_on], 0
+    je .ph
+    add ecx, 20
+.ph:
     call draw_panel
     mov dword [font_scale], 2
     lea edi, [r12+165]
@@ -2129,6 +2134,10 @@ FUNC draw_welcome
     lea rdx, [s_welcome2]
     mov ecx, UI_TEXT
     call draw_text
+    ; beta: how hard the new city will be
+    lea edi, [r12+12]
+    lea esi, [r13+150]
+    call welcome_difficulty
     ; pick up where you left off
     cmp dword [has_save], 0
     je .out
@@ -6099,6 +6108,10 @@ FUNC draw_budget, 32
     mov ecx, UI_GOLD
     call draw_text
     mov dword [font_scale], 1
+    ; beta: the city's difficulty
+    lea edi, [r12+230]
+    lea esi, [r13+6]
+    call budget_difficulty
     add r13d, 28
     lea edi, [r12+10]
     mov esi, r13d

@@ -2781,3 +2781,174 @@ FUNC emergency_pause
     mov dword [sim_speed], 0
 .out:
     RETURN
+
+; =====================================================================
+;  difficulty (beta): what running a city costs
+;    Relaxed  the classic costs
+;    Normal   services cost 1.5x, more as the city grows (x2.4 at
+;             35,000 people); roads $1 / $2 / $3 a tile a month, and $1
+;             more where traffic wears them
+;    Hard     services 2x and growing twice as fast; roads 1.5x that
+; =====================================================================
+DIFF_NORMAL  equ 0
+DIFF_RELAXED equ 1
+DIFF_HARD    equ 2
+section .data
+diff_names  dq s_df0, s_df1, s_df2
+s_df0       db "Normal", 0
+s_df1       db "Relaxed", 0
+s_df2       db "Hard", 0
+s_df_lbl    db "Difficulty: ", 0
+s_df_tip    db "Relaxed: classic costs. Normal: services cost", 10
+            db "more as the city grows, roads cost upkeep and", 10
+            db "wear. Hard: all of it, much more so.", 0
+; the welcome card's order: relaxed, normal, hard
+diff_order  dd DIFF_RELAXED, DIFF_NORMAL, DIFF_HARD
+section .text
+
+; month end (beta): road and service costs by difficulty
+FUNC economy_scale
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [free_mode], 0
+    jne .out
+    mov eax, [difficulty]
+    cmp eax, DIFF_RELAXED
+    je .out
+    ; roads: a dollar per tile per lane size, and wear on busy ones
+    xor ecx, ecx
+    xor ebx, ebx
+.w:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .wn
+    cmp byte [tiles+rax+T_TRAFFIC], 160
+    jb .wn
+    inc ebx
+.wn:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .w
+    mov eax, [road_cost]
+    add eax, ebx
+    cmp dword [difficulty], DIFF_HARD
+    jne .r
+    lea eax, [rax*2+rax]
+    shr eax, 1
+.r:
+    mov [exp_roads], eax
+    ; services: x1.5 plus the size of the city (hard: x2, twice as fast)
+    mov eax, [population]
+    shl eax, 8
+    xor edx, edx
+    mov ecx, 40000
+    mov r12d, 384
+    cmp dword [difficulty], DIFF_HARD
+    jne .m
+    mov ecx, 25000
+    mov r12d, 512
+.m:
+    div ecx
+    add r12d, eax                   ; multiplier x256
+    mov eax, [exp_services]
+    imul rax, r12
+    shr rax, 8
+    mov [exp_services], eax
+    xor ebx, ebx
+.c:
+    mov eax, [exp_cat+rbx*4]
+    imul rax, r12
+    shr rax, 8
+    mov [exp_cat+rbx*4], eax
+    inc ebx
+    cmp ebx, 8
+    jl .c
+.out:
+    RETURN
+
+; the difficulty buttons on the welcome card (beta; edi x, esi y)
+FUNC welcome_difficulty
+    cmp dword [beta_on], 0
+    je .out
+    mov r12d, edi
+    mov r13d, esi
+    xor ebx, ebx
+.b:
+    imul edi, ebx, 54
+    add edi, r12d
+    mov esi, r13d
+    mov edx, 52
+    mov eax, [diff_order+rbx*4]
+    mov rcx, [diff_names+rax*8]
+    xor r8d, r8d
+    cmp eax, [difficulty]
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .n
+    mov eax, [diff_order+rbx*4]
+    mov [difficulty], eax
+.n:
+    imul edi, ebx, 54
+    add edi, r12d
+    mov esi, r13d
+    mov edx, 52
+    mov ecx, 14
+    call ui_over
+    test eax, eax
+    jz .nt
+    lea rax, [s_df_tip]
+    mov [tooltip], rax
+.nt:
+    inc ebx
+    cmp ebx, 3
+    jl .b
+.out:
+    RETURN
+
+; the budget panel's difficulty button (beta; edi x, esi y): cycles
+FUNC budget_difficulty
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [free_mode], 0
+    jne .out
+    mov r12d, edi
+    mov r13d, esi
+    call tb_reset
+    lea rdi, [s_df_lbl]
+    call tb_str
+    mov eax, [difficulty]
+    mov rdi, [diff_names+rax*8]
+    call tb_str
+    lea rsi, [textbuf]
+    lea rdi, [move_title]
+    mov ecx, 63
+    rep movsb
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 110
+    lea rcx, [move_title]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .t
+    mov eax, [difficulty]
+    inc eax
+    cmp eax, 3
+    jl .s
+    xor eax, eax
+.s:
+    mov [difficulty], eax
+.t:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 110
+    mov ecx, 14
+    call ui_over
+    test eax, eax
+    jz .out
+    lea rax, [s_df_tip]
+    mov [tooltip], rax
+.out:
+    RETURN

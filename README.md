@@ -145,6 +145,12 @@ Features still in testing, off unless you ask for them:
   found with A*, so the extra cars cost little.
 - **Traffic lights** stand on avenue junctions and show which way is
   green.
+- **Difficulty** (on the welcome card, and in the budget panel):
+  Relaxed keeps the classic costs. Normal: services cost 1.5x and more
+  as the city grows (about 2.4x at 35,000 people), roads cost $1 / $2 /
+  $3 a tile a month, $1 more where traffic wears them. Hard: services 2x
+  and growing twice as fast, roads 1.5x that. (A 68,000-people city that
+  made $76k a month makes about $18k on Normal.)
 - **Route viewer:** inspect a road to see how many cars are on it, where
   they come from (cyan) and where they go (green), with their routes
   marked yellow to red by how many share them.

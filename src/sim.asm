@@ -189,6 +189,7 @@ exp_loans       resd 1
 loan_left       resd 3                  ; months still to pay per loan
 ms_card         resd 1                  ; milestone card to show (0 none)
 free_mode       resd 1                  ; a sandbox city: money never runs out
+difficulty      resd 1                  ; beta: 0 normal, 1 relaxed, 2 hard
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 
@@ -3697,6 +3698,12 @@ FUNC month_end, 32
     cmp ecx, 3
     jl .ln
     mov [exp_loans], edx
+    ; beta: costs that grow with the city (by difficulty)
+    push rdx
+    push rdx
+    call economy_scale
+    pop rdx
+    pop rdx
     mov eax, [exp_roads]
     add eax, [exp_services]
     add eax, r12d

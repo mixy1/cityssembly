@@ -129,6 +129,7 @@ pf_report   db "PLAY report %d-%02d pop %d jobs %d money %lld", 0
 pf_report2  db " vehicles %d flow %d%% commute %d jams %d", 0
 pf_report3  db " income %d expenses %d happy %d", 0
 pf_report4  db " power %d/%d water %d/%d sewage %d reds %d", 10, 0
+pf_report5  db "PLAY spend roads %d services %d policies %d loans %d | income res %d com %d ind %d off %d other %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -872,6 +873,20 @@ FUNC play_tick, 16
     pop rax
     pop rax
     mov dword [sig_reds], 0
+    lea rdi, [pf_report5]
+    mov esi, [exp_roads]
+    mov edx, [exp_services]
+    mov ecx, [exp_policies]
+    mov r8d, [exp_loans]
+    mov r9d, [inc_class]
+    sub rsp, 8
+    push qword [inc_other]
+    push qword [inc_class+12]
+    push qword [inc_class+8]
+    push qword [inc_class+4]
+    xor eax, eax
+    CALLC printf
+    add rsp, 40
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row
