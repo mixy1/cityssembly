@@ -115,6 +115,16 @@ Features still in testing, off unless you ask for them:
   landfill to incinerator, coal to nuclear. A service gives its lot back
   to the zone it was built over when it goes.
 - **Redo:** Ctrl+Y (or Ctrl+Shift+Z).
+- **Road modes** (buttons under the road hint, or `G`): L-shape, straight
+  (or hold Shift), freehand (the road follows the pointer) and grid (drag
+  a rectangle: a road every few tiles both ways, 6-tile blocks by default
+  so every lot is in reach; Ctrl+wheel or +/- sizes the blocks). New
+  roads lay a pipe underneath (a chip turns that off). A road stopped by
+  buildings says so; with Ctrl held it goes through homes and shops.
+- **Zone modes** (`G`): area, fill a block (click: every lot the roads
+  around it reach, up to the roads) and along a road (drag along it: both
+  sides, 3 deep). Lots no road reaches are marked while you drag, and the
+  price tag says how many people or jobs the lots hold now and at level 5.
 
 ### Quality of life
 

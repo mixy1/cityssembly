@@ -1235,3 +1235,968 @@ extra_reset:
     mov dword [repl_open], 0
     pop rdi
     ret
+
+; =====================================================================
+;  road modes (beta): L-shape, straight (or Shift), freehand, grid;
+;  pipes laid under new roads; Ctrl builds through homes and shops.
+;  zone modes (beta): area, fill a block, along a road; lots too far
+;  from a road are marked, and the price tag says what will grow.
+; =====================================================================
+RM_L        equ 0
+RM_STRAIGHT equ 1
+RM_FREE     equ 2
+RM_GRID     equ 3
+ZM_AREA     equ 0
+ZM_FILL     equ 1
+ZM_ROAD     equ 2
+
+section .bss
+fh_n        resd 1                  ; freehand path so far
+fh_x        resd MAX_TL
+fh_y        resd MAX_TL
+fill_stamp  resb MAP_TILES          ; tiles taken this collect (fill_gen)
+fill_gen    resd 1
+tl_blocked  resd 1                  ; road tiles blocked by buildings
+tl_far      resd 1                  ; zoned lots out of a road's reach
+tl_farf     resb MAX_TL
+ev_keys     resd 1                  ; modifiers during this evaluation
+fill_q      resd MAX_TL
+tl_here     resb MAP_TILES
+
+section .data
+s_rm_names  dq s_rm0, s_rm1, s_rm2, s_rm3
+s_rm0       db "L-shape", 0
+s_rm1       db "Straight", 0
+s_rm2       db "Freehand", 0
+s_rm3       db "Grid", 0
+s_zm_names  dq s_zm0, s_zm1, s_zm2
+s_zm0       db "Area", 0
+s_zm1       db "Fill block", 0
+s_zm2       db "Along road", 0
+s_pipes_on  db "+ pipes: on", 0
+s_pipes_off db "+ pipes: off", 0
+s_blocks    db "Blocks: ", 0
+s_blk_sub   db "-", 0
+s_blk_add   db "+", 0
+s_blocked1  db " tiles are blocked by buildings - hold Ctrl to build", 0
+s_blocked2  db " through homes and shops.", 0
+s_far1      db " lots too far from a road", 0
+s_est1      db "~", 0
+s_est2      db " now, up to ", 0
+s_est_res   db " residents", 0
+s_est_jobs  db " jobs", 0
+s_modekey   db 6, "G: next mode", 0
+
+section .text
+
+; next generation of the fill stamps
+fill_next_gen:
+    inc dword [fill_gen]
+    mov eax, [fill_gen]
+    and eax, 255
+    jnz .ok
+    push rdi
+    push rcx
+    lea rdi, [fill_stamp]
+    mov ecx, MAP_TILES/8
+    xor eax, eax
+    rep stosq
+    pop rcx
+    pop rdi
+    mov dword [fill_gen], 1
+.ok:
+    ret
+
+; tl_push unless the tile is already in the list (fill stamps)
+; (edi x, esi y)
+tl_push_once:
+    cmp edi, MAP_W
+    jae .o
+    cmp esi, MAP_W
+    jae .o
+    mov eax, esi
+    shl eax, MAP_SHIFT
+    add eax, edi
+    mov cl, [fill_gen]
+    cmp [fill_stamp+rax], cl
+    je .o
+    mov [fill_stamp+rax], cl
+    jmp tl_push
+.o: ret
+
+; the road tool's mode right now (the tour always draws L-shapes)
+FUNC road_mode_now
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tut_step], 0
+    jge .out
+    mov eax, [set_road_mode]
+    cmp eax, RM_GRID
+    je .out
+    push rax
+    push rax
+    call keys_held
+    mov ecx, eax
+    pop rax
+    pop rax
+    test ecx, 1
+    jz .out
+    mov eax, RM_STRAIGHT
+.out:
+    RETURN
+
+; lay pipes under new roads? (beta, not in the tour)
+road_pipes_now:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .o
+    cmp dword [tut_step], 0
+    jge .o
+    mov eax, [set_road_pipes]
+.o: ret
+
+; the zone tool's mode right now
+zone_mode_now:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .o
+    cmp dword [tut_step], 0
+    jge .o
+    cmp dword [tool], T_ZONETOOL
+    jne .o
+    mov eax, [set_zone_mode]
+.o: ret
+
+; follow the pointer while a freehand road is dragged (every frame)
+FUNC freehand_track
+    cmp dword [drag_active], 0
+    je .reset
+    cmp dword [tool], T_ROAD
+    jne .reset
+    call road_mode_now
+    cmp eax, RM_FREE
+    jne .reset
+    cmp dword [fh_n], 0
+    jne .have
+    mov eax, [drag_sx]
+    mov [fh_x], eax
+    mov eax, [drag_sy]
+    mov [fh_y], eax
+    mov dword [fh_n], 1
+.have:
+    cmp dword [hover_valid], 0
+    je .out
+.step:
+    mov ebx, [fh_n]
+    mov r12d, [fh_x+rbx*4-4]
+    mov r13d, [fh_y+rbx*4-4]
+    mov eax, [hover_tx]
+    sub eax, r12d
+    mov ecx, [hover_ty]
+    sub ecx, r13d
+    mov edx, eax
+    or edx, ecx
+    jz .out
+    ; one tile toward the pointer, along the longer way first
+    mov r8d, eax
+    sar r8d, 31
+    mov r9d, eax
+    xor r9d, r8d
+    sub r9d, r8d                    ; |dx|
+    mov r8d, ecx
+    sar r8d, 31
+    mov r10d, ecx
+    xor r10d, r8d
+    sub r10d, r8d                   ; |dy|
+    cmp r9d, r10d
+    jl .sy
+    mov edx, 1
+    test eax, eax
+    jns .sx
+    neg edx
+.sx:
+    add r12d, edx
+    jmp .push
+.sy:
+    mov edx, 1
+    test ecx, ecx
+    jns .sy2
+    neg edx
+.sy2:
+    add r13d, edx
+.push:
+    ; going back over the path takes the last tile off
+    cmp ebx, 2
+    jl .add
+    cmp [fh_x+rbx*4-8], r12d
+    jne .add
+    cmp [fh_y+rbx*4-8], r13d
+    jne .add
+    dec dword [fh_n]
+    jmp .step
+.add:
+    cmp ebx, MAX_TL
+    jge .out
+    mov [fh_x+rbx*4], r12d
+    mov [fh_y+rbx*4], r13d
+    inc dword [fh_n]
+    jmp .step
+.reset:
+    mov dword [fh_n], 0
+.out:
+    RETURN
+
+; the road tool's tiles in beta modes (r14d, r15d start; r12d, r13d
+; end) -> eax 0: draw the L-shape, 1: done, 2: straight (L with the
+; end moved onto the start's row or column)
+FUNC road_collect_beta, 32
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    mov [rbp-56], edx
+    mov [rbp-60], ecx
+    call road_mode_now
+    cmp eax, RM_STRAIGHT
+    je .straight
+    cmp eax, RM_FREE
+    je .free
+    cmp eax, RM_GRID
+    je .grid
+    xor eax, eax
+    RETURN
+.straight:
+    mov eax, 2
+    RETURN
+.free:
+    xor ebx, ebx
+.fl:
+    cmp ebx, [fh_n]
+    jge .done
+    mov edi, [fh_x+rbx*4]
+    mov esi, [fh_y+rbx*4]
+    call tl_push
+    inc ebx
+    jmp .fl
+.grid:
+    ; the rectangle, with a road every set_grid_step tiles both ways
+    ; and along the far edges; roads already there are left alone
+    mov eax, [rbp-48]
+    mov ecx, [rbp-56]
+    cmp eax, ecx
+    jle .gx
+    xchg eax, ecx
+.gx:
+    mov r12d, eax                   ; x0
+    mov r13d, ecx                   ; x1
+    mov eax, [rbp-52]
+    mov ecx, [rbp-60]
+    cmp eax, ecx
+    jle .gy
+    xchg eax, ecx
+.gy:
+    mov r14d, eax                   ; y0
+    mov r15d, ecx                   ; y1
+    mov ebx, r14d
+.yl:
+    cmp ebx, r15d
+    jg .done
+    ; a row line?
+    mov eax, ebx
+    sub eax, r14d
+    xor edx, edx
+    div dword [set_grid_step]
+    xor r8d, r8d
+    test edx, edx
+    jnz .r1
+    mov r8d, 1
+.r1:
+    cmp ebx, r15d
+    jne .r2
+    mov r8d, 1
+.r2:
+    mov [rbp-64], r8d
+    mov ecx, r12d
+.xl:
+    cmp ecx, r13d
+    jg .yn
+    mov [rbp-68], ecx
+    cmp dword [rbp-64], 0
+    jne .on
+    mov eax, ecx
+    sub eax, r12d
+    xor edx, edx
+    div dword [set_grid_step]
+    test edx, edx
+    jz .on
+    cmp ecx, r13d
+    jne .xn
+.on:
+    mov edi, [rbp-68]
+    mov esi, ebx
+    call is_road
+    test eax, eax
+    jnz .xn
+    mov edi, [rbp-68]
+    mov esi, ebx
+    call tl_push
+.xn:
+    mov ecx, [rbp-68]
+    inc ecx
+    jmp .xl
+.yn:
+    inc ebx
+    jmp .yl
+.done:
+    mov eax, 1
+    RETURN
+
+; extra cost of a road tile (r12 its tile): a pipe laid under it
+road_pipe_cost:
+    xor eax, eax
+    test byte [r12+T_FLAGS2], F2_PIPE
+    jnz .o
+    push rcx
+    push rdx
+    call road_pipes_now
+    pop rdx
+    pop rcx
+    test eax, eax
+    jz .o
+    mov eax, 5
+.o: ret
+
+; can the road go through what's on this tile (r12 tile, ecx object)?
+; -> eax extra cost, or -1 if not.  Ctrl held: homes, shops and pylons
+; make way (beta).  Counts the blocked tiles.
+road_through_cost:
+    cmp dword [beta_on], 0
+    je .no
+    cmp ecx, OBJ_ZONEBLD
+    je .z
+    cmp ecx, OBJ_POWER
+    je .p
+    cmp ecx, OBJ_SERVICE
+    jne .no
+    inc dword [tl_blocked]
+    jmp .no
+.z:
+    test dword [ev_keys], 2
+    jz .blk
+    movzx eax, byte [r12+T_LEVEL]
+    imul eax, 12
+    add eax, 5
+    ret
+.p:
+    test dword [ev_keys], 2
+    jz .blk
+    mov eax, 5
+    ret
+.blk:
+    inc dword [tl_blocked]
+.no:
+    mov eax, -1
+    ret
+
+; before a road goes on a tile (r12 tile; r13d, r14d its x, y): what
+; was built there comes down (beta, Ctrl)
+FUNC road_clear_tile
+    cmp byte [r12+T_OBJ], OBJ_ZONEBLD
+    jne .out
+    mov edi, r13d
+    mov esi, r14d
+    call destroy_to_rubble
+.out:
+    RETURN
+
+; after the road tool (beta): pipes under the new roads, the rubble of
+; homes it went through swept (their zones stay), and a word about
+; tiles buildings blocked
+FUNC road_after_beta, 16
+    cmp dword [beta_on], 0
+    je .out
+    call road_pipes_now
+    mov [rbp-48], eax
+    xor ebx, ebx
+.l:
+    cmp ebx, [tl_n]
+    jge .msg
+    cmp byte [tl_ok+rbx], 0
+    je .n
+    mov r13d, [tl_x+rbx*4]
+    mov r14d, [tl_y+rbx*4]
+    mov edi, r13d
+    mov esi, r14d
+    call tile_at
+    test rax, rax
+    jz .n
+    cmp dword [rbp-48], 0
+    je .sw
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    je .sw
+    or byte [rax+T_FLAGS2], F2_PIPE
+.sw:
+    mov r15d, -1
+.sy:
+    mov r12d, -1
+.sx:
+    lea edi, [r13+r12]
+    lea esi, [r14+r15]
+    call tile_at
+    test rax, rax
+    jz .snx
+    cmp byte [rax+T_OBJ], OBJ_RUBBLE
+    jne .snx
+    cmp byte [rax+T_ZONE], 0
+    je .snx
+    mov byte [rax+T_OBJ], OBJ_NONE
+.snx:
+    inc r12d
+    cmp r12d, 1
+    jle .sx
+    inc r15d
+    cmp r15d, 1
+    jle .sy
+.n:
+    inc ebx
+    jmp .l
+.msg:
+    call wires_cleanup
+    call road_blocked_msg
+.out:
+    RETURN
+
+; "5 tiles are blocked by buildings - hold Ctrl ..."
+FUNC road_blocked_msg
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tool], T_ROAD
+    jne .out
+    cmp dword [tl_blocked], 0
+    je .out
+    test dword [ev_keys], 2
+    jnz .out
+    call tb_reset
+    movsxd rdi, dword [tl_blocked]
+    call tb_num
+    lea rdi, [s_blocked1]
+    call tb_str
+    lea rdi, [s_blocked2]
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.out:
+    RETURN
+
+; can this tile be zoned (edi x, esi y)? -> eax 1
+FUNC zonable
+    mov r12d, edi
+    mov r13d, esi
+    call tile_owned
+    test eax, eax
+    jz .no
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    test rax, rax
+    jz .no
+    cmp byte [rax+T_TERRAIN], TER_WATER
+    je .no
+    movzx ecx, byte [rax+T_OBJ]
+    cmp ecx, OBJ_NONE
+    je .y
+    cmp ecx, OBJ_TREE
+    je .y
+    cmp ecx, OBJ_RUBBLE
+    je .y
+    cmp ecx, OBJ_ZONEBLD
+    je .y
+.no:
+    xor eax, eax
+    RETURN
+.y:
+    mov eax, 1
+    RETURN
+
+; fill: every zonable lot a road reaches, connected to (edi, esi)
+; without crossing roads or buildings -> tl
+FUNC zone_fill_collect, 16
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    call fill_next_gen
+    call zonable
+    test eax, eax
+    jz .out
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call road_near
+    test eax, eax
+    jz .out
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call tl_push_once
+    xor ebx, ebx                    ; queue head (the tl list is the queue)
+.q:
+    cmp ebx, [tl_n]
+    jge .out
+    xor r14d, r14d
+.d:
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    add edi, [dir_dx+r14*4]
+    add esi, [dir_dy+r14*4]
+    mov r12d, edi
+    mov r13d, esi
+    cmp edi, MAP_W
+    jae .dn
+    cmp esi, MAP_W
+    jae .dn
+    mov eax, esi
+    shl eax, MAP_SHIFT
+    add eax, edi
+    mov cl, [fill_gen]
+    cmp [fill_stamp+rax], cl
+    je .dn
+    call zonable
+    test eax, eax
+    jz .dn
+    mov edi, r12d
+    mov esi, r13d
+    call road_near
+    test eax, eax
+    jz .dn
+    mov edi, r12d
+    mov esi, r13d
+    call tl_push_once
+.dn:
+    inc r14d
+    cmp r14d, 4
+    jl .d
+    inc ebx
+    jmp .q
+.out:
+    RETURN
+
+; along a road: from (edi, esi) to (edx, ecx) as an L, every zonable lot
+; within 3 steps of a road tile on the way -> tl
+FUNC zone_along_collect, 32
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    mov [rbp-56], edx
+    mov [rbp-60], ecx
+    call fill_next_gen
+    ; walk the L: x first, then y
+    mov r12d, [rbp-48]
+    mov r13d, [rbp-52]
+.walk:
+    ; the road under the pointer, or right next to it
+    mov edi, r12d
+    mov esi, r13d
+    call is_road
+    test eax, eax
+    jnz .lots
+    xor ebx, ebx
+.nb:
+    mov edi, r12d
+    mov esi, r13d
+    add edi, [dir_dx+rbx*4]
+    add esi, [dir_dy+rbx*4]
+    call is_road
+    test eax, eax
+    jnz .lots
+    inc ebx
+    cmp ebx, 4
+    jl .nb
+    jmp .next
+.lots:
+    ; lots within 3 steps
+    mov r15d, -3
+.dy:
+    mov r14d, -3
+.dx:
+    mov eax, r14d
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ecx, r15d
+    sar ecx, 31
+    mov edx, r15d
+    xor edx, ecx
+    sub edx, ecx
+    add eax, edx
+    cmp eax, 3
+    jg .dn
+    lea edi, [r12+r14]
+    lea esi, [r13+r15]
+    call zonable
+    test eax, eax
+    jz .dn
+    lea edi, [r12+r14]
+    lea esi, [r13+r15]
+    call tl_push_once
+.dn:
+    inc r14d
+    cmp r14d, 3
+    jle .dx
+    inc r15d
+    cmp r15d, 3
+    jle .dy
+.next:
+    cmp r12d, [rbp-56]
+    je .ydir
+    jl .xi
+    dec r12d
+    jmp .walk
+.xi:
+    inc r12d
+    jmp .walk
+.ydir:
+    cmp r13d, [rbp-60]
+    je .out
+    jl .yi
+    dec r13d
+    jmp .walk
+.yi:
+    inc r13d
+    jmp .walk
+.out:
+    RETURN
+
+; zone tool tiles in beta modes -> eax 1 if the list was made
+FUNC zone_collect_beta
+    call zone_mode_now
+    cmp eax, ZM_FILL
+    je .fill
+    cmp eax, ZM_ROAD
+    je .road
+    xor eax, eax
+    RETURN
+.fill:
+    cmp dword [hover_valid], 0
+    je .none
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    cmp dword [drag_active], 0
+    je .f1
+    mov edi, [drag_sx]
+    mov esi, [drag_sy]
+.f1:
+    call zone_fill_collect
+    mov eax, 1
+    RETURN
+.road:
+    cmp dword [hover_valid], 0
+    je .none
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    mov edx, edi
+    mov ecx, esi
+    cmp dword [drag_active], 0
+    je .r1
+    mov edi, [drag_sx]
+    mov esi, [drag_sy]
+.r1:
+    call zone_along_collect
+.none:
+    mov eax, 1
+    RETURN
+
+; a zoned lot's reach (beta): rbx its list index, (edi, esi) the tile
+; -> marks lots no road reaches
+FUNC zone_reach_mark
+    mov byte [tl_farf+rbx], 0
+    cmp dword [beta_on], 0
+    je .out
+    call road_near
+    test eax, eax
+    jnz .out
+    mov byte [tl_farf+rbx], 1
+    inc dword [tl_far]
+.out:
+    RETURN
+
+; the zone tool's notes by the cursor (beta): what may grow, what won't
+FUNC zone_notes
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tool], T_ZONETOOL
+    jne .out
+    mov eax, [tl_valid]
+    sub eax, [tl_far]
+    jle .far
+    mov r12d, eax                   ; lots that can grow
+    mov ecx, [zone_type]
+    imul ecx, ecx, 6
+    mov eax, [zone_pop+rcx*4+4]
+    imul eax, r12d
+    mov r13d, eax                   ; at level 1
+    mov eax, [zone_pop+rcx*4+20]
+    imul eax, r12d
+    mov r14d, eax                   ; at level 5
+    call tb_reset
+    lea rdi, [s_est1]
+    call tb_str
+    movsxd rdi, r13d
+    call tb_num
+    lea rdi, [s_est2]
+    call tb_str
+    movsxd rdi, r14d
+    call tb_num
+    lea rdi, [s_est_res]
+    mov eax, [zone_type]
+    cmp byte [zone_class+rax], ZC_RES
+    je .e
+    lea rdi, [s_est_jobs]
+.e:
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_TEXT
+    mov edx, 1
+    call cursor_note
+.far:
+    cmp dword [tl_far], 0
+    je .out
+    call tb_reset
+    movsxd rdi, dword [tl_far]
+    call tb_num
+    lea rdi, [s_far1]
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_BAD
+    mov edx, 2
+    call cursor_note
+.out:
+    RETURN
+
+; mode buttons under the road / zone hint (beta) at y edi -> eax rows
+FUNC tool_mode_chips, 32
+    mov [rbp-48], edi
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tut_step], 0
+    jge .out
+    cmp dword [tool], T_ROAD
+    je .road
+    cmp dword [tool], T_ZONETOOL
+    je .zone
+    xor eax, eax
+    jmp .out
+.road:
+    xor ebx, ebx
+.rb:
+    imul edi, ebx, 46
+    add edi, 10
+    mov esi, [rbp-48]
+    mov edx, 44
+    mov rcx, [s_rm_names+rbx*8]
+    xor r8d, r8d
+    cmp ebx, [set_road_mode]
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .rbn
+    mov [set_road_mode], ebx
+    call settings_save
+.rbn:
+    inc ebx
+    cmp ebx, 4
+    jl .rb
+    ; pipes, and the grid's block size
+    mov esi, [rbp-48]
+    add esi, 17
+    mov edi, 10
+    mov edx, 80
+    lea rcx, [s_pipes_on]
+    cmp dword [set_road_pipes], 0
+    jne .p1
+    lea rcx, [s_pipes_off]
+.p1:
+    mov r8d, [set_road_pipes]
+    call text_button
+    test eax, eax
+    jz .p2
+    xor dword [set_road_pipes], 1
+    call settings_save
+.p2:
+    cmp dword [set_road_mode], RM_GRID
+    jne .two
+    call tb_reset
+    lea rdi, [s_blocks]
+    call tb_str
+    mov eax, [set_grid_step]
+    dec eax
+    movsxd rdi, eax
+    call tb_num
+    mov edi, 100
+    mov esi, [rbp-48]
+    add esi, 20
+    mov ecx, UI_TEXT
+    call tb_draw
+    mov edi, 150
+    mov esi, [rbp-48]
+    add esi, 17
+    mov edx, 16
+    lea rcx, [s_blk_sub]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .g1
+    mov edi, -1
+    call grid_step_add
+.g1:
+    mov edi, 168
+    mov esi, [rbp-48]
+    add esi, 17
+    mov edx, 16
+    lea rcx, [s_blk_add]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .two
+    mov edi, 1
+    call grid_step_add
+.two:
+    mov eax, 2
+    jmp .out
+.zone:
+    xor ebx, ebx
+.zb:
+    imul edi, ebx, 60
+    add edi, 10
+    mov esi, [rbp-48]
+    mov edx, 58
+    mov rcx, [s_zm_names+rbx*8]
+    xor r8d, r8d
+    cmp ebx, [set_zone_mode]
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .zbn
+    mov [set_zone_mode], ebx
+    call settings_save
+.zbn:
+    inc ebx
+    cmp ebx, 3
+    jl .zb
+    mov eax, 1
+.out:
+    RETURN
+
+; grid block size +/- edi (3..12 tiles apart)
+grid_step_add:
+    mov eax, [set_grid_step]
+    add eax, edi
+    CLAMP eax, 3, 12
+    mov [set_grid_step], eax
+    jmp settings_save
+
+; G: the next mode of the road or zone tool (beta) -> eax 1 if taken
+FUNC tool_next_mode
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tool], T_ROAD
+    jne .z
+    mov eax, [set_road_mode]
+    inc eax
+    and eax, 3
+    mov [set_road_mode], eax
+    jmp .saved
+.z:
+    cmp dword [tool], T_ZONETOOL
+    jne .out
+    mov eax, [set_zone_mode]
+    inc eax
+    cmp eax, 3
+    jl .z1
+    xor eax, eax
+.z1:
+    mov [set_zone_mode], eax
+.saved:
+    call settings_save
+    mov eax, 1
+.out:
+    RETURN
+
+; rows of mode buttons under the tool hint (beta) -> eax
+tool_mode_rows:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .o
+    cmp dword [welcome], 0
+    jne .o
+    cmp dword [tut_step], 0
+    jge .o
+    cmp dword [tool], T_ROAD
+    jne .z
+    mov eax, 2
+    ret
+.z: cmp dword [tool], T_ZONETOOL
+    jne .o
+    mov eax, 1
+.o: ret
+
+; the tool list as a map (tl_here), for quick "is this tile in the
+; drag" questions while previewing
+tl_here_mark:
+    xor ecx, ecx
+.l: cmp ecx, [tl_n]
+    jge .o
+    mov eax, [tl_y+rcx*4]
+    cmp eax, MAP_W
+    jae .n
+    shl eax, MAP_SHIFT
+    mov edx, [tl_x+rcx*4]
+    cmp edx, MAP_W
+    jae .n
+    add eax, edx
+    mov byte [tl_here+rax], 1
+.n: inc ecx
+    jmp .l
+.o: ret
+
+tl_here_clear:
+    xor ecx, ecx
+.l: cmp ecx, [tl_n]
+    jge .o
+    mov eax, [tl_y+rcx*4]
+    cmp eax, MAP_W
+    jae .n
+    shl eax, MAP_SHIFT
+    mov edx, [tl_x+rcx*4]
+    cmp edx, MAP_W
+    jae .n
+    add eax, edx
+    mov byte [tl_here+rax], 0
+.n: inc ecx
+    jmp .l
+.o: ret
+
+; Ctrl+wheel over the grid road tool: blocks bigger / smaller (beta)
+; -> eax 1 if the wheel was taken
+FUNC grid_wheel
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tool], T_ROAD
+    jne .out
+    cmp dword [set_road_mode], RM_GRID
+    jne .out
+    call keys_held
+    test eax, 2
+    jz .no
+    mov edi, 1
+    cmp dword [event_buf+EV_MW_Y], 0
+    jg .a
+    mov edi, -1
+.a:
+    call grid_step_add
+    mov eax, 1
+    RETURN
+.no:
+    xor eax, eax
+.out:
+    RETURN

@@ -31,6 +31,8 @@
 ;     echo TEXT           print a line
 ;     select N            choose menu item N (a BK_* building, 100+ tools)
 ;     press LABEL         click the button whose label starts with LABEL
+;     down X Y / up X Y   press / let go of the left button on a tile (a
+;                         drag in steps: down, move ..., shot, up)
 ;     quit
 ; =====================================================================
 %ifndef WEB
@@ -76,7 +78,7 @@ pf_shot     db "PLAY shot %s", 10, 0
 play_cmds   dq pc_new, pc_rich, pc_money, pc_center, pc_zoom, pc_key, pc_hold
             dq pc_release, pc_move, pc_click, pc_drag, pc_uimove, pc_uiclick
             dq pc_rclick, pc_wait, pc_days, pc_shot, pc_tile, pc_state, pc_echo
-            dq pc_quit, pc_select, pc_press, 0
+            dq pc_quit, pc_select, pc_press, pc_down, pc_up, 0
 pc_new      db "new", 0
 pc_rich     db "rich", 0
 pc_money    db "money", 0
@@ -100,6 +102,8 @@ pc_echo     db "echo", 0
 pc_quit     db "quit", 0
 pc_select   db "select", 0
 pc_press    db "press", 0
+pc_down     db "down", 0
+pc_up       db "up", 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -471,6 +475,10 @@ FUNC play_tick, 16
     je .select
     cmp ebx, 22
     je .press
+    cmp ebx, 23
+    je .down
+    cmp ebx, 24
+    je .up
     ; quit
     mov dword [running], 0
     jmp .done
@@ -736,6 +744,26 @@ FUNC play_tick, 16
     test eax, eax
     jz .more
     mov dword [play_wait], 4
+    jmp .done
+.down:
+.up:
+    cmp dword [play_t], 0
+    jne .du1
+    mov edi, 1
+    call play_tile_win
+    mov edi, eax
+    mov esi, edx
+    call bot_move
+    jmp .more
+.du1:
+    cmp dword [play_t], 2
+    jl .more
+    mov edi, 1
+    xor esi, esi
+    cmp ebx, 23
+    sete sil
+    call bot_button
+    mov dword [play_wait], 3
     jmp .done
 .more:
     inc dword [play_t]

@@ -25,7 +25,7 @@ PANEL_SETTINGS equ 6
 PANEL_SAVE     equ 7
 PANEL_LOAD     equ 8
 
-MAX_TL      equ 1100
+MAX_TL      equ 4096
 NOTIFS      equ 5
 DOCK_BTN    equ 22
 
@@ -1051,6 +1051,13 @@ FUNC tool_collect, 16
     mov dword [tl_n], 0
     mov r12d, [hover_tx]
     mov r13d, [hover_ty]
+    ; beta: zone fill / along a road
+    cmp dword [tool], T_ZONETOOL
+    jne .nzb
+    call zone_collect_beta
+    test eax, eax
+    jnz .out
+.nzb:
     cmp dword [drag_active], 0
     je .single
     mov r14d, [drag_sx]
@@ -1111,6 +1118,37 @@ FUNC tool_collect, 16
     inc ebx
     jmp .ryl
 .line:
+    ; beta: straight, freehand and grid roads
+    cmp dword [tool], T_ROAD
+    jne .lineL
+    mov edi, r14d
+    mov esi, r15d
+    mov edx, r12d
+    mov ecx, r13d
+    call road_collect_beta
+    cmp eax, 1
+    je .out
+    cmp eax, 2
+    jne .lineL
+    ; straight: the end moves onto the start's row or column
+    mov eax, r12d
+    sub eax, r14d
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ecx, r13d
+    sub ecx, r15d
+    mov edx, ecx
+    sar edx, 31
+    xor ecx, edx
+    sub ecx, edx
+    cmp eax, ecx
+    jl .stv
+    mov r13d, r15d
+    jmp .lineL
+.stv:
+    mov r12d, r14d
+.lineL:
     ; L shape: along the longer axis first
     mov eax, r12d
     sub eax, r14d
@@ -1265,18 +1303,16 @@ FUNC preview_road_mask
     pop rsi
     test eax, eax
     jnz .y
-    ; in path?
-    xor ecx, ecx
-.p:
-    cmp ecx, [tl_n]
-    jge .n
-    cmp [tl_x+rcx*4], r15d
-    jne .pn
-    cmp [tl_y+rcx*4], esi
-    je .y
-.pn:
-    inc ecx
-    jmp .p
+    ; in the drag? (tl_here, marked for the preview)
+    cmp r15d, MAP_W
+    jae .n
+    cmp esi, MAP_W
+    jae .n
+    mov eax, esi
+    shl eax, MAP_SHIFT
+    add eax, r15d
+    cmp byte [tl_here+rax], 0
+    je .n
 .y:
     bts ebx, r14d
 .n:
@@ -1901,6 +1937,10 @@ set_edge      dd 0
 set_autosave  dd 1
 set_light     dd 1          ; sun shadows, clouds and night glow
 set_tutdone   dd 0          ; the first-time tour was finished or skipped
+set_road_mode dd 0          ; beta: L-shape, straight, freehand, grid
+set_grid_step dd 7          ; beta: grid roads this far apart
+set_road_pipes dd 1         ; beta: pipes go under new roads
+set_zone_mode dd 0          ; beta: area, fill a block, along a road
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
@@ -2686,7 +2726,7 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
-SET_N     equ 7                 ; append new settings at the end
+SET_N     equ 11                ; append new settings at the end
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
@@ -3335,6 +3375,10 @@ FUNC tool_evaluate, 32
     mov dword [tl_cost], 0
     mov dword [tl_valid], 0
     mov dword [last_tool_err], 0
+    mov dword [tl_blocked], 0
+    mov dword [tl_far], 0
+    call keys_held
+    mov [ev_keys], eax
     cmp dword [tool], T_BUILD
     je .build
     mov dword [pl_n], 0
@@ -3397,11 +3441,21 @@ FUNC tool_evaluate, 32
     cmp ecx, OBJ_TREE
     je .rw
     cmp ecx, OBJ_RUBBLE
-    jne .n
+    je .rw
+    ; beta: Ctrl builds through homes, shops and pylons
+    call road_through_cost
+    cmp eax, -1
+    je .n
+    add r13d, eax
 .rw:
     cmp edx, TER_WATER
-    jne .set
+    jne .rwl
     imul r13d, r13d, 3              ; bridges
+    jmp .set
+.rwl:
+    ; beta: a pipe underneath
+    call road_pipe_cost
+    add r13d, eax
     jmp .set
 .t1:
     cmp eax, T_POWERLN
@@ -3441,6 +3495,10 @@ FUNC tool_evaluate, 32
     cmp al, [r12+T_ZONE]
     je .n
     mov r13d, 5
+    ; beta: is it in a road's reach?
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call zone_reach_mark
     jmp .set
 .t3:
     cmp eax, T_DEZONE
@@ -3674,6 +3732,7 @@ FUNC tool_apply
     mov eax, [tool]
     cmp eax, T_ROAD
     jne .a1
+    call road_clear_tile
     mov byte [r12+T_OBJ], OBJ_ROAD
     mov byte [r12+T_ZONE], 0
     and byte [r12+T_FLAGS], F_HIGHWAY
@@ -3813,6 +3872,10 @@ FUNC tool_apply
     inc ebx
     jmp .l
 .done:
+    cmp dword [tool], T_ROAD
+    jne .dnr
+    call road_after_beta
+.dnr:
     cmp dword [tool], T_BULLDOZE
     jne .snd
     call wires_cleanup
@@ -3988,6 +4051,7 @@ FUNC tool_apply
     mov ecx, -1
     call notify
 .e3:
+    call road_blocked_msg
     mov edi, SFX_ERROR
     call sfx_play
     RETURN
@@ -3997,6 +4061,7 @@ FUNC tool_apply
 ; ---------------------------------------------------------------------
 FUNC draw_tool_preview, 16
     call set_target_world
+    call freehand_track
     ; a move ends when the build tool is put down
     cmp dword [tool], T_BUILD
     je .mvk
@@ -4036,10 +4101,11 @@ FUNC draw_tool_preview, 16
     je .bprev
     cmp dword [tool], T_POWERLN
     je .plprev
+    call tl_here_mark
     xor ebx, ebx
 .l:
     cmp ebx, [tl_n]
-    jge .sel
+    jge .ldone
     mov r12d, [tl_x+rbx*4]
     mov r13d, [tl_y+rbx*4]
     mov edi, r12d
@@ -4077,6 +4143,10 @@ FUNC draw_tool_preview, 16
 .gz:
     cmp eax, T_ZONETOOL
     jne .gd
+    ; beta: a lot no road reaches won't grow
+    mov ecx, RAMP(R_YELLOW, 6)
+    cmp byte [tl_farf+rbx], 0
+    jne .dia
     mov eax, [zone_type]
     mov edi, [spr_lot+rax*4]
     jmp .ghost
@@ -4105,6 +4175,9 @@ FUNC draw_tool_preview, 16
 .n:
     inc ebx
     jmp .l
+.ldone:
+    call tl_here_clear
+    jmp .sel
 .plprev:
     mov dword [blit_tint], TINT_KEEP
     xor ebx, ebx
@@ -6455,6 +6528,14 @@ FUNC draw_tool_hint, 16
     jne .h2
     add ecx, 20                     ; room for the type buttons
 .h2:
+    ; beta: room for the mode buttons
+    push rcx
+    push rcx
+    call tool_mode_rows
+    pop rcx
+    pop rcx
+    imul eax, eax, 17
+    add ecx, eax
     mov [rbp-48], ecx
     mov edi, 4
     mov esi, 42
@@ -6481,6 +6562,16 @@ FUNC draw_tool_hint, 16
     mov ecx, UI_DIM
     call draw_text
 .out:
+    ; beta: the road and zone modes
+    call tool_mode_rows
+    test eax, eax
+    jz .nmr
+    imul eax, eax, 17
+    mov edi, [rbp-48]
+    add edi, 42-4
+    sub edi, eax
+    call tool_mode_chips
+.nmr:
     cmp dword [tool], T_UPGRADE
     jne .o2
     cmp dword [welcome], 0
@@ -6584,6 +6675,7 @@ FUNC draw_cursor_cost
     lea esi, [r14+2]
     lea rdx, [textbuf]
     call draw_text
+    call zone_notes
     ; beta: what comes down to make room
     cmp dword [beta_on], 0
     je .out
@@ -7795,6 +7887,11 @@ FUNC ui_key
     call notify
     jmp .out
 .nh:
+    cmp eax, SC_G
+    jne .ng
+    call tool_next_mode
+    jmp .out
+.ng:
     cmp eax, SC_SPACE
     jne .k2
     cmp dword [sim_speed], 0

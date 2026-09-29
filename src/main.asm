@@ -857,6 +857,10 @@ FUNC poll_events
 .nbu:
     cmp eax, SDL_MOUSEWHEEL
     jne .nwh
+    ; beta: Ctrl+wheel sizes the grid of the road tool
+    call grid_wheel
+    test eax, eax
+    jnz .next
     mov eax, [event_buf+EV_MW_Y]
     mov edi, [zoom]
     test eax, eax
