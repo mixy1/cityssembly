@@ -33,6 +33,7 @@
 ;     press LABEL         click the button whose label starts with LABEL
 ;     down X Y / up X Y   press / let go of the left button on a tile (a
 ;                         drag in steps: down, move ..., shot, up)
+;     poke X Y OFF VALUE  set byte OFF of a tile record (test setups)
 ;     quit
 ; =====================================================================
 %ifndef WEB
@@ -78,7 +79,7 @@ pf_shot     db "PLAY shot %s", 10, 0
 play_cmds   dq pc_new, pc_rich, pc_money, pc_center, pc_zoom, pc_key, pc_hold
             dq pc_release, pc_move, pc_click, pc_drag, pc_uimove, pc_uiclick
             dq pc_rclick, pc_wait, pc_days, pc_shot, pc_tile, pc_state, pc_echo
-            dq pc_quit, pc_select, pc_press, pc_down, pc_up, 0
+            dq pc_quit, pc_select, pc_press, pc_down, pc_up, pc_poke, 0
 pc_new      db "new", 0
 pc_rich     db "rich", 0
 pc_money    db "money", 0
@@ -104,6 +105,7 @@ pc_select   db "select", 0
 pc_press    db "press", 0
 pc_down     db "down", 0
 pc_up       db "up", 0
+pc_poke     db "poke", 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -479,6 +481,8 @@ FUNC play_tick, 16
     je .down
     cmp ebx, 24
     je .up
+    cmp ebx, 25
+    je .poke
     ; quit
     mov dword [running], 0
     jmp .done
@@ -744,6 +748,17 @@ FUNC play_tick, 16
     test eax, eax
     jz .more
     mov dword [play_wait], 4
+    jmp .done
+.poke:
+    mov edi, [play_arg+4]
+    mov esi, [play_arg+8]
+    call tile_at
+    test rax, rax
+    jz .done
+    mov ecx, [play_arg+12]
+    and ecx, 31
+    mov edx, [play_arg+16]
+    mov [rax+rcx], dl
     jmp .done
 .down:
 .up:

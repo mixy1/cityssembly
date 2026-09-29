@@ -31,6 +31,9 @@ fit_nanch   resd 1
 fit_anch    resd 16
 repl_open   resd 1                  ; the inspector's "replace with" list
 repl_scroll resd 1
+BOOKMARKS   equ 4
+bookmarks   resd BOOKMARKS*3        ; x, y, zoom (zoom 0: unset)
+cam_prev    resd 3                  ; where the view was before a jump
 moving      resd 1                  ; the build tool is moving move_from
 move_title  resb 64
 
@@ -1261,6 +1264,11 @@ extra_reset:
     mov dword [move_from], -1
     mov dword [moving], 0
     mov dword [repl_open], 0
+    lea rdi, [bookmarks]
+    mov ecx, BOOKMARKS*3
+    xor eax, eax
+    rep stosd
+    mov dword [cam_prev+8], 0
     pop rdi
     ret
 
@@ -2571,4 +2579,205 @@ FUNC build_many
     mov edi, SFX_PLACE
     call sfx_play
     call cost_float
+    RETURN
+
+; =====================================================================
+;  bookmarks and the way back (beta), assists (beta)
+; =====================================================================
+section .data
+s_bm_set    db "View marked - Shift+", 0
+s_bm_set2   db " comes back here.", 0
+s_bm_none   db "No view marked on that key yet (Ctrl+number marks one).", 0
+s_rubble_n  db " piles of rubble swept up.", 0
+s_aband_n   db " abandoned buildings cleared away.", 0
+section .text
+
+; remember the view before a jump (Backspace comes back)
+cam_remember:
+    push rax
+    mov eax, [cam_x]
+    mov [cam_prev], eax
+    mov eax, [cam_y]
+    mov [cam_prev+4], eax
+    mov eax, [zoom]
+    mov [cam_prev+8], eax
+    pop rax
+    ret
+
+; the same, keeping edi / esi (a jump about to happen)
+cam_remember_keep:
+    jmp cam_remember
+
+; Backspace: back to the view before the last jump
+FUNC cam_back
+    cmp dword [beta_on], 0
+    je .out
+    mov eax, [cam_prev+8]
+    test eax, eax
+    jz .out
+    ; swap, so Backspace again returns
+    mov r12d, [cam_x]
+    mov r13d, [cam_y]
+    mov r14d, [zoom]
+    mov edi, eax
+    call video_set_zoom
+    mov eax, [cam_prev]
+    mov [cam_x], eax
+    mov eax, [cam_prev+4]
+    mov [cam_y], eax
+    call camera_clamp
+    mov [cam_prev], r12d
+    mov [cam_prev+4], r13d
+    mov [cam_prev+8], r14d
+.out:
+    RETURN
+
+; Ctrl+1..4: mark this view; Shift+1..4: go to the marked view (beta)
+; (edi scancode) -> eax 1 if taken
+FUNC bookmark_key
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp edi, SC_1
+    jl .out
+    cmp edi, SC_1+BOOKMARKS-1
+    jg .out
+    lea ebx, [rdi-SC_1]
+    imul ebx, ebx, 12
+    test dword [key_mod], 0xC0
+    jnz .mark
+    test dword [key_mod], 3
+    jz .out
+    ; go there
+    mov eax, [bookmarks+rbx+8]
+    test eax, eax
+    jz .none
+    call cam_remember
+    mov edi, [bookmarks+rbx+8]
+    call video_set_zoom
+    mov eax, [bookmarks+rbx]
+    mov [cam_x], eax
+    mov eax, [bookmarks+rbx+4]
+    mov [cam_y], eax
+    call camera_clamp
+    mov eax, 1
+    RETURN
+.none:
+    lea rdi, [s_bm_none]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov eax, 1
+    RETURN
+.mark:
+    mov eax, [cam_x]
+    mov [bookmarks+rbx], eax
+    mov eax, [cam_y]
+    mov [bookmarks+rbx+4], eax
+    mov eax, [zoom]
+    mov [bookmarks+rbx+8], eax
+    call tb_reset
+    lea rdi, [s_bm_set]
+    call tb_str
+    mov eax, ebx
+    xor edx, edx
+    mov ecx, 12
+    div ecx
+    lea edi, [rax+'1']
+    call tb_char
+    lea rdi, [s_bm_set2]
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_GOOD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov eax, 1
+.out:
+    RETURN
+
+; month end (beta): abandoned buildings cleared, rubble swept
+FUNC assists_month, 16
+    cmp dword [beta_on], 0
+    je .out
+    mov dword [rbp-48], 0           ; cleared
+    mov dword [rbp-52], 0           ; swept
+    xor ebx, ebx
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    lea r12, [tiles+rax]
+    movzx ecx, byte [r12+T_OBJ]
+    cmp ecx, OBJ_ZONEBLD
+    jne .rb
+    cmp dword [set_clear_abandoned], 0
+    je .n
+    test byte [r12+T_FLAGS], F_ABANDON
+    jz .n
+    test byte [r12+T_FLAGS], F_ANCHOR
+    jz .n
+    test byte [r12+T_FLAGS], F_FIRE
+    jnz .n
+    mov edi, ebx
+    and edi, MAP_W-1
+    mov esi, ebx
+    shr esi, MAP_SHIFT
+    call destroy_to_rubble
+    inc dword [rbp-48]
+    jmp .n
+.rb:
+    cmp ecx, OBJ_RUBBLE
+    jne .n
+    cmp dword [set_sweep_rubble], 0
+    je .n
+    mov byte [r12+T_OBJ], OBJ_NONE
+    inc dword [rbp-52]
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+    ; the cleared buildings' rubble goes at once (zones stay)
+    cmp dword [rbp-48], 0
+    je .msg
+    xor ebx, ebx
+.c:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_RUBBLE
+    jne .cn
+    cmp byte [tiles+rax+T_ZONE], 0
+    je .cn
+    mov byte [tiles+rax+T_OBJ], OBJ_NONE
+.cn:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .c
+    call tb_reset
+    movsxd rdi, dword [rbp-48]
+    call tb_num
+    lea rdi, [s_aband_n]
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.msg:
+    mov dword [net_dirty], 1
+.out:
+    RETURN
+
+; pause for an emergency (beta, if asked for)
+FUNC emergency_pause
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [set_emerg_pause], 0
+    je .out
+    cmp dword [sim_speed], 0
+    je .out
+    mov eax, [sim_speed]
+    mov [saved_speed], eax
+    mov dword [sim_speed], 0
+.out:
     RETURN

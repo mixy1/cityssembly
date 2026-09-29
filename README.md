@@ -129,6 +129,12 @@ Features still in testing, off unless you ask for them:
   and everything is unlocked.
 - **City files on the web** (menu): download the city you're playing, or
   open a `.sav` file from your computer.
+- **Bookmarks:** Ctrl+1..4 marks the view, Shift+1..4 goes back to it
+  (saved with the city). Backspace returns to where you were before the
+  last jump (bookmark, notification, Home).
+- **Assists** (Settings): clear abandoned buildings away every month (on),
+  sweep up rubble every month (on), pause for emergencies - fires,
+  meteors, an empty treasury (off).
 - **Zone modes** (`G`): area, fill a block (click: every lot the roads
   around it reach, up to the roads) and along a road (drag along it: both
   sides, 3 deep). Lots no road reaches are marked while you drag, and the

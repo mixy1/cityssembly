@@ -361,6 +361,9 @@ s_st_light  db "Lighting: ", 0
 s_st_auto   db "Autosave: ", 0
 s_st_auto1  db "every 3 months", 0
 s_st_back   db "Back", 0
+s_st_abandon db "Clear abandoned buildings: ", 0
+s_st_rubble db "Sweep up rubble: ", 0
+s_st_epause db "Pause for emergencies: ", 0
 s_autosaved db "Autosaved.", 0
 s_on        db "on", 0
 s_off       db "off", 0
@@ -858,6 +861,7 @@ FUNC draw_notifications
     mov dword [notif_time+rbx*4], 1     ; dismiss
     cmp dword [notif_tx+rbx*4], 0
     jl .t
+    call cam_remember
     mov edi, [notif_tx+rbx*4]
     mov esi, [notif_ty+rbx*4]
     call camera_center_tile
@@ -1736,21 +1740,29 @@ FUNC ui_slider, 16
     RETURN
 
 FUNC draw_settings, 16
+    ; beta: three more rows (the assists)
+    mov eax, 226
+    cmp dword [beta_on], 0
+    je .h
+    add eax, 3*18
+.h:
+    mov [rbp-48], eax
     mov r12d, [ui_w]
     sub r12d, 260
     shr r12d, 1
     mov r13d, [ui_h]
-    sub r13d, 232
+    sub r13d, [rbp-48]
+    sub r13d, 6
     shr r13d, 1
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 226
+    mov ecx, [rbp-48]
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 226
+    mov ecx, [rbp-48]
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+130]
@@ -1890,6 +1902,54 @@ FUNC draw_settings, 16
     jz .b5
     xor dword [tod_lock], 1
 .b5:
+    ; beta: assists
+    cmp dword [beta_on], 0
+    je .b55
+    call tb_reset
+    lea rdi, [s_st_abandon]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_clear_abandoned], 0
+    jne .as1
+    lea rdi, [s_off]
+.as1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .as2
+    xor dword [set_clear_abandoned], 1
+    mov dword [settings_dirty], 1
+.as2:
+    call tb_reset
+    lea rdi, [s_st_rubble]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_sweep_rubble], 0
+    jne .as3
+    lea rdi, [s_off]
+.as3:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .as4
+    xor dword [set_sweep_rubble], 1
+    mov dword [settings_dirty], 1
+.as4:
+    call tb_reset
+    lea rdi, [s_st_epause]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_emerg_pause], 0
+    jne .as5
+    lea rdi, [s_off]
+.as5:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b55
+    xor dword [set_emerg_pause], 1
+    mov dword [settings_dirty], 1
+.b55:
     call tb_reset
     lea rdi, [s_m_full]
     call tb_str
@@ -1984,6 +2044,9 @@ set_road_mode dd 0          ; beta: L-shape, straight, freehand, grid
 set_grid_step dd 7          ; beta: grid roads this far apart
 set_road_pipes dd 1         ; beta: pipes go under new roads
 set_zone_mode dd 0          ; beta: area, fill a block, along a road
+set_clear_abandoned dd 1    ; beta: abandoned buildings are cleared away
+set_sweep_rubble dd 1       ; beta: rubble is swept up every month
+set_emerg_pause dd 0        ; beta: fires, meteors, an empty treasury pause
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
@@ -2598,6 +2661,9 @@ save_chunks:
     db "SZON"
     dq svc_zone
     dd MAP_TILES
+    db "BKMK"
+    dq bookmarks
+    dd BOOKMARKS*12
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 2
 SC_SIMS equ 3
@@ -2769,7 +2835,7 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
-SET_N     equ 11                ; append new settings at the end
+SET_N     equ 14                ; append new settings at the end
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
@@ -3276,6 +3342,7 @@ FUNC issue_visit
     shr esi, MAP_SHIFT
     mov [sel_x], edi
     mov [sel_y], esi
+    call cam_remember_keep
     call camera_center_tile
     mov dword [tool], T_INSPECT
     mov edi, SFX_CLICK
@@ -6825,6 +6892,7 @@ FUNC budget_services_tip
 
 ; Home: back to the middle of the city (its buildings' centre)
 FUNC camera_home
+    call cam_remember
     xor ebx, ebx
     xor r12, r12                    ; sum x
     xor r13, r13                    ; sum y
@@ -7881,6 +7949,16 @@ FUNC ui_key
     mov dword [panel], PANEL_MENU
     jmp .out
 .k1:
+    ; beta: Ctrl+1..4 marks the view, Shift+1..4 goes back to it
+    push rax
+    push rax
+    mov edi, eax
+    call bookmark_key
+    mov ecx, eax
+    pop rax
+    pop rax
+    test ecx, ecx
+    jnz .out
     ; zones 1..6
     cmp eax, SC_1
     jl .nz
@@ -7960,6 +8038,11 @@ FUNC ui_key
     call eyedropper
     jmp .out
 .ne:
+    cmp eax, SC_BACKSPACE
+    jne .nbk
+    call cam_back
+    jmp .out
+.nbk:
     cmp eax, SC_SPACE
     jne .k2
     cmp dword [sim_speed], 0

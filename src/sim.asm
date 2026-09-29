@@ -3698,6 +3698,7 @@ FUNC month_end, 32
     mov edx, -1
     mov ecx, -1
     call notify
+    call emergency_pause
 .solvent:
     mov eax, [hist_count]
     and eax, 63
@@ -3711,6 +3712,7 @@ FUNC month_end, 32
     inc dword [ext_demand]
 .ed:
     call age_buildings
+    call assists_month
     call check_milestone
     call random_event
     call autosave_tick
@@ -3942,6 +3944,7 @@ FUNC random_event
     jg .nofire
     or byte [r13+T_FLAGS], F_FIRE
     mov byte [r13+T_TIMER], 0
+    call emergency_pause
     lea rdi, [msg_fire]
     mov esi, UI_BAD
     mov edx, r12d
@@ -3981,6 +3984,11 @@ FUNC random_event
     and edi, MAP_W-1
     mov esi, eax
     shr esi, MAP_SHIFT
+    push rdi
+    push rsi
+    call emergency_pause
+    pop rsi
+    pop rdi
     call meteor_strike
 .out:
     RETURN
