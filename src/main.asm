@@ -1462,6 +1462,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "sim.asm"
 %include "traffic.asm"
 %include "traffic2.asm"
+%include "requests.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

@@ -190,6 +190,12 @@ loan_left       resd 3                  ; months still to pay per loan
 ms_card         resd 1                  ; milestone card to show (0 none)
 free_mode       resd 1                  ; a sandbox city: money never runs out
 difficulty      resd 1                  ; beta: 0 normal, 1 relaxed, 2 hard
+req_kind        resd 1                  ; beta: the council's request (RQ_*)
+req_target      resd 1
+req_due         resd 1                  ; the month it's due (year*12+month)
+req_reward      resd 1
+req_last        resd 1                  ; the kind asked last
+req_cool        resd 1                  ; months until the next request
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 
@@ -3739,6 +3745,7 @@ FUNC month_end, 32
 .ed:
     call age_buildings
     call assists_month
+    call requests_month
     call check_milestone
     call random_event
     call autosave_tick

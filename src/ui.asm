@@ -1388,6 +1388,10 @@ FUNC existing_rings
 ; =====================================================================
 
 FUNC draw_goal
+    ; beta: the council's request, once the goals are done
+    call draw_request
+    test eax, eax
+    jnz .out
     mov eax, [goal_index]
     cmp eax, GOAL_COUNT
     jg .out

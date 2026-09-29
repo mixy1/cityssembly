@@ -151,6 +151,10 @@ Features still in testing, off unless you ask for them:
   $3 a tile a month, $1 more where traffic wears them. Hard: services 2x
   and growing twice as fast, roads 1.5x that. (A 68,000-people city that
   made $76k a month makes about $18k on Normal.)
+- **Council requests:** once the advisor's goals are done, the council
+  asks for what the city needs now - fewer jams, shorter commutes,
+  happier people, water for every home, cleaner air, more bus riders, or
+  growth - with a deadline and a reward of about three months' profit.
 - **Route viewer:** inspect a road to see how many cars are on it, where
   they come from (cyan) and where they go (green), with their routes
   marked yellow to red by how many share them.
