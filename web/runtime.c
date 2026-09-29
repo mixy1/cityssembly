@@ -329,6 +329,15 @@ void ext_web_bench(void) {
 #endif
 }
 
+// ?beta: features still in testing are switched on
+void ext_web_beta(void) {
+#ifdef __EMSCRIPTEN__
+    RET((uint32_t)EM_ASM_INT({ return /[?&]beta/.test(location.search) ? 1 : 0; }));
+#else
+    RET(getenv("CS_BETA") ? 1 : 0);
+#endif
+}
+
 // a city opened by link: the shell fetched it into /save/shared.sav
 void ext_web_open(void) {
 #ifdef __EMSCRIPTEN__

@@ -368,6 +368,7 @@ s_loaded    db "City loaded.", 0
 s_loadfail  db "No saved city found.", 0
 s_savefile  db "city.sav", 0
 s_paused    db "PAUSED", 0
+s_beta      db "BETA", 0
 s_speeds    dq sp0, sp1, sp2, sp3
 sp0 db "||", 0
 sp1 db ">", 0
@@ -415,7 +416,7 @@ s_needs     db "Needs: ", 0
 s_n_road    db "a road nearby", 0
 s_n_power   db "electricity", 0
 s_n_hwy     db "a road link to the highway", 0
-s_n_water   db "water (pipes within 2 tiles)", 0
+s_n_water   db "water (pipes within 3 tiles)", 0
 s_n_sewage  db "sewage treatment", 0
 s_n_garbage db "garbage collection", 0
 s_n_goods   db "goods deliveries", 0
@@ -984,6 +985,14 @@ FUNC text_button
     mov r14d, edx
     mov r15, rcx
     mov ecx, 14
+    mov ebx, r8d
+    mov r8, r15
+    call ui_note_button
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, r14d
+    mov ecx, 14
+    mov r8d, ebx
     call button
     mov ebx, eax
     mov edi, r14d
@@ -2341,6 +2350,9 @@ FUNC load_city_from, 32
     CALLC SDL_RWclose
     cmp r14, 8 + MAP_TILES*TILE_BYTES
     jb .fail
+    ; the old city's actions can't be undone in this one
+    call undo_reset
+    call extra_reset
     ; defaults for anything the save doesn't have
     lea rdi, [money]
     mov ecx, sim_state_end - money
@@ -2500,6 +2512,9 @@ save_chunks:
     db "CAMR"
     dq cam_save
     dd 12
+    db "SZON"
+    dq svc_zone
+    dd MAP_TILES
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 2
 SC_SIMS equ 3
@@ -2510,6 +2525,8 @@ section .text
 
 FUNC new_city
     call tut_abort
+    call undo_reset
+    call extra_reset
     mov dword [sandbox], 0
     CALLC SDL_GetPerformanceCounter
     mov [world_seed], eax
@@ -3565,6 +3582,12 @@ FUNC tool_evaluate, 32
     mov dword [last_tool_err], 1
     jmp .out
 .unl:
+    ; beta: over zoned buildings, sliding to where it fits
+    cmp dword [beta_on], 0
+    je .unl0
+    call build_eval_beta
+    jmp .out
+.unl0:
     mov r12d, [tl_x]
     mov r13d, [tl_y]
     xor ebx, ebx
@@ -3723,7 +3746,19 @@ FUNC tool_apply
     jmp .upd
 .bz0:
     cmp cl, OBJ_SERVICE
+    jne .bzz
+    ; beta: a service leaves its lot as it found it (zone and all)
+    cmp dword [beta_on], 0
     je .bzm
+    mov edi, r13d
+    mov esi, r14d
+    call anchor_of
+    mov edi, eax
+    mov esi, edx
+    mov edx, OBJ_RUBBLE
+    call svc_remove
+    jmp .upd
+.bzz:
     cmp cl, OBJ_ZONEBLD
     jne .bz
 .bzm:
@@ -3824,6 +3859,13 @@ FUNC tool_apply
     RETURN
 
 .build:
+    ; beta: clear the spot first (what's built there comes down)
+    cmp dword [beta_on], 0
+    je .bnb
+    mov edi, [tl_x]
+    mov esi, [tl_y]
+    call bld_clear
+.bnb:
     mov edi, [build_kind]
     call bld_rec
     movzx r14d, byte [rax+BI_SIZE]
@@ -3836,6 +3878,13 @@ FUNC tool_apply
     lea edi, [r12+r15]
     lea esi, [r13+rbx]
     call tile_at
+    ; the zone it stands on, for when it goes
+    lea edx, [r13+rbx]
+    shl edx, MAP_SHIFT
+    add edx, r12d
+    add edx, r15d
+    mov cl, [rax+T_ZONE]
+    mov [svc_zone+rdx], cl
     mov byte [rax+T_OBJ], OBJ_SERVICE
     mov ecx, [build_kind]
     mov [rax+T_SUB], cl
@@ -3885,6 +3934,9 @@ FUNC tool_apply
     mov edi, SFX_PLACE
     call sfx_play
     call cost_float
+    mov edi, [tl_x]
+    mov esi, [tl_y]
+    call build_placed_beta
     RETURN
 
 .broke:
@@ -3916,8 +3968,21 @@ FUNC tool_apply
     call notify
 .e2:
     cmp dword [last_tool_err], 2
-    jne .e3
+    jne .e4
     lea rdi, [s_needwater]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp .e3
+.e4:
+    ; beta: what's in the way
+    mov eax, [last_tool_err]
+    cmp eax, TE_ROAD
+    jb .e3
+    cmp eax, TE_HIGHWAY
+    ja .e3
+    mov rdi, [te_msgs+rax*8]
     mov esi, UI_WARN
     mov edx, -1
     mov ecx, -1
@@ -3932,6 +3997,12 @@ FUNC tool_apply
 ; ---------------------------------------------------------------------
 FUNC draw_tool_preview, 16
     call set_target_world
+    ; a move ends when the build tool is put down
+    cmp dword [tool], T_BUILD
+    je .mvk
+    mov dword [moving], 0
+    mov dword [move_from], -1
+.mvk:
     cmp dword [tool], T_LAND
     jne .nland
     cmp dword [welcome], 0
@@ -4139,6 +4210,9 @@ FUNC draw_tool_preview, 16
     mov ecx, RAMP(R_RED, 6)
 .bdd:
     call draw_diamond
+    cmp dword [beta_on], 0
+    je .sel
+    call build_preview_beta
 .sel:
     cmp dword [sel_x], 0
     jl .out
@@ -4458,6 +4532,16 @@ FUNC draw_topbar, 16
     inc ebx
     cmp ebx, 4
     jl .sp
+    ; features in testing are on: say so in the corner
+    cmp dword [beta_on], 0
+    je .nbeta
+    mov edi, 4
+    mov esi, [ui_h]
+    sub esi, 12
+    lea rdx, [s_beta]
+    mov ecx, UI_WARN
+    call draw_text
+.nbeta:
     cmp dword [sim_speed], 0
     jne .out
     mov eax, [anim_tick]
@@ -4748,10 +4832,18 @@ FUNC draw_dock, 32
     cmp eax, [panel]
     sete r8b
 .sb:
+    mov [rbp-56], r8d
     mov edi, r15d
     lea esi, [r13+3]
     mov edx, DOCK_BTN
     mov ecx, DOCK_BTN
+    mov r8, [dock_tips+rbx*8]
+    call ui_note_button
+    mov edi, r15d
+    lea esi, [r13+3]
+    mov edx, DOCK_BTN
+    mov ecx, DOCK_BTN
+    mov r8d, [rbp-56]
     call button
     mov [rbp-52], eax
     mov edi, r15d
@@ -4948,6 +5040,8 @@ FUNC submenu_select
 .b:
     mov [build_kind], ebx
     mov dword [tool], T_BUILD
+    mov dword [moving], 0
+    mov dword [move_from], -1
 .close:
     mov dword [submenu], -1
     RETURN
@@ -5089,6 +5183,12 @@ FUNC draw_submenu, 48
     mov edi, r14d
     call submenu_item_info
     mov [rbp-64], rax
+    lea edi, [r12+3]
+    mov esi, [rbp-56]
+    mov edx, 194
+    mov ecx, 15
+    mov r8, rax
+    call ui_note_button
     mov [rbp-68], edx
     mov [rbp-72], ecx
     mov [rbp-76], r8d
@@ -5612,6 +5712,8 @@ FUNC draw_inspect, 32
     jz .out
     mov dword [fight_request], 1
 .out:
+    ; beta: demolish / replace / move / upgrade
+    call insp_actions
     ; size next frame's panel to what was drawn
     mov eax, [row_y]
     sub eax, 42-8
@@ -6319,6 +6421,14 @@ FUNC draw_tool_hint, 16
     lea r13, [textbuf]
     jmp .draw
 .bld:
+    call move_hint_title
+    test rax, rax
+    jz .bld0
+    mov r12, rax
+    lea r13, [hx_moving]
+    xor r14, r14
+    jmp .draw
+.bld0:
     mov edi, [build_kind]
     call bld_rec
     mov r12, [rax+BI_NAME]
@@ -6417,7 +6527,23 @@ FUNC draw_cursor_cost
     cmp eax, T_LAND
     je .out
     cmp dword [tl_valid], 0
+    jne .val
+    ; beta: why a building can't go here
+    cmp dword [beta_on], 0
     je .out
+    cmp eax, T_BUILD
+    jne .out
+    mov eax, [last_tool_err]
+    cmp eax, TE_NEEDW
+    jb .out
+    cmp eax, TE_HIGHWAY
+    ja .out
+    mov rdi, [te_short+rax*8]
+    mov esi, UI_BAD
+    xor edx, edx
+    call cursor_note
+    jmp .out
+.val:
     call tb_reset
     movsxd rdi, dword [tl_cost]
     call tb_money
@@ -6458,7 +6584,44 @@ FUNC draw_cursor_cost
     lea esi, [r14+2]
     lea rdx, [textbuf]
     call draw_text
+    ; beta: what comes down to make room
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tool], T_BUILD
+    jne .out
+    call build_repl_text
+    test eax, eax
+    jz .out
+    lea rdi, [textbuf]
+    mov esi, UI_WARN
+    mov edx, 1
+    call cursor_note
 .out:
+    RETURN
+
+; a note in a box by the cursor (rdi text, esi colour, edx line 0/1)
+FUNC cursor_note
+    mov r15, rdi
+    mov ebx, esi
+    imul r12d, edx, 14
+    mov rdi, r15
+    call text_width
+    lea r14d, [rax+6]
+    mov r13d, [umx]
+    add r13d, 28
+    add r12d, [umy]
+    add r12d, 16
+    mov edi, r13d
+    mov esi, r12d
+    mov edx, r14d
+    mov ecx, 12
+    mov r8d, UI_BG2
+    call draw_box
+    lea edi, [r13+3]
+    lea esi, [r12+2]
+    mov rdx, r15
+    mov ecx, ebx
+    call draw_text
     RETURN
 
 ; zoning hint: the rules plus how much this zone is wanted right now
@@ -6561,11 +6724,52 @@ count_lines:
 ; ---------------------------------------------------------------------
 ;  problem icons above buildings (screen positions from the renderer)
 ; ---------------------------------------------------------------------
-FUNC draw_problem_icons, 16
+FUNC draw_problem_icons, 32
+    ; beta: none over the spot a building is being placed on
+    mov dword [rbp-56], -1000
+    mov dword [rbp-60], -1000
+    mov dword [rbp-64], 0
+    cmp dword [beta_on], 0
+    je .nb
+    cmp dword [tool], T_BUILD
+    jne .nb
+    cmp dword [tl_n], 0
+    je .nb
+    mov edi, [build_kind]
+    call bld_rec
+    movzx eax, byte [rax+BI_SIZE]
+    mov [rbp-64], eax
+    mov eax, [tl_x]
+    mov [rbp-56], eax
+    mov eax, [tl_y]
+    mov [rbp-60], eax
+.nb:
     xor ebx, ebx
 .l:
     cmp ebx, [prob_n]
     jge .out
+    ; (in the building's footprint, or a tile around it: skip)
+    mov eax, [prob_tile+rbx*4]
+    mov ecx, eax
+    and ecx, MAP_W-1
+    shr eax, MAP_SHIFT
+    mov edx, [rbp-64]
+    inc edx
+    sub ecx, [rbp-56]
+    inc ecx
+    cmp ecx, 0
+    jl .show
+    cmp ecx, edx
+    jg .show
+    sub eax, [rbp-60]
+    inc eax
+    cmp eax, 0
+    jl .show
+    cmp eax, edx
+    jg .show
+    inc ebx
+    jmp .l
+.show:
     mov eax, [prob_x+rbx*4]
     imul eax, [zoom]
     cdq
@@ -7278,6 +7482,7 @@ FUNC draw_ms_card, 32
     ret
 
 FUNC render_ui
+    call ui_note_reset
     call set_target_ui
     xor edi, edi
     call clear_target
@@ -7363,6 +7568,7 @@ FUNC render_ui
     cmp dword [tool], T_INSPECT
     jne .noinsp
     call draw_inspect
+    call draw_replace_list
 .noinsp:
     cmp dword [tut_step], 0         ; the tour's card explains instead
     jge .nohint
@@ -7460,14 +7666,30 @@ section .text
 ; =====================================================================
 FUNC ui_key
     mov eax, edi
-    ; Ctrl+Z: undo
+    ; Ctrl+Z: undo (beta: Ctrl+Shift+Z and Ctrl+Y redo)
     cmp eax, SC_Z
     jne .nz0
     test dword [key_mod], 0xC0
     jz .nz0
+    cmp dword [beta_on], 0
+    je .undo
+    test dword [key_mod], 3
+    jz .undo
+    call redo_do
+    jmp .out
+.undo:
     call undo_do
     jmp .out
 .nz0:
+    cmp eax, SC_Y
+    jne .ny0
+    test dword [key_mod], 0xC0
+    jz .ny0
+    cmp dword [beta_on], 0
+    je .ny0
+    call redo_do
+    jmp .out
+.ny0:
     cmp eax, SC_ESCAPE
     jne .k1
     cmp dword [welcome], 0

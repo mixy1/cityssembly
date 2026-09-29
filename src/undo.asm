@@ -21,12 +21,15 @@ act_count       resd UNDO_ACTS
 act_cost        resd UNDO_ACTS
 act_tool        resd UNDO_ACTS
 n_acts          resd 1
+n_redo          resd 1          ; undone actions that can be done again
 undo_top        resd 1          ; entries in use
 undo_armed      resd 1
 
 section .data
 s_undone    db "Undone - refunded ", 0
 s_noundo    db "Nothing to undo.", 0
+s_redone    db "Redone - cost ", 0
+s_noredo    db "Nothing to redo.", 0
 
 section .text
 ; copy the wires into rdi
@@ -113,6 +116,14 @@ FUNC undo_end, 16
     je .out
     mov dword [undo_armed], 0
     mov [rbp-48], edi
+    ; a new action: what was undone can't be redone any more
+    cmp dword [n_redo], 0
+    je .r0
+    mov eax, [n_acts]
+    mov eax, [act_start+rax*4]
+    mov [undo_top], eax
+    mov dword [n_redo], 0
+.r0:
     ; room for another action
     cmp dword [n_acts], UNDO_ACTS
     jl .r1
@@ -203,20 +214,18 @@ FUNC undo_end, 16
 .out:
     RETURN
 
-FUNC undo_do
-    mov r15d, [n_acts]
-    test r15d, r15d
-    jnz .go
-    lea rdi, [s_noundo]
-    mov esi, UI_DIM
-    mov edx, -1
-    mov ecx, -1
-    call notify
-    mov edi, SFX_ERROR
-    call sfx_play
-    jmp .out
-.go:
-    dec r15d
+; forget every action (a new or loaded city)
+undo_reset:
+    mov dword [n_acts], 0
+    mov dword [n_redo], 0
+    mov dword [undo_top], 0
+    mov dword [undo_armed], 0
+    ret
+
+; swap the tiles and wires of action edi with the map's: what the action
+; put back comes out, and the other way round (undo and redo alike)
+FUNC undo_swap
+    mov r15d, edi
     mov r12d, [act_start+r15*4]
     mov r13d, [act_count+r15*4]
     xor ebx, ebx
@@ -235,13 +244,21 @@ FUNC undo_do
     mov r9b, [rdi+T_JAM]
     mov r10b, [rdi+T_TRAFFIC]
     mov rcx, [rsi]
+    mov rdx, [rdi]
     mov [rdi], rcx
+    mov [rsi], rdx
     mov rcx, [rsi+8]
+    mov rdx, [rdi+8]
     mov [rdi+8], rcx
+    mov [rsi+8], rdx
     mov rcx, [rsi+16]
+    mov rdx, [rdi+16]
     mov [rdi+16], rcx
+    mov [rsi+16], rdx
     mov rcx, [rsi+24]
+    mov rdx, [rdi+24]
     mov [rdi+24], rcx
+    mov [rsi+24], rdx
     cmp byte [rdi+T_OBJ], OBJ_ROAD
     jne .nr
     mov [rdi+T_OCC], r8d
@@ -251,18 +268,45 @@ FUNC undo_do
     inc ebx
     jmp .l
 .w:
+    lea rdi, [undo_wtmp]
+    call wires_copy_out
     imul esi, r15d, WIRE_BYTES
     lea rsi, [undo_wires+rsi]
+    push rsi
+    push rsi
     call wires_copy_in
-    mov [undo_top], r12d
-    mov [n_acts], r15d
-    movsxd rax, dword [act_cost+r15*4]
-    add [money], rax
+    pop rdi
+    pop rdi
+    lea rsi, [undo_wtmp]
+    mov ecx, WIRE_BYTES
+    rep movsb
     call roads_update_all
     mov dword [net_dirty], 1
     mov dword [cov_dirty], 1
     call networks_update
     call coverage_update
+    RETURN
+
+FUNC undo_do
+    mov r15d, [n_acts]
+    test r15d, r15d
+    jnz .go
+    lea rdi, [s_noundo]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ERROR
+    call sfx_play
+    jmp .out
+.go:
+    dec r15d
+    mov edi, r15d
+    call undo_swap
+    mov [n_acts], r15d
+    inc dword [n_redo]
+    movsxd rax, dword [act_cost+r15*4]
+    add [money], rax
     call tb_reset
     lea rdi, [s_undone]
     call tb_str
@@ -274,6 +318,52 @@ FUNC undo_do
     mov ecx, -1
     call notify
     mov edi, SFX_BULLDOZE
+    call sfx_play
+.out:
+    RETURN
+
+; Ctrl+Y: do the last undone action again
+FUNC redo_do
+    cmp dword [n_redo], 0
+    jne .go
+    lea rdi, [s_noredo]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ERROR
+    call sfx_play
+    jmp .out
+.go:
+    mov r15d, [n_acts]
+    movsxd rax, dword [act_cost+r15*4]
+    cmp rax, [money]
+    jle .pay
+    lea rdi, [s_nomoney]
+    mov esi, UI_BAD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ERROR
+    call sfx_play
+    jmp .out
+.pay:
+    sub [money], rax
+    mov edi, r15d
+    call undo_swap
+    inc dword [n_acts]
+    dec dword [n_redo]
+    call tb_reset
+    lea rdi, [s_redone]
+    call tb_str
+    movsxd rdi, dword [act_cost+r15*4]
+    call tb_money
+    lea rdi, [textbuf]
+    mov esi, UI_TEXT
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    mov edi, SFX_ROAD
     call sfx_play
 .out:
     RETURN

@@ -23,6 +23,7 @@ shot_frames     resd 1
 shot_file       resq 1
 demo_mode       resd 1
 sandbox         resd 1
+beta_on         resd 1          ; ?beta / --beta: features still in testing
 key_mod         resd 1          ; modifiers of the last key press
 mouse_inside    resd 1          ; demo / trailer: whole map is yours
 demo_view       resd 1
@@ -42,6 +43,8 @@ section .data
 str_shot_flag   db "--shot", 0
 str_demo_flag   db "--demo", 0
 str_wav_flag    db "--wav", 0
+str_beta_flag   db "--beta", 0
+str_beta_env    db "CS_BETA", 0
 wav_header:
     db "RIFF"
     dd 0
@@ -94,6 +97,29 @@ FUNC main
 %endif
     mov r12d, edi                   ; argc
     mov r13, rsi                    ; argv
+%ifndef WEB
+    ; --beta anywhere on the line (or CS_BETA=1): the features in testing
+    mov ebx, 1
+.beta:
+    cmp ebx, r12d
+    jge .betae
+    mov rdi, [r13+rbx*8]
+    lea rsi, [str_beta_flag]
+    CALLC strcmp
+    test eax, eax
+    jnz .betan
+    mov dword [beta_on], 1
+.betan:
+    inc ebx
+    jmp .beta
+.betae:
+    lea rdi, [str_beta_env]
+    CALLC getenv
+    test rax, rax
+    jz .nbenv
+    mov dword [beta_on], 1
+.nbenv:
+%endif
     cmp r12d, 3
     jl .noargs
 %ifndef WEB
@@ -142,6 +168,21 @@ FUNC main
     mov [bot_seed], eax
     jmp .noargs
 .nottb:
+    ; --play SCRIPT: a scripted player for tests (src/script.asm)
+    mov rdi, [r13+8]
+    lea rsi, [str_play_flag]
+    CALLC strcmp
+    test eax, eax
+    jnz .notplay
+    mov dword [play_on], 1
+    mov rax, [r13+16]
+    mov [play_file], rax
+    mov dword [shot_frames], 100000000  ; one tick a frame, fixed seed
+    mov dword [init_w], 1920            ; room to drag away from the ui
+    mov dword [init_h], 1080
+    call play_load
+    jmp .noargs
+.notplay:
 %endif
     mov rdi, [r13+8]
     lea rsi, [str_wav_flag]
@@ -280,6 +321,8 @@ FUNC main
     mov esi, [hwy_row]
     call camera_center_tile
 %ifdef WEB
+    call web_beta
+    mov [beta_on], eax
     call web_bench
     mov [perf_on], eax
     ; a city opened by link (?load=...): straight into it
@@ -428,6 +471,7 @@ FUNC main
     PERF_MARK -1
 %ifndef WEB
     call tut_bot
+    call play_tick
 %endif
     call poll_events
     cmp dword [running], 0
@@ -493,6 +537,7 @@ FUNC main
     call video_present              ; (marks 5: lighting, 6: upload)
 %ifndef WEB
     call tut_bot_after
+    call play_after
 %endif
     PERF_MARK 6
     call audio_update
@@ -1382,6 +1427,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "music.asm"
 %include "tunes.asm"
 %include "ui.asm"
+%include "tools.asm"
 %include "tutorial.asm"
 %include "saves.asm"
 %ifndef WEB
@@ -1389,3 +1435,4 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %endif
 %include "undo.asm"
 %include "playtest.asm"
+%include "script.asm"

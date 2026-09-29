@@ -61,6 +61,8 @@ URL options:
 - `?load=URL` opens a city file, so you can share a city by link.
 - `?debug` shows the log and frame timings.
 - `?bench` prints a per-stage frame profile.
+- `?beta` switches on the features still in testing (see *Beta* below).
+  Native builds take `--beta` (or `CS_BETA=1`).
 
 ```sh
 make web        # -> site/  (needs nasm, emcc, pip install capstone pyelftools)
@@ -97,6 +99,22 @@ have. All other views (traffic, land value, pollution, desirability...) are
 one press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
+
+### Beta (`?beta`)
+
+Features still in testing, off unless you ask for them:
+
+- **Build over the city:** special buildings go down over zoned
+  buildings, which come down first. The price tag says how many and who
+  lived or worked there. Roads only give way with Ctrl held. A spot that
+  doesn't fit slides up to 2 tiles to the nearest one that does, and the
+  cursor says why a spot won't work.
+- **Inspector actions:** Demolish any building, Replace a zoned one with
+  any service (a list with prices), Move a service (a quarter of its
+  price), and Upgrade in place: clinic to hospital, park to plaza,
+  landfill to incinerator, coal to nuclear. A service gives its lot back
+  to the zone it was built over when it goes.
+- **Redo:** Ctrl+Y (or Ctrl+Shift+Z).
 
 ### Quality of life
 
@@ -401,4 +419,7 @@ cityssembly --wav SECONDS out.wav [STYLE [INST]]  # render the soundtrack (STYLE
 cityssembly --trailer out.raw plan.bin W H         # film a scripted plan (trailer_work/plan.py)
 cityssembly --tourbot FRAMES out.bmp [seed]        # play the tour with real input, following its
                                                    # highlights; prints each step (CI runs it)
+cityssembly --play script.txt [--beta]             # a scripted player: keys, clicks and drags on
+                                                   # tiles, button presses by label, screenshots
+                                                   # (commands in src/script.asm)
 ```

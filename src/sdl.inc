@@ -89,6 +89,7 @@ SC_K equ 14
 SC_HOME equ 74
 SC_W equ 26
 SC_X equ 27
+SC_Y equ 28
 SC_Z equ 29
 SC_1 equ 30
 SC_0 equ 39
@@ -122,5 +123,7 @@ SC_RSHIFT equ 229
 
 AUDIO_S16LSB equ 0x8010
 %ifdef WEB
-extern web_setup, web_open, web_bench
+extern web_setup, web_open, web_bench, web_beta
+%else
+extern getenv
 %endif
