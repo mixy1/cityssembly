@@ -45,6 +45,7 @@ str_demo_flag   db "--demo", 0
 str_wav_flag    db "--wav", 0
 str_beta_flag   db "--beta", 0
 str_beta_env    db "CS_BETA", 0
+str_bench_env   db "CS_BENCH", 0
 wav_header:
     db "RIFF"
     dd 0
@@ -119,6 +120,12 @@ FUNC main
     jz .nbenv
     mov dword [beta_on], 1
 .nbenv:
+    lea rdi, [str_bench_env]
+    CALLC getenv
+    test rax, rax
+    jz .nbench
+    mov dword [perf_on], 1
+.nbench:
 %endif
     cmp r12d, 3
     jl .noargs
@@ -582,6 +589,16 @@ FUNC perf_report
     inc dword [perf_n]
     cmp dword [perf_n], 120
     jl .out
+    ; buckets 30 and 31 count route searches and heap pops
+    mov rax, [perf_acc+30*8]
+    xor edx, edx
+    mov ecx, 120
+    div rcx
+    mov [perf_calls], eax
+    mov rax, [perf_acc+31*8]
+    xor edx, edx
+    div rcx
+    mov [perf_pops], eax
     CALLC SDL_GetPerformanceFrequency
     mov rbx, rax
     xor ecx, ecx
@@ -693,10 +710,26 @@ FUNC perf_report
     call printf
 %endif
     add rsp, 32
+    ; traffic: trips, moving, route finding (its calls and heap pops per
+    ; frame), the vehicles
+    lea rdi, [str_perftr]
+    mov esi, [perf_out+27*4]
+    mov edx, [perf_out+28*4]
+    mov ecx, [perf_out+29*4]
+    mov r8d, [perf_calls]
+    mov r9d, [perf_pops]
+    sub rsp, 8
+    push qword [veh_count]
+    xor eax, eax
+%ifndef WIN64
+    call printf
+%endif
+    add rsp, 16
 .out:
     RETURN
 
 section .data
+str_perftr db "PERFTRAFFIC x0.1ms trips %d move %d routes %d | routes/frame %d pops/frame %d vehicles %d", 10, 0
 str_perf2 db "PERF2 world: list %d bands %d pipes %d | light: prep %d lut %d rows %d bloom %d", 10, 0
 str_perf3 db "PERF3 list: tiles %d wires %d agents %d | zoom %d world %dx%d pop %d", 10, 0
 str_perfday db "PERFDAY max x0.1ms tiles %d zones %d networks %d coverage %d stats %d dispatch %d goals+month %d", 10, 0
@@ -711,6 +744,8 @@ perf_cur    resq 32
 perf_max    resq 32
 perf_mx     resd 32
 perf_out    resd 32
+perf_calls  resd 1
+perf_pops   resd 1
 section .text
 
 ; ---------------------------------------------------------------------
@@ -1426,6 +1461,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "threads.asm"
 %include "sim.asm"
 %include "traffic.asm"
+%include "traffic2.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

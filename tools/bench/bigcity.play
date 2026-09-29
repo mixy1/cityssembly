@@ -1,0 +1,626 @@
+# bigcity: written by tools/bench/gen.py
+new 1234567
+rich
+key r
+key g
+key g
+key g
+roadtype 0
+apply 8 12 64 68
+apply 64 12 120 68
+apply 8 68 64 124
+apply 64 68 120 124
+key g
+roadtype 1
+apply 36 12 36 124
+apply 64 12 64 124
+apply 92 12 92 124
+apply 8 40 120 40
+apply 8 68 120 68
+apply 8 96 120 96
+roadtype 0
+key 1
+apply 8 12 36 96
+key 5
+apply 36 12 47 68
+key 2
+apply 36 68 47 96
+key 3
+apply 8 96 47 124
+key 4
+apply 51 40 64 68
+key 6
+apply 64 40 87 68
+key 5
+apply 51 12 87 40
+key 6
+apply 51 68 87 96
+key 3
+apply 51 110 87 124
+key 1
+apply 51 96 87 110
+key 5
+apply 100 68 124 124
+key 1
+apply 100 12 124 68
+select 3
+apply 12 118 12 118
+select 3
+apply 118 118 118 118
+select 3
+apply 118 14 118 14
+select 3
+apply 58 14 58 14
+select 3
+apply 30 14 30 14
+select 3
+apply 80 118 80 118
+select 120
+apply 45 14 45 124
+select 120
+apply 10 26 120 26
+select 120
+apply 10 54 120 54
+select 120
+apply 10 82 120 82
+select 120
+apply 10 110 120 110
+select 4
+apply 46 18 46 18
+select 4
+apply 46 24 46 24
+select 4
+apply 46 30 46 30
+select 4
+apply 46 36 46 36
+select 4
+apply 46 42 46 42
+select 4
+apply 46 48 46 48
+select 4
+apply 46 54 46 54
+select 4
+apply 46 60 46 60
+select 4
+apply 46 66 46 66
+select 4
+apply 46 72 46 72
+select 4
+apply 46 78 46 78
+select 4
+apply 46 84 46 84
+select 4
+apply 46 90 46 90
+select 4
+apply 46 96 46 96
+select 4
+apply 46 102 46 102
+select 4
+apply 46 108 46 108
+select 4
+apply 46 114 46 114
+select 4
+apply 46 120 46 120
+select 5
+apply 20 20 20 20
+select 5
+apply 20 40 20 40
+select 5
+apply 20 60 20 60
+select 5
+apply 20 80 20 80
+select 5
+apply 20 100 20 100
+select 5
+apply 20 118 20 118
+select 5
+apply 40 20 40 20
+select 5
+apply 40 40 40 40
+select 5
+apply 40 60 40 60
+select 5
+apply 40 80 40 80
+select 5
+apply 40 100 40 100
+select 5
+apply 40 118 40 118
+select 5
+apply 58 20 58 20
+select 5
+apply 58 40 58 40
+select 5
+apply 58 60 58 60
+select 5
+apply 58 80 58 80
+select 5
+apply 58 100 58 100
+select 5
+apply 58 118 58 118
+select 5
+apply 78 20 78 20
+select 5
+apply 78 40 78 40
+select 5
+apply 78 60 78 60
+select 5
+apply 78 80 78 80
+select 5
+apply 78 100 78 100
+select 5
+apply 78 118 78 118
+select 5
+apply 108 20 108 20
+select 5
+apply 108 40 108 40
+select 5
+apply 108 60 108 60
+select 5
+apply 108 80 108 80
+select 5
+apply 108 100 108 100
+select 5
+apply 108 118 108 118
+select 6
+apply 96 24 96 24
+select 6
+apply 96 34 96 34
+select 6
+apply 96 44 96 44
+select 6
+apply 94 54 94 54
+select 6
+apply 86 74 86 74
+select 6
+apply 86 84 86 84
+select 6
+apply 86 94 86 94
+select 6
+apply 86 104 86 104
+select 6
+apply 86 114 86 114
+select 6
+apply 86 122 86 122
+select 6
+apply 96 30 96 30
+select 6
+apply 96 40 96 40
+select 6
+apply 86 80 86 80
+select 6
+apply 86 90 86 90
+select 6
+apply 86 100 86 100
+select 6
+apply 86 110 86 110
+select 7
+apply 22 100 22 100
+select 7
+apply 60 116 60 116
+select 7
+apply 110 100 110 100
+select 7
+apply 24 30 24 30
+select 7
+apply 76 24 76 24
+select 7
+apply 110 40 110 40
+select 9
+apply 16 20 16 20
+select 10
+apply 20 20 20 20
+select 11
+apply 16 24 16 24
+select 13
+apply 20 24 20 24
+select 9
+apply 16 41 16 41
+select 10
+apply 20 41 20 41
+select 11
+apply 16 45 16 45
+select 13
+apply 20 45 20 45
+select 9
+apply 16 62 16 62
+select 10
+apply 20 62 20 62
+select 11
+apply 16 66 16 66
+select 13
+apply 20 66 20 66
+select 9
+apply 16 83 16 83
+select 10
+apply 20 83 20 83
+select 11
+apply 16 87 16 87
+select 13
+apply 20 87 20 87
+select 9
+apply 16 104 16 104
+select 10
+apply 20 104 20 104
+select 11
+apply 16 108 16 108
+select 13
+apply 20 108 20 108
+select 9
+apply 37 20 37 20
+select 10
+apply 41 20 41 20
+select 11
+apply 37 24 37 24
+select 13
+apply 41 24 41 24
+select 9
+apply 37 41 37 41
+select 10
+apply 41 41 41 41
+select 11
+apply 37 45 37 45
+select 13
+apply 41 45 41 45
+select 9
+apply 37 62 37 62
+select 10
+apply 41 62 41 62
+select 11
+apply 37 66 37 66
+select 13
+apply 41 66 41 66
+select 9
+apply 37 83 37 83
+select 10
+apply 41 83 41 83
+select 11
+apply 37 87 37 87
+select 13
+apply 41 87 41 87
+select 9
+apply 37 104 37 104
+select 10
+apply 41 104 41 104
+select 11
+apply 37 108 37 108
+select 13
+apply 41 108 41 108
+select 9
+apply 58 20 58 20
+select 10
+apply 62 20 62 20
+select 11
+apply 58 24 58 24
+select 13
+apply 62 24 62 24
+select 9
+apply 58 41 58 41
+select 10
+apply 62 41 62 41
+select 11
+apply 58 45 58 45
+select 13
+apply 62 45 62 45
+select 9
+apply 58 62 58 62
+select 10
+apply 62 62 62 62
+select 11
+apply 58 66 58 66
+select 13
+apply 62 66 62 66
+select 9
+apply 58 83 58 83
+select 10
+apply 62 83 62 83
+select 11
+apply 58 87 58 87
+select 13
+apply 62 87 62 87
+select 9
+apply 58 104 58 104
+select 10
+apply 62 104 62 104
+select 11
+apply 58 108 58 108
+select 13
+apply 62 108 62 108
+select 9
+apply 79 20 79 20
+select 10
+apply 83 20 83 20
+select 11
+apply 79 24 79 24
+select 13
+apply 83 24 83 24
+select 9
+apply 79 41 79 41
+select 10
+apply 83 41 83 41
+select 11
+apply 79 45 79 45
+select 13
+apply 83 45 83 45
+select 9
+apply 79 62 79 62
+select 10
+apply 83 62 83 62
+select 11
+apply 79 66 79 66
+select 13
+apply 83 66 83 66
+select 9
+apply 79 83 79 83
+select 10
+apply 83 83 83 83
+select 11
+apply 79 87 79 87
+select 13
+apply 83 87 83 87
+select 9
+apply 79 104 79 104
+select 10
+apply 83 104 83 104
+select 11
+apply 79 108 79 108
+select 13
+apply 83 108 83 108
+select 9
+apply 108 20 108 20
+select 10
+apply 112 20 112 20
+select 11
+apply 108 24 108 24
+select 13
+apply 112 24 112 24
+select 9
+apply 108 41 108 41
+select 10
+apply 112 41 112 41
+select 11
+apply 108 45 108 45
+select 13
+apply 112 45 112 45
+select 9
+apply 108 62 108 62
+select 10
+apply 112 62 112 62
+select 11
+apply 108 66 108 66
+select 13
+apply 112 66 112 66
+select 9
+apply 108 83 108 83
+select 10
+apply 112 83 112 83
+select 11
+apply 108 87 108 87
+select 13
+apply 112 87 112 87
+select 9
+apply 108 104 108 104
+select 10
+apply 112 104 112 104
+select 11
+apply 108 108 108 108
+select 13
+apply 112 108 112 108
+select 12
+apply 25 30 25 30
+select 14
+apply 29 30 29 30
+select 12
+apply 25 64 25 64
+select 14
+apply 29 64 29 64
+select 12
+apply 25 100 25 100
+select 14
+apply 29 100 29 100
+select 12
+apply 60 30 60 30
+select 14
+apply 64 30 64 30
+select 12
+apply 60 64 60 64
+select 14
+apply 64 64 64 64
+select 12
+apply 60 100 60 100
+select 14
+apply 64 100 64 100
+select 12
+apply 110 30 110 30
+select 14
+apply 114 30 114 30
+select 12
+apply 110 64 110 64
+select 14
+apply 114 64 114 64
+select 12
+apply 110 100 110 100
+select 14
+apply 114 100 114 100
+select 15
+apply 30 50 30 50
+select 15
+apply 72 86 72 86
+select 17
+apply 12 16 12 16
+select 17
+apply 12 30 12 30
+select 17
+apply 12 44 12 44
+select 17
+apply 12 58 12 58
+select 17
+apply 12 72 12 72
+select 17
+apply 12 86 12 86
+select 17
+apply 12 100 12 100
+select 17
+apply 12 114 12 114
+select 17
+apply 26 16 26 16
+select 17
+apply 26 30 26 30
+select 17
+apply 26 44 26 44
+select 17
+apply 26 58 26 58
+select 17
+apply 26 72 26 72
+select 17
+apply 26 86 26 86
+select 17
+apply 26 100 26 100
+select 17
+apply 26 114 26 114
+select 17
+apply 40 16 40 16
+select 17
+apply 40 30 40 30
+select 17
+apply 40 44 40 44
+select 17
+apply 40 58 40 58
+select 17
+apply 40 72 40 72
+select 17
+apply 40 86 40 86
+select 17
+apply 40 100 40 100
+select 17
+apply 40 114 40 114
+select 17
+apply 54 16 54 16
+select 17
+apply 54 30 54 30
+select 17
+apply 54 44 54 44
+select 17
+apply 54 58 54 58
+select 17
+apply 54 72 54 72
+select 17
+apply 54 86 54 86
+select 17
+apply 54 100 54 100
+select 17
+apply 54 114 54 114
+select 17
+apply 68 16 68 16
+select 17
+apply 68 30 68 30
+select 17
+apply 68 44 68 44
+select 17
+apply 68 58 68 58
+select 17
+apply 68 72 68 72
+select 17
+apply 68 86 68 86
+select 17
+apply 68 100 68 100
+select 17
+apply 68 114 68 114
+select 17
+apply 82 16 82 16
+select 17
+apply 82 30 82 30
+select 17
+apply 82 44 82 44
+select 17
+apply 82 58 82 58
+select 17
+apply 82 72 82 72
+select 17
+apply 82 86 82 86
+select 17
+apply 82 100 82 100
+select 17
+apply 82 114 82 114
+select 17
+apply 96 16 96 16
+select 17
+apply 96 30 96 30
+select 17
+apply 96 44 96 44
+select 17
+apply 96 58 96 58
+select 17
+apply 96 72 96 72
+select 17
+apply 96 86 96 86
+select 17
+apply 96 100 96 100
+select 17
+apply 96 114 96 114
+select 17
+apply 110 16 110 16
+select 17
+apply 110 30 110 30
+select 17
+apply 110 44 110 44
+select 17
+apply 110 58 110 58
+select 17
+apply 110 72 110 72
+select 17
+apply 110 86 110 86
+select 17
+apply 110 100 110 100
+select 17
+apply 110 114 110 114
+select 19
+apply 74 58 74 58
+select 20
+apply 57 60 57 60
+select 21
+apply 72 48 72 48
+select 16
+apply 62 72 62 72
+select 103
+apply 10 40 10 40
+apply 10 68 10 68
+apply 20 40 20 40
+apply 20 68 20 68
+apply 30 40 30 40
+apply 30 68 30 68
+apply 40 40 40 40
+apply 40 68 40 68
+apply 50 40 50 40
+apply 50 68 50 68
+apply 60 40 60 40
+apply 60 68 60 68
+apply 70 40 70 40
+apply 70 68 70 68
+apply 80 40 80 40
+apply 80 68 80 68
+apply 90 40 90 40
+apply 90 68 90 68
+apply 100 40 100 40
+apply 100 68 100 68
+apply 110 40 110 40
+apply 110 68 110 68
+key q
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+save bigcity.sav
+quit

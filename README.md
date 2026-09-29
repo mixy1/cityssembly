@@ -135,6 +135,14 @@ Features still in testing, off unless you ask for them:
 - **Assists** (Settings): clear abandoned buildings away every month (on),
   sweep up rubble every month (on), pause for emergencies - fires,
   meteors, an empty treasury (off).
+- **Traffic that grows with the city:** no cap at 1,080 cars (a car on
+  the road for every 14 residents and 40 jobs, up to about 6,000), and
+  the day has a rhythm: commuters in the morning, home again in the
+  evening, shoppers and trucks in between, a quiet night. Trips go to
+  nearer jobs, shops and homes. Avenue junctions have traffic lights.
+  Every home remembers its commute: long ones make people unhappy, and
+  homes on them stay at level 3 ("Needs: shorter commutes"). Routes are
+  found with A*, so the extra cars cost little.
 - **Zone modes** (`G`): area, fill a block (click: every lot the roads
   around it reach, up to the roads) and along a road (drag along it: both
   sides, 3 deep). Lots no road reaches are marked while you drag, and the
@@ -446,4 +454,6 @@ cityssembly --tourbot FRAMES out.bmp [seed]        # play the tour with real inp
 cityssembly --play script.txt [--beta]             # a scripted player: keys, clicks and drags on
                                                    # tiles, button presses by label, screenshots
                                                    # (commands in src/script.asm)
+python3 tools/bench/gen.py                         # test-city scripts (mid ~10k, big ~55k) for
+                                                   # --play; CS_BENCH=1 prints the frame profile
 ```

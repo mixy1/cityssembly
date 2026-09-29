@@ -34,6 +34,13 @@
 ;     down X Y / up X Y   press / let go of the left button on a tile (a
 ;                         drag in steps: down, move ..., shot, up)
 ;     poke X Y OFF VALUE  set byte OFF of a tile record (test setups)
+;     apply X0 Y0 X1 Y1   use the current tool from tile to tile directly
+;                         (no pointer: for building big test cities)
+;     roadtype N          the road tool's type (0 street, 1 avenue, 2 hwy)
+;     save FILE / load FILE
+;     speed N             game speed 0..3
+;     report              one line: date, population, jobs, money, traffic
+;     mapdump             print the map as text (. land ~ water # road ...)
 ;     quit
 ; =====================================================================
 %ifndef WEB
@@ -79,7 +86,9 @@ pf_shot     db "PLAY shot %s", 10, 0
 play_cmds   dq pc_new, pc_rich, pc_money, pc_center, pc_zoom, pc_key, pc_hold
             dq pc_release, pc_move, pc_click, pc_drag, pc_uimove, pc_uiclick
             dq pc_rclick, pc_wait, pc_days, pc_shot, pc_tile, pc_state, pc_echo
-            dq pc_quit, pc_select, pc_press, pc_down, pc_up, pc_poke, 0
+            dq pc_quit, pc_select, pc_press, pc_down, pc_up, pc_poke
+            dq pc_apply, pc_save, pc_load, pc_speed, pc_report, pc_roadtype
+            dq pc_mapdump, 0
 pc_new      db "new", 0
 pc_rich     db "rich", 0
 pc_money    db "money", 0
@@ -106,6 +115,20 @@ pc_press    db "press", 0
 pc_down     db "down", 0
 pc_up       db "up", 0
 pc_poke     db "poke", 0
+pc_apply    db "apply", 0
+pc_save     db "save", 0
+pc_load     db "load", 0
+pc_speed    db "speed", 0
+pc_report   db "report", 0
+pc_roadtype db "roadtype", 0
+pc_mapdump  db "mapdump", 0
+pf_mapline  db "MAP %s", 10, 0
+; map characters by object (terrain for empty land)
+map_chars   db ". #=+HS*"
+pf_report   db "PLAY report %d-%02d pop %d jobs %d money %lld", 0
+pf_report2  db " vehicles %d flow %d%% commute %d jams %d", 0
+pf_report3  db " income %d expenses %d happy %d", 0
+pf_report4  db " power %d/%d water %d/%d sewage %d reds %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -483,6 +506,20 @@ FUNC play_tick, 16
     je .up
     cmp ebx, 25
     je .poke
+    cmp ebx, 26
+    je .apply
+    cmp ebx, 27
+    je .save
+    cmp ebx, 28
+    je .load
+    cmp ebx, 29
+    je .speed
+    cmp ebx, 30
+    je .report
+    cmp ebx, 31
+    je .roadtype
+    cmp ebx, 32
+    je .mapdump
     ; quit
     mov dword [running], 0
     jmp .done
@@ -748,6 +785,152 @@ FUNC play_tick, 16
     test eax, eax
     jz .more
     mov dword [play_wait], 4
+    jmp .done
+.apply:
+    ; as if dragged from (X0, Y0) to (X1, Y1)
+    mov eax, [play_arg+4]
+    mov [drag_sx], eax
+    mov eax, [play_arg+8]
+    mov [drag_sy], eax
+    mov eax, [play_arg+12]
+    mov [hover_tx], eax
+    mov eax, [play_arg+16]
+    mov [hover_ty], eax
+    mov dword [hover_valid], 1
+    mov dword [drag_active], 1
+    call tool_collect
+    call tool_apply
+    mov dword [drag_active], 0
+    jmp .done
+.save:
+    lea rdi, [play_tok+PLAY_TOKLEN]
+    call save_city_to
+    jmp .done
+.load:
+    lea rdi, [play_tok+PLAY_TOKLEN]
+    call load_city_from
+    jmp .done
+.speed:
+    mov eax, [play_arg+4]
+    mov [sim_speed], eax
+    jmp .done
+.roadtype:
+    mov eax, [play_arg+4]
+    mov [road_type], eax
+    jmp .done
+.report:
+    ; jammed road tiles
+    xor r12d, r12d
+    xor ecx, ecx
+.rj:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .rjn
+    cmp byte [tiles+rax+T_JAM], 150
+    jb .rjn
+    inc r12d
+.rjn:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .rj
+    lea rdi, [pf_report]
+    mov esi, [year]
+    mov edx, [month]
+    inc edx
+    mov ecx, [population]
+    mov r8d, [jobs+ZC_COM*4]
+    add r8d, [jobs+ZC_IND*4]
+    add r8d, [jobs+ZC_OFF*4]
+    mov r9, [money]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [pf_report2]
+    mov esi, [veh_count]
+    mov edx, [flow_pct]
+    mov ecx, [avg_commute]
+    mov r8d, r12d
+    xor eax, eax
+    CALLC printf
+    lea rdi, [pf_report3]
+    mov esi, [income_last]
+    mov edx, [expense_last]
+    mov ecx, [happy_avg]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [pf_report4]
+    mov esi, [power_demand]
+    mov edx, [power_supply]
+    mov ecx, [water_demand]
+    mov r8d, [water_supply]
+    mov r9d, [sewage_cap]
+    mov eax, [sig_reds]
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
+    mov dword [sig_reds], 0
+    jmp .done
+.mapdump:
+    xor r12d, r12d                  ; row
+.mr:
+    xor r13d, r13d
+.mc:
+    mov eax, r12d
+    shl eax, MAP_SHIFT
+    add eax, r13d
+    shl eax, TILE_SHIFT
+    lea rbx, [tiles+rax]
+    movzx ecx, byte [rbx+T_OBJ]
+    mov dl, '.'
+    cmp ecx, OBJ_NONE
+    jne .mo
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    jne .mz
+    mov dl, '~'
+    jmp .mput
+.mz:
+    cmp byte [rbx+T_ZONE], 0
+    je .mput
+    mov dl, 'z'
+    jmp .mput
+.mo:
+    mov dl, 't'
+    cmp ecx, OBJ_TREE
+    je .mput
+    mov dl, '#'
+    cmp ecx, OBJ_ROAD
+    jne .mo2
+    cmp byte [rbx+T_TERRAIN], TER_WATER
+    jne .mput
+    mov dl, '='
+    jmp .mput
+.mo2:
+    mov dl, '+'
+    cmp ecx, OBJ_POWER
+    je .mput
+    mov dl, 'b'
+    cmp ecx, OBJ_ZONEBLD
+    je .mput
+    mov dl, 'S'
+    cmp ecx, OBJ_SERVICE
+    je .mput
+    mov dl, 'r'
+.mput:
+    mov [play_rest+r13], dl
+    inc r13d
+    cmp r13d, MAP_W
+    jl .mc
+    mov byte [play_rest+MAP_W], 0
+    lea rdi, [pf_mapline]
+    lea rsi, [play_rest]
+    xor eax, eax
+    CALLC printf
+    inc r12d
+    cmp r12d, MAP_W
+    jl .mr
     jmp .done
 .poke:
     mov edi, [play_arg+4]

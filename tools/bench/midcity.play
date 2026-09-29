@@ -1,0 +1,181 @@
+# midcity: written by tools/bench/gen.py
+new 1234567
+rich
+key r
+key g
+key g
+key g
+roadtype 0
+apply 8 36 43 92
+key g
+roadtype 1
+apply 22 36 22 92
+apply 8 64 43 64
+roadtype 0
+key 5
+apply 8 36 22 64
+key 5
+apply 22 36 43 50
+key 1
+apply 22 50 43 64
+key 2
+apply 8 64 22 71
+key 6
+apply 22 64 43 71
+key 4
+apply 8 71 43 78
+key 3
+apply 8 78 43 92
+select 3
+apply 12 100 12 100
+select 120
+apply 13 97 13 38
+select 120
+apply 8 40 45 40
+select 120
+apply 8 54 45 54
+select 120
+apply 8 75 45 75
+select 120
+apply 8 88 45 88
+select 120
+apply 45 38 45 100
+select 4
+apply 46 38 46 38
+select 4
+apply 46 46 46 46
+select 4
+apply 46 54 46 54
+select 4
+apply 46 62 46 62
+select 4
+apply 46 70 46 70
+select 4
+apply 46 78 46 78
+select 4
+apply 46 86 46 86
+select 5
+apply 15 45 15 45
+select 5
+apply 36 45 36 45
+select 5
+apply 15 75 15 75
+select 5
+apply 36 85 36 85
+select 6
+apply 46 100 46 100
+select 6
+apply 46 104 46 104
+select 6
+apply 46 108 46 108
+select 7
+apply 30 98 30 98
+select 9
+apply 13 41 13 41
+select 10
+apply 17 41 17 41
+select 11
+apply 13 45 13 45
+select 13
+apply 17 45 17 45
+select 9
+apply 34 41 34 41
+select 10
+apply 38 41 38 41
+select 11
+apply 34 45 34 45
+select 13
+apply 38 45 38 45
+select 9
+apply 13 65 13 65
+select 10
+apply 17 65 17 65
+select 11
+apply 13 69 13 69
+select 13
+apply 17 69 17 69
+select 9
+apply 34 65 34 65
+select 10
+apply 38 65 38 65
+select 11
+apply 34 69 34 69
+select 13
+apply 38 69 38 69
+select 9
+apply 23 83 23 83
+select 10
+apply 27 83 27 83
+select 11
+apply 23 87 23 87
+select 13
+apply 27 87 27 87
+select 12
+apply 25 55 25 55
+select 14
+apply 29 55 29 55
+select 17
+apply 12 40 12 40
+select 17
+apply 12 52 12 52
+select 17
+apply 12 64 12 64
+select 17
+apply 12 76 12 76
+select 17
+apply 12 88 12 88
+select 17
+apply 22 40 22 40
+select 17
+apply 22 52 22 52
+select 17
+apply 22 64 22 64
+select 17
+apply 22 76 22 76
+select 17
+apply 22 88 22 88
+select 17
+apply 32 40 32 40
+select 17
+apply 32 52 32 52
+select 17
+apply 32 64 32 64
+select 17
+apply 32 76 32 76
+select 17
+apply 32 88 32 88
+select 17
+apply 42 40 42 40
+select 17
+apply 42 52 42 52
+select 17
+apply 42 64 42 64
+select 17
+apply 42 76 42 76
+select 17
+apply 42 88 42 88
+select 20
+apply 32 60 32 60
+select 16
+apply 12 60 12 60
+select 103
+apply 8 64 8 64
+apply 15 64 15 64
+apply 29 64 29 64
+apply 36 64 36 64
+apply 22 44 22 44
+apply 22 58 22 58
+apply 22 72 22 72
+apply 22 86 22 86
+key q
+report
+days 180
+report
+days 180
+report
+days 180
+report
+days 180
+report
+save midcity.sav
+quit

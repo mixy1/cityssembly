@@ -10,10 +10,31 @@
 ;    trucks, garbage trucks and police patrols.
 ; =====================================================================
 
-MAX_VEH      equ 1200
+MAX_VEH      equ 6000
 VREC         equ 128
 MAX_PATH     equ 250
 PF_MAX_POPS  equ 14000
+PF_WEIGHT    equ 3              ; A* (beta): cost guessed per tile still to go
+
+; eax = PF_WEIGHT-ish guess of the cost from tile %1 to the destination
+; ([rbp-64], [rbp-68]); 0 in classic traffic.  Uses edx, r11.
+%macro PF_GUESS 1
+    mov eax, %1
+    and eax, MAP_W-1
+    sub eax, [rbp-64]
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov r11d, %1
+    shr r11d, MAP_SHIFT
+    sub r11d, [rbp-68]
+    mov edx, r11d
+    sar edx, 31
+    xor r11d, edx
+    sub r11d, edx
+    add eax, r11d
+    imul eax, [rbp-72]
+%endmacro
 TURN_COST    equ 8
 
 ; vehicle record
@@ -75,6 +96,7 @@ pf_heap         resd 65536
 pf_gen          resd 1
 pf_path         resb MAX_PATH+8
 pf_len          resd 1
+pf_popsleft     resd 1
 veh_count       resd 1
 stops           resw MAX_STOPS
 n_stops         resd 1
@@ -135,9 +157,35 @@ FUNC traffic_init
 ;  pathfinding: path_find(edi src tile, esi dst tile) -> eax length or -1
 ;  directions in pf_path[0..len)
 ; ---------------------------------------------------------------------
-FUNC path_find, 32
+; timed for the frame profile (buckets 29 time, 30 calls, 31 heap pops)
+FUNC path_find
+    cmp dword [perf_on], 0
+    jne .timed
+    call path_find_core
+    RETURN
+.timed:
+    mov r12d, edi
+    mov r13d, esi
+    CALLC SDL_GetPerformanceCounter
+    mov r14, rax
+    mov edi, r12d
+    mov esi, r13d
+    call path_find_core
+    mov r15d, eax
+    CALLC SDL_GetPerformanceCounter
+    sub rax, r14
+    add [perf_cur+29*8], rax
+    inc qword [perf_cur+30*8]
+    mov eax, PF_MAX_POPS
+    sub eax, [pf_popsleft]
+    add [perf_cur+31*8], rax
+    mov eax, r15d
+    RETURN
+
+FUNC path_find_core, 32
     mov [rbp-48], edi
     mov [rbp-52], esi
+    mov dword [pf_popsleft], PF_MAX_POPS
     cmp edi, esi
     jne .go
     mov dword [pf_len], 0
@@ -156,10 +204,26 @@ FUNC path_find, 32
     mov eax, 1
 .gen:
     mov r15d, eax                   ; generation stamp
+    ; beta: A* - the heap is ordered by cost so far plus a guess of the
+    ; rest (PF_WEIGHT per tile to go), which finds routes far faster
+    mov dword [rbp-72], 0
+    cmp dword [beta_on], 0
+    je .nw
+    mov dword [rbp-72], PF_WEIGHT
+.nw:
+    mov eax, [rbp-52]
+    mov ecx, eax
+    and ecx, MAP_W-1
+    mov [rbp-64], ecx               ; destination x
+    shr eax, MAP_SHIFT
+    mov [rbp-68], eax               ; destination y
     mov ebx, [rbp-48]
     mov [pf_stamp+rbx*2], r15w
     mov word [pf_dist+rbx*2], 0
-    mov [pf_heap], ebx              ; key = 0<<14 | src
+    PF_GUESS ebx
+    shl eax, 14
+    or eax, ebx
+    mov [pf_heap], eax              ; key = guess<<14 | src
     mov r12d, 1                     ; heap size
     mov r13d, PF_MAX_POPS
 .pop:
@@ -196,8 +260,11 @@ FUNC path_find, 32
     ; node / cost
     mov ebx, r14d
     and ebx, 0x3FFF
-    mov eax, r14d
-    shr eax, 14
+    PF_GUESS ebx
+    mov ecx, r14d
+    shr ecx, 14
+    sub ecx, eax                    ; the cost so far (the key had the guess)
+    mov eax, ecx
     cmp ax, [pf_dist+rbx*2]
     ja .pop                         ; stale entry
     cmp ebx, [rbp-52]
@@ -260,7 +327,9 @@ FUNC path_find, 32
     mov [pf_stamp+rsi*2], r15w
     mov [pf_dist+rsi*2], cx
     mov [pf_from+rsi], r9b
-    ; push (cost<<14 | node)
+    ; push ((cost + guess)<<14 | node)
+    PF_GUESS esi
+    add ecx, eax
     shl ecx, 14
     or ecx, esi
     cmp r12d, 65535
@@ -286,6 +355,7 @@ FUNC path_find, 32
     jl .dir
     jmp .pop
 .found:
+    mov [pf_popsleft], r13d
     ; walk back to count, then write forwards
     xor ecx, ecx
     mov ebx, [rbp-52]
@@ -330,6 +400,7 @@ FUNC path_find, 32
     mov eax, [pf_len]
     RETURN
 .fail:
+    mov [pf_popsleft], r13d
     mov eax, -1
     RETURN
 
@@ -547,6 +618,13 @@ FUNC vehicle_spawn, 32
     mov [rbp-64], r8d
     mov [rbp-68], r9d
     ; free slot
+    cmp dword [beta_on], 0
+    je .s0
+    call veh_free_slot
+    cmp ebx, MAX_VEH
+    jge .fail
+    jmp .have
+.s0:
     xor ebx, ebx
 .s:
     cmp ebx, MAX_VEH
@@ -852,6 +930,21 @@ FUNC vehicles_update, 32
     mov eax, [rbp-60]
 .hd:
     mov [rbp-64], eax               ; next out heading
+    ; beta: a red light at the junction ahead (fire trucks go through)
+    cmp byte [r15+V_TYPE], VT_FIRE
+    je .grn
+    push rax
+    push r8
+    mov esi, [rbp-60]
+    call signal_red
+    pop r8
+    mov ecx, eax
+    pop rax
+    test ecx, ecx
+    jz .grn
+    mov dword [r15+V_PROG], 256
+    jmp .n
+.grn:
     ; capacity (emergency vehicles squeeze through)
     movzx ecx, byte [r8+T_OCC+rax]
     movzx edx, byte [r8+T_ROADTYPE]
@@ -993,8 +1086,12 @@ FUNC vehicle_arrive
     je .garb
     cmp eax, PU_BUS
     je .bus
-    jmp .free                       ; returns and patrols
+    cmp eax, PU_HOME
+    jne .free                       ; returns and patrols
+    call note_commute
+    jmp .done_ok
 .commute:
+    call note_commute
     mov eax, [r15+V_AGE]
     add [commute_sum], eax
     inc dword [commute_n]
@@ -1224,7 +1321,16 @@ FUNC vehicle_reroute
     mov [r15+V_DSTROAD], r12d
     mov word [r15+V_WAIT], 0
     mov dword [r15+V_PROG], 128
+    ; (beta: a commuter's clock keeps running through a detour)
+    cmp dword [beta_on], 0
+    je .age0
+    cmp r13d, PU_COMMUTE
+    je .agek
+    cmp r13d, PU_HOME
+    je .agek
+.age0:
     mov dword [r15+V_AGE], 0
+.agek:
     mov eax, 1
     RETURN
 .no:
@@ -2011,6 +2117,12 @@ FUNC nearest_service, 16
 ;  per tick: trips and movement
 ; ---------------------------------------------------------------------
 FUNC traffic_tick
+    PERF_MARK 0                     ; (what came before was the sim)
+    cmp dword [beta_on], 0
+    je .classic
+    call traffic_tick_beta
+    RETURN
+.classic:
     ; how many vehicles the city "wants" on the road
     mov eax, [population]
     xor edx, edx
@@ -2022,7 +2134,7 @@ FUNC traffic_tick
     shr ecx, 5
     add eax, ecx
     add eax, 8
-    CLAMP eax, 0, MAX_VEH-120
+    CLAMP eax, 0, VEH_CAP_OLD
     mov ebx, eax
     ; spawn a few trips per tick while below target
     mov r12d, 3
@@ -2033,7 +2145,9 @@ FUNC traffic_tick
     dec r12d
     jnz .sp
 .mv:
+    PERF_MARK 27                    ; trips (with their routes)
     call vehicles_update
+    PERF_MARK 28                    ; moving
     RETURN
 
 ; ---------------------------------------------------------------------

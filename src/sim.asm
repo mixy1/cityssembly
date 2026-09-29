@@ -990,6 +990,11 @@ FUNC zone_update, 48
     movzx eax, byte [map_elem+r14]
     cmp eax, 30
     jl .tdone
+    ; beta: a home on a long commute stays at level 3
+    mov edi, r14d
+    call commute_too_long
+    test eax, eax
+    jnz .tdone
     jmp .l4
 .l4c:
     cmp eax, ZC_OFF
@@ -1066,6 +1071,19 @@ FUNC zone_update, 48
     sub eax, ecx
     cmp dword [rbp-60], ZC_RES
     jne .hc
+    ; beta: the home's own commute
+    cmp dword [beta_on], 0
+    je .hcg
+    push rax
+    push rax
+    mov edi, r14d
+    call commute_penalty
+    mov ecx, eax
+    pop rax
+    pop rax
+    sub eax, ecx
+    jmp .hc
+.hcg:
     mov ecx, [avg_commute]
     sub ecx, 300
     sar ecx, 5

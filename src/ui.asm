@@ -434,6 +434,7 @@ s_n_svc     db "police and fire cover", 0
 s_n_edu     db "schools and health care", 0
 s_n_uni     db "a university nearby", 0
 s_n_max     db "fully grown", 0
+s_n_commute db "shorter commutes (ease the jams)", 0
 s_upkeep    db "Upkeep ", 0
 s_permonth  db "/mo", 0
 s_produces  db "Output ", 0
@@ -5999,6 +6000,20 @@ FUNC growth_hint
     add edx, esi
     cmp edx, 60
     jl .o
+    ; beta: a long commute holds homes at level 3
+    cmp dword [gh_class], ZC_RES
+    jne .nlc
+    push rcx
+    push rcx
+    mov edi, r15d
+    call commute_too_long
+    pop rcx
+    pop rcx
+    test eax, eax
+    jz .nlc
+    lea rax, [s_n_commute]
+    RETURN
+.nlc:
     cmp ecx, 4
     jl .val
     cmp dword [gh_class], ZC_RES
