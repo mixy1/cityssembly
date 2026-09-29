@@ -121,6 +121,14 @@ Features still in testing, off unless you ask for them:
   so every lot is in reach; Ctrl+wheel or +/- sizes the blocks). New
   roads lay a pipe underneath (a chip turns that off). A road stopped by
   buildings says so; with Ctrl held it goes through homes and shops.
+- **Rows:** drag a small building (park, wind turbine, water tower...)
+  to put down a row of them, or drag bus stops along a road (one every
+  5 tiles).
+- **Eyedropper:** `E` over anything picks up the tool that built it.
+- **Sandbox cities** (menu): money never runs out, all the land is yours
+  and everything is unlocked.
+- **City files on the web** (menu): download the city you're playing, or
+  open a `.sav` file from your computer.
 - **Zone modes** (`G`): area, fill a block (click: every lot the roads
   around it reach, up to the roads) and along a road (drag along it: both
   sides, 3 deep). Lots no road reaches are marked while you drag, and the

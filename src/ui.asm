@@ -335,6 +335,9 @@ s_m_resume  db "Resume", 0
 s_m_save    db "Save city  (F5)", 0
 s_m_load    db "Load city  (F9)", 0
 s_m_new     db "New city", 0
+s_m_sandbox db "New sandbox city", 0
+s_m_export  db "Download city file", 0
+s_m_import  db "Open city file...", 0
 s_m_music   db "Music: ", 0
 s_m_dis     db "Disasters: ", 0
 s_m_day     db "Day/night: ", 0
@@ -369,6 +372,7 @@ s_loadfail  db "No saved city found.", 0
 s_savefile  db "city.sav", 0
 s_paused    db "PAUSED", 0
 s_beta      db "BETA", 0
+s_sandbox   db "Sandbox", 0
 s_speeds    dq sp0, sp1, sp2, sp3
 sp0 db "||", 0
 sp1 db ">", 0
@@ -1080,6 +1084,18 @@ FUNC tool_collect, 16
     je .line
     cmp eax, T_INSPECT
     je .single
+    ; beta: a row of small buildings / bus stops along the drag
+    call drag_places
+    test eax, eax
+    jz .ndp
+    mov edi, r14d
+    mov esi, r15d
+    mov edx, r12d
+    mov ecx, r13d
+    call drag_places_collect
+    jmp .out
+.ndp:
+    mov eax, [tool]
     cmp eax, T_BUILD
     je .single
     cmp eax, T_BUSSTOP
@@ -1557,21 +1573,27 @@ FUNC draw_chart, 32
 ; ---------------------------------------------------------------------
 
 FUNC draw_menu, 16
+    ; beta: a sandbox city (and on the web, city files)
+    call menu_extra_rows
+    imul eax, eax, 18
+    add eax, 180
+    mov [rbp-48], eax
     mov r12d, [ui_w]
     sub r12d, 170
     shr r12d, 1
     mov r13d, [ui_h]
-    sub r13d, 222
+    sub r13d, [rbp-48]
+    sub r13d, 42
     shr r13d, 1
     mov edi, r12d
     mov esi, r13d
     mov edx, 170
-    mov ecx, 180
+    mov ecx, [rbp-48]
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 170
-    mov ecx, 180
+    mov ecx, [rbp-48]
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+85]
@@ -1613,6 +1635,27 @@ FUNC draw_menu, 16
     call new_city
     mov dword [panel], PANEL_NONE
 .m4:
+    cmp dword [beta_on], 0
+    je .m5
+    MBTN s_m_sandbox
+    test eax, eax
+    jz .m41
+    call new_sandbox_city
+    mov dword [panel], PANEL_NONE
+.m41:
+%ifdef WEB
+    MBTN s_m_export
+    test eax, eax
+    jz .m42
+    call city_export
+    mov dword [panel], PANEL_NONE
+.m42:
+    MBTN s_m_import
+    test eax, eax
+    jz .m5
+    call web_import
+    mov dword [panel], PANEL_NONE
+%endif
 .m5:
     MBTN s_m_settings
     test eax, eax
@@ -3361,11 +3404,20 @@ tool_is_click:
     je .y
     cmp eax, T_LAND
     je .y
+    ; beta: rows of small buildings and of bus stops are dragged
+    push rax
+    push rax
+    call drag_places
+    mov ecx, eax
+    pop rax
+    pop rax
+    test ecx, ecx
+    jnz .n
     cmp eax, T_BUILD
     je .y
     cmp eax, T_BUSSTOP
     je .y
-    xor eax, eax
+.n: xor eax, eax
     ret
 .y: mov eax, 1
     ret
@@ -3922,6 +3974,12 @@ FUNC tool_apply
     RETURN
 
 .build:
+    ; beta: a row of them
+    cmp dword [tl_n], 1
+    jle .b1
+    call build_many
+    RETURN
+.b1:
     ; beta: clear the spot first (what's built there comes down)
     cmp dword [beta_on], 0
     je .bnb
@@ -4395,6 +4453,10 @@ FUNC draw_topbar, 16
     call tb_reset
     mov eax, [milestone]
     mov rdi, [milestone_names+rax*8]
+    cmp dword [free_mode], 0
+    je .tn
+    lea rdi, [s_sandbox]
+.tn:
     call tb_str
     mov edi, 6
     mov esi, 5
@@ -7575,6 +7637,7 @@ FUNC draw_ms_card, 32
 
 FUNC render_ui
     call ui_note_reset
+    call web_import_poll
     call set_target_ui
     xor edi, edi
     call clear_target
@@ -7892,6 +7955,11 @@ FUNC ui_key
     call tool_next_mode
     jmp .out
 .ng:
+    cmp eax, SC_E
+    jne .ne
+    call eyedropper
+    jmp .out
+.ne:
     cmp eax, SC_SPACE
     jne .k2
     cmp dword [sim_speed], 0

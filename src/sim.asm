@@ -187,6 +187,7 @@ plot_owned      resb PLOTS*PLOTS+7      ; land you can build on
 exp_loans       resd 1
 loan_left       resd 3                  ; months still to pay per loan
 ms_card         resd 1                  ; milestone card to show (0 none)
+free_mode       resd 1                  ; a sandbox city: money never runs out
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 
@@ -373,6 +374,13 @@ FUNC sim_tick
 FUNC sim_day
     PERF_MARK -1
     inc dword [day_count]
+    ; a sandbox city never runs out of money
+    cmp dword [free_mode], 0
+    je .nf
+    cmp qword [money], 500000
+    jge .nf
+    mov qword [money], 1000000
+.nf:
     call daily_tiles
     PERF_MARK 20
     mov eax, [day_count]

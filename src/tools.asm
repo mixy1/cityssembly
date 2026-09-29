@@ -458,6 +458,11 @@ FUNC bld_clear, 16
 ;  the tool: evaluate (tl_x/tl_y[0] is the corner under the pointer)
 ; ---------------------------------------------------------------------
 FUNC build_eval_beta
+    cmp dword [tl_n], 1
+    jle .one
+    call build_eval_many
+    RETURN
+.one:
     mov edi, [tl_x]
     mov esi, [tl_y]
     call bld_nudge
@@ -483,6 +488,29 @@ FUNC build_eval_beta
 
 ; world preview extras: what comes down, where a moved building was
 FUNC build_preview_beta, 16
+    ; a row: every building in it (the first was drawn already)
+    cmp dword [tl_n], 1
+    jle .one
+    mov ebx, 1
+.row:
+    cmp ebx, [tl_n]
+    jge .mv
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call tile_screen
+    mov esi, eax
+    mov eax, [build_kind]
+    mov edi, [spr_bld+rax*4]
+    mov ecx, 60000
+    lea r8, [remap_green]
+    cmp byte [tl_ok+rbx], 0
+    jne .rg
+    lea r8, [remap_red]
+.rg:
+    call blit_sprite
+    inc ebx
+    jmp .row
+.one:
     cmp dword [tl_valid], 0
     je .mv
     mov edi, [build_kind]
@@ -2199,4 +2227,348 @@ FUNC grid_wheel
 .no:
     xor eax, eax
 .out:
+    RETURN
+
+; =====================================================================
+;  sandbox cities, city files on the web, the eyedropper, rows of small
+;  buildings and bus stops (beta)
+; =====================================================================
+section .data
+s_expfile   db "export.sav", 0
+s_expname   db "cityssembly.sav", 0
+s_sandbox_n db "Sandbox: money never runs out, all land is yours and", 0
+s_sandbox_2 db " everything is unlocked.", 0
+s_eye_none  db "Nothing to pick up here.", 0
+BUS_SPACING equ 5
+
+section .text
+
+; extra menu rows (beta) -> eax
+menu_extra_rows:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .o
+    inc eax
+%ifdef WEB
+    add eax, 2
+%endif
+.o: ret
+
+; a new city with money that never runs out, all the land and
+; everything unlocked; no welcome card, no tour
+FUNC new_sandbox_city
+    call new_city
+    mov dword [free_mode], 1
+    mov qword [money], 1000000
+    mov qword [money_shown], 1000000
+    mov dword [milestone], 9
+    lea rdi, [plot_owned]
+    mov al, 1
+    mov ecx, PLOTS*PLOTS
+    rep stosb
+    mov dword [welcome], 0
+    call tb_reset
+    lea rdi, [s_sandbox_n]
+    call tb_str
+    lea rdi, [s_sandbox_2]
+    call tb_str
+    lea rdi, [textbuf]
+    mov esi, UI_GOLD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    RETURN
+
+%ifdef WEB
+; save the city and hand the file to the browser
+FUNC city_export
+    mov dword [save_quiet], 1
+    lea rdi, [s_expfile]
+    call save_city_to
+    lea rdi, [s_expfile]
+    lea rsi, [s_expname]
+    call web_export
+    RETURN
+%endif
+
+; a city file the player chose has arrived: open it (every frame)
+FUNC web_import_poll
+%ifdef WEB
+    cmp dword [beta_on], 0
+    je .out
+    call web_import_ready
+    test rax, rax
+    jz .out
+    mov rdi, rax
+    call load_city_from
+.out:
+%endif
+    RETURN
+
+; E: take the tool that built what's under the pointer
+FUNC eyedropper
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [hover_valid], 0
+    je .out
+    mov edi, [hover_tx]
+    mov esi, [hover_ty]
+    call tile_at
+    test rax, rax
+    jz .out
+    mov rbx, rax
+    movzx ecx, byte [rbx+T_OBJ]
+    cmp ecx, OBJ_ROAD
+    jne .n1
+    test byte [rbx+T_FLAGS2], F2_BUSSTOP
+    jz .rd
+    mov edi, SI_BUSSTOP
+    jmp .sel
+.rd:
+    movzx edi, byte [rbx+T_ROADTYPE]
+    CLAMP edi, 0, 2
+    add edi, SI_STREET
+    jmp .sel
+.n1:
+    cmp ecx, OBJ_SERVICE
+    jne .n2
+    movzx edi, byte [rbx+T_SUB]
+    jmp .sel
+.n2:
+    cmp ecx, OBJ_POWER
+    jne .n3
+    mov edi, SI_POWERLN
+    jmp .sel
+.n3:
+    cmp ecx, OBJ_TREE
+    jne .n4
+    mov dword [tool], T_TREE
+    mov dword [submenu], -1
+    jmp .out
+.n4:
+    movzx edi, byte [rbx+T_ZONE]
+    test edi, edi
+    jz .n5
+    add edi, SI_ZONE
+    jmp .sel
+.n5:
+    test byte [rbx+T_FLAGS2], F2_PIPE
+    jz .none
+    mov edi, SI_PIPE
+.sel:
+    call submenu_select
+    jmp .out
+.none:
+    lea rdi, [s_eye_none]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.out:
+    RETURN
+
+; is the current tool dragged into a row of buildings or bus stops?
+; (beta; one-tile buildings) -> eax 1
+FUNC drag_places
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [tut_step], 0
+    jge .out
+    cmp dword [tool], T_BUSSTOP
+    je .y
+    cmp dword [tool], T_BUILD
+    jne .out
+    cmp dword [moving], 0
+    jne .out
+    mov edi, [build_kind]
+    call bld_rec
+    cmp byte [rax+BI_SIZE], 1
+    jne .no
+.y:
+    mov eax, 1
+    RETURN
+.no:
+    xor eax, eax
+.out:
+    RETURN
+
+; the row: (edi, esi) to (edx, ecx), straight along the longer way.
+; Small buildings go on every tile (parks) or every other one; bus
+; stops on every BUS_SPACING-th road tile.  A drag that hasn't moved is
+; just the tile (a building centres as usual).
+FUNC drag_places_collect, 32
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    mov [rbp-56], edx
+    mov [rbp-60], ecx
+    ; straight: the end onto the start's row or column
+    mov eax, edx
+    sub eax, edi
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ecx, [rbp-60]
+    sub ecx, [rbp-52]
+    mov edx, ecx
+    sar edx, 31
+    xor ecx, edx
+    sub ecx, edx
+    cmp eax, ecx
+    jl .v
+    mov eax, [rbp-52]
+    mov [rbp-60], eax
+    jmp .step
+.v:
+    mov eax, [rbp-48]
+    mov [rbp-56], eax
+.step:
+    ; spacing
+    mov dword [rbp-64], BUS_SPACING
+    cmp dword [tool], T_BUSSTOP
+    je .walk0
+    mov dword [rbp-64], 1
+    cmp dword [build_kind], BK_PARK
+    je .walk0
+    mov dword [rbp-64], 2
+.walk0:
+    mov r12d, [rbp-48]
+    mov r13d, [rbp-52]
+    xor r14d, r14d                  ; tiles since the last one placed
+    mov r15d, [rbp-64]              ; (the first goes down at once)
+.walk:
+    cmp dword [tool], T_BUSSTOP
+    jne .any
+    ; stops: road tiles only (not highways), counted along the road
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    test rax, rax
+    jz .next
+    cmp byte [rax+T_OBJ], OBJ_ROAD
+    jne .next
+    cmp byte [rax+T_ROADTYPE], RT_HIGHWAY
+    je .next
+.any:
+    cmp r15d, [rbp-64]
+    jl .skip
+    mov edi, r12d
+    mov esi, r13d
+    call tl_push
+    xor r15d, r15d
+.skip:
+    inc r15d
+.next:
+    cmp r12d, [rbp-56]
+    je .ydir
+    jl .xi
+    dec r12d
+    jmp .walk
+.xi:
+    inc r12d
+    jmp .walk
+.ydir:
+    cmp r13d, [rbp-60]
+    je .out
+    jl .yi
+    dec r13d
+    jmp .walk
+.yi:
+    inc r13d
+    jmp .walk
+.out:
+    RETURN
+
+; evaluate a row of buildings (tl_n > 1): each where it stands
+FUNC build_eval_many
+    mov edi, [build_kind]
+    call bld_rec
+    mov r15d, [rax+BI_COST]
+    xor ebx, ebx
+.l:
+    cmp ebx, [tl_n]
+    jge .out
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call bld_fit
+    test eax, eax
+    jz .ok
+    mov [last_tool_err], eax
+    jmp .n
+.ok:
+    mov byte [tl_ok+rbx], 1
+    inc dword [tl_valid]
+    mov eax, r15d
+    add eax, [fit_cost]
+    add [tl_cost], eax
+.n:
+    inc ebx
+    jmp .l
+.out:
+    cmp dword [tl_valid], 0
+    je .o2
+    mov dword [last_tool_err], 0
+.o2:
+    RETURN
+
+; put one small (1x1) service of build_kind at (edi, esi), clearing
+; the spot first
+FUNC svc_put_one
+    mov r12d, edi
+    mov r13d, esi
+    call bld_clear
+    mov edi, r12d
+    mov esi, r13d
+    call tile_at
+    test rax, rax
+    jz .out
+    mov edx, r13d
+    shl edx, MAP_SHIFT
+    add edx, r12d
+    mov cl, [rax+T_ZONE]
+    mov [svc_zone+rdx], cl
+    mov byte [rax+T_OBJ], OBJ_SERVICE
+    mov ecx, [build_kind]
+    mov [rax+T_SUB], cl
+    mov byte [rax+T_ZONE], 0
+    mov byte [rax+T_FLAGS], F_ANCHOR
+    mov byte [rax+T_TIMER], 0
+    mov word [rax+T_POP], 0
+    mov byte [rax+T_PROBLEM], 0
+    mov byte [rax+T_ANCHOR], 0
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 3
+    mov ecx, PK_DUST
+    mov r8d, 2
+    call fx_burst
+    mov edi, r12d
+    mov esi, r13d
+    call roads_update_around
+.out:
+    RETURN
+
+; the build tool placed a row (money paid, undo begun): every valid spot
+FUNC build_many
+    xor ebx, ebx
+.l:
+    cmp ebx, [tl_n]
+    jge .d
+    cmp byte [tl_ok+rbx], 0
+    je .n
+    mov edi, [tl_x+rbx*4]
+    mov esi, [tl_y+rbx*4]
+    call svc_put_one
+.n:
+    inc ebx
+    jmp .l
+.d:
+    mov dword [net_dirty], 1
+    call networks_update
+    call coverage_update
+    mov edi, [tl_cost]
+    call undo_end
+    mov edi, SFX_PLACE
+    call sfx_play
+    call cost_float
     RETURN

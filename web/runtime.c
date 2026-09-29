@@ -338,6 +338,49 @@ void ext_web_beta(void) {
 #endif
 }
 
+// beta: hand the player a city file (A0 path, A1 name to save as)
+void ext_web_export(void) {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        var data = FS.readFile(UTF8ToString($0));
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([data], { type: 'application/octet-stream' }));
+        a.download = UTF8ToString($1);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }, (int)(uintptr_t)P(A0), (int)(uintptr_t)P(A1));
+#endif
+}
+// beta: ask the player for a city file (it arrives as import.sav)
+void ext_web_import(void) {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        var i = document.createElement('input');
+        i.type = 'file';
+        i.accept = '.sav';
+        i.onchange = function () {
+            var f = i.files[0];
+            if (!f) return;
+            f.arrayBuffer().then(function (b) {
+                FS.writeFile('/save/import.sav', new Uint8Array(b));
+                Module.importReady = 1;
+            });
+        };
+        i.click();
+    });
+#endif
+}
+// -> "import.sav" once a chosen file has been read in (once), else NULL
+void ext_web_import_ready(void) {
+#ifdef __EMSCRIPTEN__
+    int r = EM_ASM_INT({ if (Module.importReady) { Module.importReady = 0; return 1; } return 0; });
+    RETP(r ? "import.sav" : NULL);
+#else
+    RETP(NULL);
+#endif
+}
+
 // a city opened by link: the shell fetched it into /save/shared.sav
 void ext_web_open(void) {
 #ifdef __EMSCRIPTEN__
