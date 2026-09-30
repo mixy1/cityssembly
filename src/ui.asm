@@ -20,6 +20,8 @@ T_RUNWAY    equ 14              ; beta: airport runway
 T_LEVEE     equ 15              ; beta: levees
 T_TRAM      equ 16              ; beta: tram rails
 T_DISTRICT  equ 17              ; beta: districts
+T_COPY      equ 18              ; beta: blueprints
+T_PASTE     equ 19
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -1102,6 +1104,12 @@ tl_push:
 
 FUNC tool_collect, 16
     mov dword [tl_n], 0
+    ; beta: the copy follows the cursor
+    cmp dword [tool], T_PASTE
+    jne .npa
+    call bp_collect
+    jmp .out
+.npa:
     mov r12d, [hover_tx]
     mov r13d, [hover_ty]
     ; beta: zone fill / along a road
@@ -3598,6 +3606,8 @@ tool_is_click:
     mov eax, [tool]
     cmp eax, T_INSPECT
     je .y
+    cmp eax, T_PASTE
+    je .y
     cmp eax, T_LAND
     je .y
     ; beta: rows of small buildings and of bus stops are dragged
@@ -3846,6 +3856,19 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_COPY
+    jne .t8c
+    xor r13d, r13d
+    jmp .set
+.t8c:
+    cmp eax, T_PASTE
+    jne .t8p
+    call bp_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8p:
     cmp eax, T_DISTRICT
     jne .t8d
     call dist_tile_cost
@@ -4008,6 +4031,13 @@ FUNC tool_evaluate, 32
 
 ; apply the tool to all valid tiles
 FUNC tool_apply
+    ; beta: copying changes nothing
+    cmp dword [tool], T_COPY
+    jne .ncp
+    call tool_evaluate
+    call bp_copy
+    RETURN
+.ncp:
     cmp dword [force_place], 0
     jne .forced
     call tool_evaluate
@@ -4191,6 +4221,11 @@ FUNC tool_apply
     call levee_lay_tile
     jmp .upd
 .a6t:
+    cmp eax, T_PASTE
+    jne .a6p
+    call bp_lay_tile
+    jmp .upd
+.a6p:
     cmp eax, T_DISTRICT
     jne .a6x
     call dist_lay_tile
@@ -7100,6 +7135,18 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_COPY
+    jne .nbzc
+    lea r12, [ti_copy]
+    lea r13, [hx_copy]
+    jmp .draw
+.nbzc:
+    cmp eax, T_PASTE
+    jne .nbzp
+    lea r12, [ti_paste]
+    lea r13, [hx_paste]
+    jmp .draw
+.nbzp:
     cmp eax, T_DISTRICT
     jne .nbzd
     lea r12, [ti_dist]
@@ -8507,6 +8554,28 @@ FUNC ui_key
     call redo_do
     jmp .out
 .ny0:
+    ; beta: blueprints - Ctrl+C, Ctrl+V; R turns the copy
+    cmp dword [beta_on], 0
+    je .nbp
+    test dword [key_mod], 0xC0
+    jz .nbp1
+    cmp eax, SC_C
+    jne .nbp0
+    call bp_key_copy
+    jmp .out
+.nbp0:
+    cmp eax, SC_V
+    jne .nbp
+    call bp_key_paste
+    jmp .out
+.nbp1:
+    cmp eax, SC_R
+    jne .nbp
+    cmp dword [tool], T_PASTE
+    jne .nbp
+    call bp_turn_key
+    jmp .out
+.nbp:
     ; beta: photo mode (F; Esc also leaves it)
     cmp dword [beta_on], 0
     je .nph

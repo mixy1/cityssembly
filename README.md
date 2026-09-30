@@ -270,6 +270,11 @@ Features still in testing, off unless you ask for them:
   the services a higher level needs; green grows.
 - **Forecasts** (city issues): power or water running out, the landfill
   filling up, or the money running out within six months at this pace.
+- **Blueprints:** Ctrl+C, then drag over a piece of the city (up to
+  32x32) to copy its roads, zones, pipes and trees - not the buildings,
+  the zones grow them again. The copy then follows the cursor: click to
+  stamp it (paying for what it lays), R to turn it; Ctrl+V picks it up
+  again later. Undo takes a stamp back.
 - **Photo mode** (`F`): the interface goes, the city stays; `F` or Esc
   brings it back.
 - **Follow camera:** click a car or train (on its road or track), a ship
