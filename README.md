@@ -238,6 +238,12 @@ Features still in testing, off unless you ask for them:
     wanted, and a launch every summer that brings $15,000.
   - Expo Centre (Global City; 5,000 air passengers a month): $8,000 a
     month from visitors, and shops wanted.
+- **Deathcare** (Health): every month about one in 400 people dies.
+  Cemeteries (3x3, from Large Town) take them until full (6,000 graves
+  each); Crematoriums (2x2, powered, from Large City) take 200 a month
+  and never fill. Homes with neither within 30 tiles are less happy, and
+  when the city has more dead than it can take, everyone is - the city
+  issues say "Not enough deathcare".
 - **Achievements:** twenty for each city (the list is in the statistics
   panel, F4), announced as they're earned: population marks, transit
   riders, an airport with jets, a port, free-flowing traffic, clean air,

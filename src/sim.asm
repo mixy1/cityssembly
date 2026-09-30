@@ -206,6 +206,7 @@ loan_pay_cur    resd 3                  ; beta: what each loan costs a month
 wx_kind         resd 1                  ; beta: the weather (WX_*)
 wx_days         resd 1                  ; beta: days it has left
 snow_level      resd 1                  ; beta: snow on the roads, 0..255
+graves_used     resd 1                  ; beta: graves taken in the cemeteries
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 svc_count       resd BK_MAX     ; buildings of each kind (rebuilt daily)
@@ -233,12 +234,12 @@ use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
 bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0, 0, 0, 0
-              db 0, 0, 80, 0, 0, 0
+              db 0, 0, 80, 0, 0, 0, 0, 0
               times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
 svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1, 1, 1, 0
-                db 1, 1, 1, 1, 1, 1
+                db 1, 1, 1, 1, 1, 1, 0, 1
                 times BK_MAX-BK_COUNT db 0
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000
@@ -1104,6 +1105,14 @@ FUNC zone_update, 48
     push rax
     mov edi, r14d
     call commute_penalty
+    mov ecx, eax
+    pop rax
+    pop rax
+    sub eax, ecx
+    push rax
+    push rax
+    mov edi, r14d
+    call death_penalty
     mov ecx, eax
     pop rax
     pop rax
@@ -3098,6 +3107,7 @@ FUNC cov_rows, 48
 
 FUNC coverage_update, 48
     call svc_load                   ; (beta: room and funding)
+    call death_update
     ; the stamps: every core takes a band of map rows (each cell still
     ; gets its stamps in the same order, so the result is the same)
     lea rdi, [cov_rows]
@@ -3669,6 +3679,7 @@ FUNC apply_staffing
 FUNC month_end, 32
     call airport_month              ; (beta)
     call wonders_month
+    call death_month
     call port_month
     call region_month
     mov eax, [population]

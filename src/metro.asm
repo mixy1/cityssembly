@@ -42,9 +42,13 @@ tm_same            resd 1           ; (the same station)
 tm_lost            resd 1           ; (the car was quicker)
 
 section .data
+; beta menus in place of the classic ones (0: the same)
+sm_beta         dq 0, 0, 0, sm_water_beta, 0, sm_safety_beta, sm_health_beta
+                dq 0, sm_transit_beta, sm_leisure_beta
 sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE
                 dd BK_TREAT, -1
 sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
+sm_health_beta  dd BK_CLINIC, BK_HOSPITAL, BK_CEMETERY, BK_CREM, -1
 sm_leisure_beta dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK
                 dd BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
@@ -586,21 +590,11 @@ submenu_list:
     mov r15, [submenu_lists+rax*8]
     cmp dword [beta_on], 0
     je .o
-    cmp eax, 8
-    jne .o3
-    lea r15, [sm_transit_beta]
-.o3:
-    cmp eax, 3
-    jne .o5
-    lea r15, [sm_water_beta]
-.o5:
-    cmp eax, 5
-    jne .o9
-    lea r15, [sm_safety_beta]
-.o9:
-    cmp eax, 9
-    jne .o
-    lea r15, [sm_leisure_beta]
+    cmp eax, 10
+    jae .o
+    cmp qword [sm_beta+rax*8], 0
+    je .o
+    mov r15, [sm_beta+rax*8]
 .o: ret
 
 ; a station's lines in the inspector (beta; rbx its tile, r15d index)

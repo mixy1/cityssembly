@@ -277,7 +277,7 @@ s_people    db " people", 0
 s_tiles     db " tiles", 0
 s_stretch   db "Stretch: ", 0
 s_isstip    db "Click to visit each one", 0
-iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11, is12
+iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11, is12, s_dc_iss
 is12 db "Services overloaded", 0
 is1  db "without power", 0
 is2  db "without water", 0
@@ -290,8 +290,8 @@ is8  db "with no road", 0
 is9  db "with dirty water", 0
 is10 db "whose trips can't get through", 0
 is11 db "jammed road tiles - upgrade?", 0
-iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136, '!' 
-iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD, UI_WARN
+iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136, '!', '!' 
+iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD, UI_WARN, UI_WARN
 s_stjam1    db ", ", 3, 0
 s_stjam2    db " jammed", 0
 s_mmtip     db "Click or drag to move the view  (Tab hides)", 0
@@ -631,6 +631,7 @@ hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
         dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo, hb_treat
+        dq hb_cemetery, hb_crem
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -6098,6 +6099,7 @@ FUNC draw_inspect, 32
     call airport_inspect
     call port_inspect
     call service_inspect
+    call death_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
