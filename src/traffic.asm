@@ -882,6 +882,12 @@ FUNC vehicles_update, 32
 .sp:
     mov [rbp-48], eax
     add [flow_possible], eax
+    ; beta: snow on the road
+    cmp dword [snow_level], 0
+    je .nsn
+    call snow_slow
+    mov [rbp-48], eax
+.nsn:
     mov ecx, [r15+V_PROG]
     add ecx, eax
     ; final tile: arrive at the middle

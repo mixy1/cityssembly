@@ -213,6 +213,18 @@ Features still in testing, off unless you ask for them:
 - **An empty treasury:** two months in the red brings a warning, three
   cut the services back to 70%, six and the region bails the city out
   (back to $25,000) - with taxes 2% higher.
+- **Weather, a hazard for each season:**
+  - Winter snow: cars crawl on snowy roads (they turn white) except
+    within 20 tiles of a Snowplow Depot (Safety, from City).
+  - Spring floods (with disasters on): for a week or so the water covers
+    the land up to two tiles from it; the people there are miserable and
+    some buildings are wrecked when it goes down. Levees (Water, dragged
+    along the shore, $40 a tile) hold it back.
+  - Summer heatwaves: a quarter more water used, and fires start easily.
+  - Autumn storms: rain, and power lines come down.
+- **New disasters** (with disasters on): tornadoes that cross the map
+  tearing up what's in their path, epidemics where health care is
+  overloaded or the water dirty, riots when people are unhappy.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

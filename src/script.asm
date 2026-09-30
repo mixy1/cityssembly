@@ -34,6 +34,8 @@
 ;     down X Y / up X Y   press / let go of the left button on a tile (a
 ;                         drag in steps: down, move ..., shot, up)
 ;     poke X Y OFF VALUE  set byte OFF of a tile record (test setups)
+;     weather N           beta: 1 snow, 2 flood, 3 heat, 4 storm,
+;                         5 tornado, 6 epidemic, 7 riot
 ;     apply X0 Y0 X1 Y1   use the current tool from tile to tile directly
 ;                         (no pointer: for building big test cities)
 ;     roadtype N          the road tool's type (0 street, 1 avenue, 2 hwy)
@@ -89,7 +91,7 @@ play_cmds   dq pc_new, pc_rich, pc_money, pc_center, pc_zoom, pc_key, pc_hold
             dq pc_rclick, pc_wait, pc_days, pc_shot, pc_tile, pc_state, pc_echo
             dq pc_quit, pc_select, pc_press, pc_down, pc_up, pc_poke
             dq pc_apply, pc_save, pc_load, pc_speed, pc_report, pc_roadtype
-            dq pc_mapdump, 0
+            dq pc_mapdump, pc_weather, 0
 pc_new      db "new", 0
 pc_rich     db "rich", 0
 pc_money    db "money", 0
@@ -123,6 +125,7 @@ pc_speed    db "speed", 0
 pc_report   db "report", 0
 pc_roadtype db "roadtype", 0
 pc_mapdump  db "mapdump", 0
+pc_weather  db "weather", 0
 pf_mapline  db "MAP %s", 10, 0
 ; map characters by object (terrain for empty land)
 map_chars   db ". #=+HS*"
@@ -139,6 +142,8 @@ pf_report10 db " links %x tiles N %d W %d", 10, 0
 pf_report11 db "PLAY port ports %d live %d way %d ship %d trade %d (this month)", 10, 0
 pf_report12 db "PLAY services worst %d reach police %d fire %d health %d schools %d high %d", 10, 0
 pf_report13 db "PLAY econ red %d hist %x grade %d declined %d fund %d tax %d", 10, 0
+pf_report14 db "PLAY weather kind %d days %d snow %d tornado %d hits %d at %d", 0
+pf_report15 db ",%d plowed %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -530,6 +535,8 @@ FUNC play_tick, 16
     je .roadtype
     cmp ebx, 32
     je .mapdump
+    cmp ebx, 33
+    je .weather
     ; quit
     mov dword [running], 0
     jmp .done
@@ -1003,6 +1010,33 @@ FUNC play_tick, 16
     CALLC printf
     pop rax
     pop rax
+    lea rdi, [pf_report14]
+    mov esi, [wx_kind]
+    mov edx, [wx_days]
+    mov ecx, [snow_level]
+    mov r8d, [tor_on]
+    mov r9d, [tor_hits]
+    mov eax, [tor_x]
+    shr eax, 8
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
+    xor edx, edx
+    xor ecx, ecx
+.plc:
+    movzx eax, byte [map_plow+rcx]
+    add edx, eax
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .plc
+    lea rdi, [pf_report15]
+    mov esi, [tor_y]
+    shr esi, 8
+    xor eax, eax
+    CALLC printf
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row
@@ -1062,6 +1096,25 @@ FUNC play_tick, 16
     inc r12d
     cmp r12d, MAP_W
     jl .mr
+    jmp .done
+.weather:
+    ; 1 snow, 2 flood, 3 heat, 4 storm, 5 tornado, 6 epidemic, 7 riot
+    mov edi, [play_arg+4]
+    cmp edi, 5
+    jl .wx
+    je .wxt
+    cmp edi, 6
+    je .wxe
+    call riot
+    jmp .done
+.wxe:
+    call epidemic
+    jmp .done
+.wxt:
+    call tornado_start
+    jmp .done
+.wx:
+    call weather_start
     jmp .done
 .poke:
     mov edi, [play_arg+4]

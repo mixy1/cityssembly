@@ -313,6 +313,12 @@ FUNC ground_sprite
     call runway_ground
     RETURN
 .nrw:
+    cmp eax, OBJ_LEVEE
+    jne .nlv
+    mov rdi, rbx
+    call levee_ground
+    RETURN
+.nlv:
     cmp eax, OBJ_RUBBLE
     jne .nrub
     mov eax, [spr_rubble]
@@ -486,6 +492,14 @@ FUNC render_world, 32
     mov ecx, r14d
     mov r8, [rbp-56]
     call blit_sprite
+    ; beta: flood water or snow over it
+    cmp dword [wx_kind], WX_FLOOD
+    je .wxo
+    cmp dword [snow_level], 100
+    jl .objs
+.wxo:
+    mov r8, [rbp-56]
+    call flood_overlay
 .objs:
     cmp dword [emit_now], 0
     je .noemit

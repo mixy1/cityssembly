@@ -724,6 +724,14 @@ FUNC update_tile_mask
     mov [rbx+T_SUB], al
     jmp .out
 .npw:
+    cmp al, OBJ_LEVEE
+    jne .npl
+    mov edi, r12d
+    mov esi, r13d
+    call levee_mask
+    mov [rbx+T_SUB], al
+    jmp .out
+.npl:
     cmp al, OBJ_POWER
     jne .out
     mov edi, r12d

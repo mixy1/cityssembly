@@ -410,6 +410,31 @@ FUNC part_emit
     mov [rbx+PT_COL], al
     jmp .d
 .n5:
+    cmp r15d, PK_SNOW
+    jne .n6
+    mov word [rbx+PT_LIFE], 140
+    mov dword [rbx+PT_VZ], -12
+    sar dword [rbx+PT_VX], 2
+    mov dword [rbx+PT_VY], 0
+    mov byte [rbx+PT_COL], RAMP(R_WHITE, 7)
+    jmp .d
+.n6:
+    cmp r15d, PK_RAIN
+    jne .n7
+    mov word [rbx+PT_LIFE], 40
+    mov dword [rbx+PT_VZ], -48
+    mov dword [rbx+PT_VX], 3
+    mov dword [rbx+PT_VY], -3
+    mov byte [rbx+PT_COL], RAMP(R_GLASS, 6)
+    jmp .d
+.n7:
+    cmp r15d, PK_FUNNEL
+    jne .n8
+    mov word [rbx+PT_LIFE], 22
+    mov dword [rbx+PT_VZ], 3
+    mov byte [rbx+PT_COL], RAMP(R_GREY, 2)
+    jmp .d
+.n8:
     ; ember
     mov word [rbx+PT_LIFE], 50
     call rand
@@ -444,11 +469,21 @@ FUNC parts_update
     je .grav
     cmp eax, PK_EMBER
     je .grav
+    cmp eax, PK_SNOW
+    je .fall
+    cmp eax, PK_RAIN
+    je .fall
     ; smoke: slow down horizontally
     mov eax, [r15+PT_VX]
     sar eax, 4
     sub [r15+PT_VX], eax
     jmp .floor
+.fall:
+    ; snow and rain end on the ground
+    cmp dword [r15+PT_Z], 0
+    jg .n
+    mov word [r15+PT_LIFE], 0
+    jmp .n
 .grav:
     sub dword [r15+PT_VZ], 1
 .floor:
@@ -559,6 +594,7 @@ FUNC agents_tick
     mov ecx, 1
     call update_movers
     call parts_update
+    call weather_fx
     mov eax, [anim_tick]
     and eax, 7
     sete al
@@ -722,14 +758,28 @@ FUNC draw_agents, 16
     je .puff
     cmp eax, PK_DUST
     je .puff
+    cmp eax, PK_FUNNEL
+    je .puff
     ; single / double pixel particles
     mov edi, r12d
     mov esi, r13d
     mov ecx, r14d
     call zpixel
     movzx eax, byte [r15+PT_TYPE]
+    cmp eax, PK_RAIN
+    jne .qc
+    mov edi, r12d
+    lea esi, [r13-1]
+    movzx edx, byte [r15+PT_COL]
+    mov ecx, r14d
+    call zpixel
+    jmp .qn
+.qc:
+    cmp eax, PK_SNOW
+    je .qw
     cmp eax, PK_CONFETTI
     jne .qn
+.qw:
     lea edi, [r12+1]
     mov esi, r13d
     movzx edx, byte [r15+PT_COL]

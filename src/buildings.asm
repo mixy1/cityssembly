@@ -30,7 +30,8 @@ BK_RAILSTN   equ 23         ; beta
 BK_FREIGHT   equ 24         ; beta
 BK_AIRPORT   equ 25         ; beta
 BK_PORT      equ 26         ; beta
-BK_COUNT     equ 27
+BK_PLOW      equ 27         ; beta
+BK_COUNT     equ 28
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -113,6 +114,7 @@ bld_info:
     BINFO  3, CV_NONE, 10, 20, 8000, 350, 0, 0, 9000, nm_freight, 0, 40, 0, CAT_TRANSIT, 0, ds_freight
     BINFO  3, CV_NONE, 0, 10, 30000, 900, 0, 0, AP_UNLOCK, nm_airport, 0, 60, 0, CAT_TRANSIT, 0, ds_airport
     BINFO  3, CV_NONE, 0, 15, 15000, 400, 0, 0, 9000, nm_port, 0, 40, 1, CAT_TRANSIT, 0, ds_port
+    BINFO  2, CV_NONE, 20, 0, 2000, 120, 0, 0, 2500, nm_plow, 0, 10, 0, CAT_SAFETY, 0, ds_plow
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

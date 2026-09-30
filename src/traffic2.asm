@@ -105,6 +105,7 @@ FUNC traffic_tick_beta
     call trains_update
     call planes_update
     call ships_update
+    call tornado_step
     PERF_MARK 28
     RETURN
 

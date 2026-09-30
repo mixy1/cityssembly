@@ -203,6 +203,9 @@ svc_fund        resd CV_COUNT           ; beta: funding, in 10% steps from 100%
 months_red      resd 1                  ; beta: months in a row in the red
 red_hist        resd 1                  ; beta: the last 12 months, 1 = red
 loan_pay_cur    resd 3                  ; beta: what each loan costs a month
+wx_kind         resd 1                  ; beta: the weather (WX_*)
+wx_days         resd 1                  ; beta: days it has left
+snow_level      resd 1                  ; beta: snow on the roads, 0..255
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 svc_count       resd BK_MAX     ; buildings of each kind (rebuilt daily)
@@ -229,11 +232,11 @@ spec_poll   db 0, 8, 25, 45
 use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
-bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0, 0, 0
+bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0, 0, 0, 0
               times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
-svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1, 1, 1
+svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1, 1, 1, 0
                 times BK_MAX-BK_COUNT db 0
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
@@ -400,6 +403,7 @@ FUNC sim_day
     mov qword [money], 1000000
 .nf:
     call daily_tiles
+    call weather_day                ; (beta)
     PERF_MARK 20
     mov eax, [day_count]
     and eax, 7
@@ -1906,7 +1910,16 @@ tile_water_use:
     cmp byte [rdi+T_SIZE], 2
     jne .o
     shl eax, 2
-.o: ret
+.o:
+    ; beta: a heatwave, a quarter more
+    cmp dword [wx_kind], WX_HEAT
+    jne .o2
+    cmp dword [beta_on], 0
+    je .o2
+    lea eax, [rax+rax*4]
+    shr eax, 2
+.o2:
+    ret
 
 FUNC water_flood, 80
     lea rdi, [comp_map]
@@ -3998,6 +4011,7 @@ milestone_for:
 ;  random events: fires, meteors, booms
 ; ---------------------------------------------------------------------
 FUNC random_event
+    call disasters_month            ; (beta)
     mov eax, [cnt_r]
     add eax, [cnt_c]
     add eax, [cnt_i]

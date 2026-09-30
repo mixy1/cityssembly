@@ -41,6 +41,8 @@ tm_same            resd 1           ; (the same station)
 tm_lost            resd 1           ; (the car was quicker)
 
 section .data
+sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE, -1
+sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
                 dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, BK_PORT, -1
 ti_metro    db "Metro tunnel", 0
@@ -574,8 +576,16 @@ submenu_list:
     cmp dword [beta_on], 0
     je .o
     cmp eax, 8
-    jne .o
+    jne .o3
     lea r15, [sm_transit_beta]
+.o3:
+    cmp eax, 3
+    jne .o5
+    lea r15, [sm_water_beta]
+.o5:
+    cmp eax, 5
+    jne .o
+    lea r15, [sm_safety_beta]
 .o: ret
 
 ; a station's lines in the inspector (beta; rbx its tile, r15d index)

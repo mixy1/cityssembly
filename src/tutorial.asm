@@ -1952,9 +1952,12 @@ FUNC tut_ui_target, 16
     je .dock
     cmp dword [tut_phase], 2
     jne .none
-    ; the item in the open menu (see draw_submenu)
+    ; the item in the open menu (see draw_submenu: the same list)
     mov eax, [submenu]
-    mov r8, [submenu_lists+rax*8]
+    push r15
+    call submenu_list
+    mov r8, r15
+    pop r15
     xor ecx, ecx
 .cnt:
     cmp dword [r8+rcx*4], -1

@@ -141,6 +141,7 @@ OBJ_RUNWAY   equ 8     ; beta: airport runway (sub = runway mask)
 MISC_RWLIVE  equ 64    ; T_MISC: a runway an airport flies from (beta)
 MISC_RWINTL  equ 128   ;   ... with jets
 MISC_RWKEEP  equ 0x3F  ; (the other bits)
+OBJ_LEVEE    equ 9     ; beta: a levee (sub = mask)
 
 F_POWER      equ 1
 F_WATER      equ 2

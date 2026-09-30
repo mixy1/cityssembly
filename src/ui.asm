@@ -17,6 +17,7 @@ T_UPGRADE   equ 11
 T_METRO     equ 12              ; beta: metro tunnels
 T_RAIL      equ 13              ; beta: railway track
 T_RUNWAY    equ 14              ; beta: airport runway
+T_LEVEE     equ 15              ; beta: levees
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -50,6 +51,7 @@ SI_METRO    equ 124             ; beta
 SI_UNMETRO  equ 125             ; beta
 SI_RAIL     equ 126             ; beta
 SI_RUNWAY   equ 127             ; beta
+SI_LEVEE    equ 128             ; beta
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -626,7 +628,7 @@ hx_tree db "Trees raise land value and", 10
 ; extra hints by building kind
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-        dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port
+        dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -1120,6 +1122,8 @@ FUNC tool_collect, 16
     je .line
     cmp eax, T_RUNWAY
     je .lineS
+    cmp eax, T_LEVEE
+    je .line
     cmp eax, T_INSPECT
     je .single
     ; beta: a row of small buildings / bus stops along the drag
@@ -3796,6 +3800,14 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_LEVEE
+    jne .t8v
+    call levee_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8v:
     cmp eax, T_RUNWAY
     jne .t8w
     call runway_tile_cost
@@ -4107,8 +4119,13 @@ FUNC tool_apply
     jmp .upd
 .a6w:
     cmp eax, T_RUNWAY
-    jne .a7
+    jne .a6v
     call runway_lay_tile
+    jmp .upd
+.a6v:
+    cmp eax, T_LEVEE
+    jne .a7
+    call levee_lay_tile
     jmp .upd
 .a7:
     cmp eax, T_BUSSTOP
@@ -5299,6 +5316,13 @@ FUNC submenu_item_info
 .zz:
     RETURN
 .u:
+    cmp ebx, SI_LEVEE
+    jne .uv
+    mov edx, LV_COST
+    lea rax, [ti_levee]
+    mov ecx, 2500
+    RETURN
+.uv:
     cmp ebx, SI_RUNWAY
     jne .uw
     mov edx, RW_COST
@@ -5407,6 +5431,9 @@ FUNC submenu_select
     jmp .close
 .u:
     mov dword [bz_filter], 0
+    mov dword [tool], T_LEVEE
+    cmp ebx, SI_LEVEE
+    je .close
     mov dword [tool], T_RUNWAY
     cmp ebx, SI_RUNWAY
     je .close
@@ -5491,6 +5518,12 @@ FUNC submenu_is_active
     sete al
     RETURN
 .u:
+    cmp ebx, SI_LEVEE
+    jne .ulv
+    cmp dword [tool], T_LEVEE
+    sete al
+    RETURN
+.ulv:
     cmp ebx, SI_RUNWAY
     jne .urw
     cmp dword [tool], T_RUNWAY
@@ -5758,6 +5791,9 @@ FUNC draw_inspect, 32
     je .tstr
     lea rdi, [s_runway]
     cmp eax, OBJ_RUNWAY
+    je .tstr
+    lea rdi, [s_levee]
+    cmp eax, OBJ_LEVEE
     je .tstr
     lea rdi, [s_powerline]
     cmp eax, OBJ_POWER
@@ -6896,6 +6932,12 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_LEVEE
+    jne .nbzv
+    lea r12, [ti_levee]
+    lea r13, [hx_levee]
+    jmp .draw
+.nbzv:
     cmp eax, T_RUNWAY
     jne .nbzw
     lea r12, [ti_runway]
