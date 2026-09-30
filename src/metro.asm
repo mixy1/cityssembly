@@ -43,6 +43,8 @@ tm_lost            resd 1           ; (the car was quicker)
 section .data
 sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE, -1
 sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
+sm_leisure_beta dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK
+                dd BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
                 dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, BK_PORT, -1
 ti_metro    db "Metro tunnel", 0
@@ -363,6 +365,7 @@ FUNC travel_mode, 32
     jz .mf
     sub eax, 30
 .mf:
+    call gc_cheaper
     push rax
     push rax
     call rand
@@ -383,6 +386,7 @@ FUNC travel_mode, 32
     call rail_trip_cost
     cmp eax, -1
     je .pk0
+    call gc_cheaper
     push rax
     push rax
     call rand
@@ -584,8 +588,12 @@ submenu_list:
     lea r15, [sm_water_beta]
 .o5:
     cmp eax, 5
-    jne .o
+    jne .o9
     lea r15, [sm_safety_beta]
+.o9:
+    cmp eax, 9
+    jne .o
+    lea r15, [sm_leisure_beta]
 .o: ret
 
 ; a station's lines in the inspector (beta; rbx its tile, r15d index)

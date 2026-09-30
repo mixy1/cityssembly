@@ -569,7 +569,8 @@ FUNC play_tick, 16
 .rich:
     mov qword [money], 10000000
     mov qword [money_shown], 10000000
-    mov dword [milestone], 9
+    call ms_top
+    mov [milestone], eax
     lea rdi, [plot_owned]
     mov al, 1
     mov ecx, PLOTS*PLOTS

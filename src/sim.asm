@@ -233,20 +233,24 @@ use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
 bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0, 0, 0, 0
+              db 0, 0, 80, 0, 0
               times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
 svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1, 1, 1, 0
+                db 1, 1, 1, 1, 1
                 times BK_MAX-BK_COUNT db 0
 
-milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
-milestone_cash  dd 0, 1000, 2000, 3500, 5000, 8000, 12000, 16000, 25000, 50000, 0
+milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000
+                dd 50000, 80000, 0x7fffffff     ; (beta: World City, Global City)
+milestone_cash  dd 0, 1000, 2000, 3500, 5000, 8000, 12000, 16000, 25000, 50000
+                dd 80000, 120000, 0
 ; loans: amount, monthly payment, months, milestone needed
 loan_amount     dd 10000, 30000, 80000
 loan_payment    dd 460, 720, 1050
 loan_months     dd 24, 48, 96
 loan_ms         dd 0, 2, 4
-milestone_names dq ms0, ms1, ms2, ms3, ms4, ms5, ms6, ms7, ms8, ms9, ms9
+milestone_names dq ms0, ms1, ms2, ms3, ms4, ms5, ms6, ms7, ms8, ms9, ms10, ms11, ms11
 ms0 db "Empty Land", 0
 ms1 db "Hamlet", 0
 ms2 db "Village", 0
@@ -3543,6 +3547,7 @@ FUNC stats_update, 48
     imul ecx, 6
     sub eax, ecx
     add eax, [air_com]
+    add eax, [w_com]
     mov edi, ZC_COM
     call smooth_demand
     mov eax, [unemployed]
@@ -3583,6 +3588,7 @@ FUNC stats_update, 48
     imul ecx, 6
     sub eax, ecx
     add eax, [air_off]
+    add eax, [w_off]
     mov edi, ZC_OFF
     call smooth_demand
     RETURN
@@ -3654,6 +3660,7 @@ FUNC apply_staffing
 ; =====================================================================
 FUNC month_end, 32
     call airport_month              ; (beta)
+    call wonders_month
     call port_month
     call region_month
     mov eax, [population]
@@ -3854,8 +3861,10 @@ FUNC age_buildings
     RETURN
 
 FUNC check_milestone
+    call ms_top
+    mov ecx, eax
     mov eax, [milestone]
-    cmp eax, 9
+    cmp eax, ecx
     jge .out
     mov ecx, [milestone_pop+rax*4+4]
     cmp [population], ecx
@@ -3998,13 +4007,25 @@ unlocked_pop:
 
 ; milestone index for an unlock population (edi) -> eax
 milestone_for:
+    push rcx
+    call ms_top
+    mov ecx, eax
     xor eax, eax
-.l: cmp eax, 9
+.l: cmp eax, ecx
     jge .o
     cmp [milestone_pop+rax*4], edi
     jge .o
     inc eax
     jmp .l
+.o: pop rcx
+    ret
+
+; the last milestone -> eax (World City and Global City in beta)
+ms_top:
+    mov eax, 9
+    cmp dword [beta_on], 0
+    je .o
+    mov eax, 11
 .o: ret
 
 ; ---------------------------------------------------------------------

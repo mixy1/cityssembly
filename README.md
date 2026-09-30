@@ -225,6 +225,19 @@ Features still in testing, off unless you ask for them:
 - **New disasters** (with disasters on): tornadoes that cross the map
   tearing up what's in their path, epidemics where health care is
   overloaded or the water dirty, riots when people are unhappy.
+- **Two more milestones:** World City (50,000, $80,000 reward) and Global
+  City (80,000, $120,000), and the wonders they unlock (Leisure, one of
+  each, each needing something first):
+  - Grand Central Station (World City; 1,000 train riders a month and a
+    metro): trips by train and metro cost a quarter less, so more ride.
+  - Stock Exchange (World City; an airport flying jets and 4,000 office
+    jobs): offices wanted, and half a dollar a month per office job.
+  - Opera House (World City; a City Hall and a Stadium): a great park -
+    land value and happiness for 22 tiles around.
+  - Space Centre (Global City; two universities): offices and hi-tech
+    wanted, and a launch every summer that brings $15,000.
+  - Expo Centre (Global City; 5,000 air passengers a month): $8,000 a
+    month from visitors, and shops wanted.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

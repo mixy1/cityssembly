@@ -48,6 +48,7 @@ NUDGE_N     equ 24
 upgrade_t   dd BK_CLINIC, BK_HOSPITAL, BK_PARK, BK_PLAZA
             dd BK_LANDFILL, BK_INCIN, BK_COAL, BK_NUCLEAR, -1
 te_msgs     dq 0, 0, 0, 0, s_te_road, s_te_water, s_te_bld, s_te_hwy
+            dq s_te_one, s_te_wgc, s_te_wex, s_te_wop, s_te_wsp, s_te_wxp
 te_short    dq 0, 0, s_ts_needw, s_ts_owned, s_ts_road, s_ts_water, s_ts_bld, s_ts_hwy
 s_te_road   db "A road is in the way - hold Ctrl to build over it.", 0
 s_te_water  db "That can't be built on water.", 0
@@ -474,6 +475,18 @@ FUNC build_eval_beta
     mov [last_tool_err], eax
     RETURN
 .ok:
+    ; wonders: one each, and what they need first
+    push r8
+    push r9
+    mov edi, [build_kind]
+    call wonder_check
+    pop r9
+    pop r8
+    test eax, eax
+    jz .ok2
+    mov [last_tool_err], eax
+    RETURN
+.ok2:
     mov [tl_x], r8d
     mov [tl_y], r9d
     mov byte [tl_ok], 1
@@ -2289,7 +2302,8 @@ FUNC new_sandbox_city
     mov dword [free_mode], 1
     mov qword [money], 1000000
     mov qword [money_shown], 1000000
-    mov dword [milestone], 9
+    call ms_top
+    mov [milestone], eax
     lea rdi, [plot_owned]
     mov al, 1
     mov ecx, PLOTS*PLOTS

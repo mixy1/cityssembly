@@ -31,7 +31,12 @@ BK_FREIGHT   equ 24         ; beta
 BK_AIRPORT   equ 25         ; beta
 BK_PORT      equ 26         ; beta
 BK_PLOW      equ 27         ; beta
-BK_COUNT     equ 28
+BK_GCENTRAL  equ 28         ; beta: wonders ..
+BK_EXCHANGE  equ 29
+BK_OPERA     equ 30
+BK_SPACE     equ 31
+BK_EXPO      equ 32         ; .. beta
+BK_COUNT     equ 33
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -115,6 +120,11 @@ bld_info:
     BINFO  3, CV_NONE, 0, 10, 30000, 900, 0, 0, AP_UNLOCK, nm_airport, 0, 60, 0, CAT_TRANSIT, 0, ds_airport
     BINFO  3, CV_NONE, 0, 15, 15000, 400, 0, 0, 9000, nm_port, 0, 40, 1, CAT_TRANSIT, 0, ds_port
     BINFO  2, CV_NONE, 20, 0, 2000, 120, 0, 0, 2500, nm_plow, 0, 10, 0, CAT_SAFETY, 0, ds_plow
+    BINFO  3, CV_NONE, 0, 0, 60000, 800, 0, 0, 50000, nm_gcentral, 0, 30, 0, CAT_TRANSIT, 0, ds_gcentral
+    BINFO  2, CV_NONE, 0, 0, 45000, 600, 0, 0, 50000, nm_exchange, 0, 10, 0, CAT_LEISURE, 0, ds_exchange
+    BINFO  3, CV_PARK, 22, 0, 50000, 700, 0, 0, 50000, nm_opera, 0, 10, 0, CAT_LEISURE, 0, ds_opera
+    BINFO  3, CV_NONE, 0, 10, 90000, 1200, 0, 0, 80000, nm_space, 0, 50, 0, CAT_EDU, 0, ds_space
+    BINFO  3, CV_NONE, 0, 0, 80000, 1000, 0, 0, 80000, nm_expo, 0, 30, 0, CAT_LEISURE, 0, ds_expo
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

@@ -629,6 +629,7 @@ hx_tree db "Trees raise land value and", 10
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
+        dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -7854,8 +7855,10 @@ FUNC land_hint_text
 
 ; progress toward the next milestone, under its name (edi.. from topbar)
 FUNC ms_progress_bar
+    call ms_top
+    mov ecx, eax
     mov eax, [milestone]
-    cmp eax, 9
+    cmp eax, ecx
     jge .out
     mov r12d, [milestone_pop+rax*4]
     mov r13d, [milestone_pop+rax*4+4]
