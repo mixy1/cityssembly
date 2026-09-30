@@ -102,7 +102,7 @@ spr_tree        resd 8
 spr_zone        resd ZONE_TYPES*ZONE_LEVELS*ZONE_VARS
 spr_zone2       resd ZONE_TYPES*3*2    ; 2x2 buildings, levels 3..5
 spr_spec        resd 4*3*2             ; industry specialisations
-spr_bld         resd BK_COUNT
+spr_bld         resd BK_MAX
 spr_power       resd 16
 spr_pylon       resd 1
 spr_car         resd VEH_TYPES*4   ; type*4 + dir
@@ -1445,6 +1445,32 @@ FUNC bld_fire
     call finish_model
     RETURN
 
+; a metro entrance: stairs down under a glass canopy, and the sign
+FUNC bld_metro
+    BEGIN 16, 24, 6100
+    MAT M_CONCRETE
+    BOX 1,1,0,15,15,1
+    MAT M_DARK
+    BOX 4,5,0,12,11,1
+    MAT M_METAL
+    BOX 4,4,1,12,5,4
+    BOX 4,11,1,12,12,4
+    BOX 11,5,1,12,11,4
+    MAT M_GLASS
+    BOX 3,3,5,13,13,6
+    MAT M_METAL
+    BOX 4,4,4,5,5,5
+    BOX 4,11,4,5,12,5
+    BOX 11,4,4,12,5,5
+    BOX 11,11,4,12,12,5
+    BOX 13,13,0,14,14,12
+    MAT M_BLUE
+    BOX 12,13,12,15,14,16
+    MAT M_WHITE
+    BOX 13,13,13,14,14,15
+    call finish_model
+    RETURN
+
 FUNC bld_clinic
     BEGIN 16, 28, 5800
     MAT M_WHITE_WIN
@@ -1772,6 +1798,7 @@ bld_models:
     dq bld_police, bld_fire, bld_clinic, bld_hospital
     dq bld_elem, bld_school, bld_univ, bld_busdepot
     dq bld_park, bld_plaza, bld_stadium, bld_cityhall, bld_landmark
+    dq bld_metro
 section .text
 
 ; =====================================================================

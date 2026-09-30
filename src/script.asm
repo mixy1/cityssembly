@@ -130,6 +130,7 @@ pf_report2  db " vehicles %d flow %d%% commute %d jams %d", 0
 pf_report3  db " income %d expenses %d happy %d", 0
 pf_report4  db " power %d/%d water %d/%d sewage %d reds %d", 10, 0
 pf_report5  db "PLAY spend roads %d services %d policies %d loans %d | income res %d com %d ind %d off %d other %d", 10, 0
+pf_report6  db "PLAY travel bus %d metro %d walk %d (this month) stations %d weighed %d near %d same %d lost %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -887,6 +888,23 @@ FUNC play_tick, 16
     xor eax, eax
     CALLC printf
     add rsp, 40
+    lea rdi, [pf_report6]
+    mov esi, [riders_month]
+    mov edx, [metro_riders_month]
+    mov ecx, [walkers_month]
+    mov r8d, [mt_n]
+    mov r9d, [tm_calls]
+    sub rsp, 8
+    push qword [tm_lost]
+    push qword [tm_same]
+    push qword [tm_near]
+    xor eax, eax
+    CALLC printf
+    add rsp, 32
+    mov dword [tm_calls], 0
+    mov dword [tm_near], 0
+    mov dword [tm_same], 0
+    mov dword [tm_lost], 0
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row

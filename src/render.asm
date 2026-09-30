@@ -659,6 +659,10 @@ FUNC render_world, 32
     jne .np
     call draw_pipes
 .np:
+    cmp dword [eff_overlay], OV_METRO
+    jne .nm
+    call draw_tunnels
+.nm:
     PERF_MARK 12
     RETURN
 
@@ -1236,6 +1240,13 @@ FUNC overlay_tint
     mov eax, TINT_BROWN
     RETURN
 .p0:
+    cmp eax, OV_METRO
+    jne .p0m
+    mov rdi, rbx
+    mov esi, r12d
+    call metro_tint
+    RETURN
+.p0m:
     cmp eax, OV_ROUTES
     jne .p0r
     mov rdi, rbx

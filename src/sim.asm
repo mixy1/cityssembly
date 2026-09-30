@@ -33,6 +33,7 @@ OV_DESIRE_I equ 18
 OV_DESIRE_O equ 19
 OV_LAND     equ 20
 OV_ROUTES   equ 21      ; beta: the inspected road's routes
+OV_METRO    equ 22      ; beta: tunnels, stations and their reach
 OV_COUNT    equ 16      ; user-cyclable overlays
 
 MISC_NET    equ 1       ; road reaches the outside
@@ -158,7 +159,8 @@ exports_month   resd 1
 fares_month     resd 1
 road_tiles      resd 1
 road_cost       resd 1
-svc_count       resd BK_COUNT
+svc_count_old   resd 22                 ; (was svc_count: counts are rebuilt
+                                        ; from the map; kept for the layout)
 milestone       resd 1
 hist_pop        resd 64
 hist_money      resd 64
@@ -198,6 +200,7 @@ req_last        resd 1                  ; the kind asked last
 req_cool        resd 1                  ; months until the next request
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
+svc_count       resd BK_MAX     ; buildings of each kind (rebuilt daily)
 
 demand_r equ demand
 demand_c equ demand+4
@@ -221,10 +224,12 @@ spec_poll   db 0, 8, 25, 45
 use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
-bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60
+bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0
+              times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
-svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1
+svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1
+                times BK_MAX-BK_COUNT db 0
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
 milestone_cash  dd 0, 1000, 2000, 3500, 5000, 8000, 12000, 16000, 25000, 50000, 0
@@ -2649,6 +2654,7 @@ FUNC networks_update
     setae al
 .lf:
     WARN_ONCE landfull_warned, msg_landfull, UI_BAD
+    call metro_update
     RETURN
 
 ; =====================================================================
@@ -3745,6 +3751,7 @@ FUNC month_end, 32
 .ed:
     call age_buildings
     call assists_month
+    call metro_month
     call requests_month
     call check_milestone
     call random_event

@@ -99,6 +99,7 @@ FUNC rq_value
     RETURN
 .t:
     mov eax, [bus_riders]
+    add eax, [metro_riders]
     RETURN
 
 ; is kind edi worth asking for now?  -> eax 1, and ecx the target,

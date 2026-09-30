@@ -24,7 +24,10 @@ BK_PLAZA     equ 18
 BK_STADIUM   equ 19
 BK_CITYHALL  equ 20
 BK_LANDMARK  equ 21
-BK_COUNT     equ 22
+BK_FIRST_BETA equ 22        ; kinds from here on are only in ?beta
+BK_METRO     equ 22         ; beta
+BK_COUNT     equ 23
+BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
 CV_NONE      equ 0
@@ -101,6 +104,7 @@ bld_info:
     BINFO  3, CV_PARK, 24, 0, 8000, 300, 0, 0, 5000, nm_stadium, 0, 60, 0, CAT_LEISURE, 0, ds_stadium
     BINFO  2, CV_PARK, 16, 0, 5000, 120, 0, 0, 2500, nm_cityhall, 0, 5, 0, CAT_LEISURE, 0, ds_cityhall
     BINFO  2, CV_PARK, 40, 0, 25000, 150, 0, 0, 16000, nm_landmark, 0, 20, 0, CAT_LEISURE, 0, ds_landmark
+    BINFO  1, CV_NONE, 6, 0, 3000, 150, 0, 0, 5000, nm_metro, 0, 5, 0, CAT_TRANSIT, 0, ds_metro
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0
@@ -124,6 +128,7 @@ nm_plaza     db "Plaza", 0
 nm_stadium   db "Stadium", 0
 nm_cityhall  db "City Hall", 0
 nm_landmark  db "Asm Tower", 0
+nm_metro     db "Metro Station", 0
 
 ds_coal      db "Cheap, strong power. Very polluting.", 0
 ds_wind      db "Clean but weak. Output varies by season.", 0
@@ -147,6 +152,7 @@ ds_plaza     db "Bigger park with a fountain.", 0
 ds_stadium   db "City-wide happiness boost.", 0
 ds_cityhall  db "Civic pride. Land value boost.", 0
 ds_landmark  db "Tourists! Monthly income.", 0
+ds_metro     db "Trains under the city, between stations.", 0
 
 section .text
 ; bld_rec(edi kind) -> rax record pointer

@@ -84,9 +84,17 @@ FUNC traffic_tick_beta
     shr eax, 4
     CLAMP eax, 0, MAX_VEH-120
     mov ebx, eax
+    ; trips on foot, by bus or metro are going too, just not by car:
+    ; they last about 512 steps
+    mov eax, [ghost_trips]
+    shr eax, 9
+    sub [ghost_trips], eax
     mov r12d, TRIPS_TICK
 .sp:
-    cmp [veh_count], ebx
+    mov eax, [ghost_trips]
+    shr eax, 8
+    add eax, [veh_count]
+    cmp eax, ebx
     jge .mv
     call generate_trip_beta
     dec r12d
@@ -216,12 +224,16 @@ FUNC generate_trip_beta
     cmp eax, -1
     je .out
     mov r12d, eax
-    call transit_instead
-    test eax, eax
-    jnz .out
     mov edi, r12d
     call pick_job_near
-    mov esi, eax
+    mov r13d, eax
+    ; on foot, by bus, by metro - or by car
+    mov edi, r12d
+    mov esi, r13d
+    call travel_mode
+    test eax, eax
+    jnz .out
+    mov esi, r13d
     mov edi, r12d
     mov edx, VT_CAR
     mov ecx, PU_COMMUTE
@@ -240,7 +252,9 @@ FUNC generate_trip_beta
     cmp eax, -1
     je .out
     mov r12d, eax
-    call transit_instead
+    mov edi, r13d
+    mov esi, r12d
+    call travel_mode
     test eax, eax
     jnz .out
     mov edi, r13d
@@ -256,16 +270,19 @@ FUNC generate_trip_beta
     cmp eax, -1
     je .out
     mov r12d, eax
-    call transit_instead
-    test eax, eax
-    jnz .out
     lea rdi, [list_com]
     mov esi, [n_com]
     mov edx, r12d
     call pick_near
     cmp eax, -1
     je .out
-    mov esi, eax
+    mov r13d, eax
+    mov edi, r12d
+    mov esi, r13d
+    call travel_mode
+    test eax, eax
+    jnz .out
+    mov esi, r13d
     mov edi, r12d
     mov edx, VT_CAR
     mov ecx, PU_SHOP

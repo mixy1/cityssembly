@@ -145,6 +145,17 @@ Features still in testing, off unless you ask for them:
   found with A*, so the extra cars cost little.
 - **Traffic lights** stand on avenue junctions and show which way is
   green.
+- **Metro** (Public transport, from Large City): dig tunnels like pipes
+  (under anything, twice the price under water) and put stations on the
+  street; stations joined by tunnels make a line. People within 6 tiles
+  of a station whose trip ends near another station on the line ride it:
+  fast, never in traffic, 4,000 riders a month per station. The metro
+  view shows the tunnels (with trains running), the stations and where
+  they're a walk away.
+- **How people travel:** every trip weighs walking (short hops), the car
+  (slower as jams grow), the bus (both ends near stops) and the metro,
+  and takes the quickest, give or take. Trips not made by car take cars
+  off the road; the statistics count metro riders and trips on foot.
 - **Difficulty** (on the welcome card, and in the budget panel):
   Relaxed keeps the classic costs. Normal: services cost 1.5x and more
   as the city grows (about 2.4x at 35,000 people), roads cost $1 / $2 /

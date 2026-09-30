@@ -14,6 +14,7 @@ T_BUILD     equ 8
 T_TREE      equ 9
 T_LAND      equ 10
 T_UPGRADE   equ 11
+T_METRO     equ 12              ; beta: metro tunnels
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -41,6 +42,8 @@ SI_POWERLN  equ 120
 SI_PIPE     equ 121
 SI_UNPIPE   equ 122
 SI_UNPOWER  equ 123
+SI_METRO    equ 124             ; beta
+SI_UNMETRO  equ 125             ; beta
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -146,7 +149,7 @@ submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
-    dq ov16, ov17, ov18, ov19, ov20, ov21
+    dq ov16, ov17, ov18, ov19, ov20, ov21, ov_metro_n
 ov21 db "Routes through this road", 0
 ov20 db "Land", 0
 ov0  db "No info view", 0
@@ -171,7 +174,7 @@ ov18 db "Industrial desirability", 0
 ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
-    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21
+    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21, oh_metro
 oh21 db 7, "where they come from  ", 2, "where they go  ", 4, "route  ", 3, "busy route", 0
 oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
@@ -505,6 +508,9 @@ st_rows:
     dq strow16, cnt_abandon, 0
     dq strow17, avg_crime, 0
 ST_ROWS equ 18
+    dq s_st_metro, metro_riders, 0      ; beta rows follow
+    dq s_st_walk, walkers, 0
+ST_ROWS_BETA equ 20
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -523,6 +529,7 @@ strow14 db "Uncollected garbage", 0
 strow15 db "Landfill used", 0
 strow16 db "Abandoned buildings", 0
 strow17 db "Average crime", 0
+s_st_walk db "Trips on foot / month", 0
 s_sec       db " s", 0
 
 goal_text:
@@ -608,6 +615,8 @@ hx_tree db "Trees raise land value and", 10
 ; extra hints by building kind
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        dq hb_metro
+        times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
            db "to your city.", 0
@@ -622,6 +631,11 @@ hb_sewage  db "Every building on a pipe sends", 10
            db "here, and it spills into the", 10
            db "river. Put it on the shore", 10
            db 3, "downstream, far from pumps", 1, ".", 0
+hb_metro   db "Stations joined by metro tunnels", 10
+           db "make a line. People near one ride", 10
+           db "to places near another: fast, and", 10
+           db "never in traffic. Dig the tunnels", 10
+           db "with Metro tunnel.", 0
 hb_service db "The ring shows its reach.", 10
            db "Dim rings: ones you already have.", 0
 
@@ -1088,6 +1102,8 @@ FUNC tool_collect, 16
     cmp eax, T_POWERLN
     je .pline
     cmp eax, T_PIPE
+    je .line
+    cmp eax, T_METRO
     je .line
     cmp eax, T_INSPECT
     je .single
@@ -2720,6 +2736,10 @@ FUNC compute_eff_overlay
     xor eax, eax
     cmp dword [welcome], 0
     jne .have
+    ; beta: the metro tools show the metro view
+    call metro_view_wanted
+    test eax, eax
+    jnz .set2
     mov ecx, [submenu]
     cmp ecx, -1
     je .tool
@@ -3070,8 +3090,13 @@ bz_mode:
     test eax, eax
     jnz .o
     cmp dword [eff_overlay], OV_WATER
-    jne .p
+    jne .p0
     mov eax, 1
+    ret
+.p0:
+    cmp dword [eff_overlay], OV_METRO
+    jne .p
+    mov eax, 3
     ret
 .p: cmp dword [eff_overlay], OV_POWER
     jne .o
@@ -3674,6 +3699,14 @@ FUNC tool_evaluate, 32
     mov r13d, 2
     jmp .set
 .bzp:
+    cmp eax, 3
+    jne .bzp2
+    ; metro tunnels only
+    test byte [r12+T_MISC], MISC_METRO
+    jz .n
+    mov r13d, 5
+    jmp .set
+.bzp2:
     cmp eax, 2
     jne .bzall
     cmp ecx, OBJ_POWER
@@ -3738,6 +3771,14 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_METRO
+    jne .t8u
+    call metro_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8u:
     cmp eax, T_UPGRADE
     jne .n
     cmp ecx, OBJ_ROAD
@@ -3941,6 +3982,11 @@ FUNC tool_apply
     cmp eax, T_BULLDOZE
     jne .a5
     call bz_mode
+    cmp eax, 3
+    jne .bzt
+    and byte [r12+T_MISC], ~MISC_METRO
+    jmp .n                          ; underground: no dust
+.bzt:
     cmp eax, 1
     jne .bzq
     and byte [r12+T_FLAGS2], ~F2_PIPE
@@ -3993,9 +4039,14 @@ FUNC tool_apply
     jmp .upd
 .a6:
     cmp eax, T_PIPE
-    jne .a7
+    jne .a6m
     or byte [r12+T_FLAGS2], F2_PIPE
     jmp .n                          ; pipes are underground: no dust
+.a6m:
+    cmp eax, T_METRO
+    jne .a7
+    or byte [r12+T_MISC], MISC_METRO
+    jmp .n
 .a7:
     cmp eax, T_BUSSTOP
     jne .a8
@@ -5177,6 +5228,19 @@ FUNC submenu_item_info
 .zz:
     RETURN
 .u:
+    cmp ebx, SI_METRO
+    jne .u1
+    mov edx, MT_COST
+    lea rax, [ti_metro]
+    mov ecx, 5000
+    RETURN
+.u1:
+    cmp ebx, SI_UNMETRO
+    jne .u2
+    mov edx, 5
+    lea rax, [ti_unmetro]
+    RETURN
+.u2:
     mov edx, 5
     lea rax, [ti_line]
     cmp ebx, SI_POWERLN
@@ -5258,6 +5322,14 @@ FUNC submenu_select
     jmp .close
 .u:
     mov dword [bz_filter], 0
+    mov dword [tool], T_METRO
+    cmp ebx, SI_METRO
+    je .close
+    mov dword [tool], T_BULLDOZE
+    mov dword [bz_filter], 3
+    cmp ebx, SI_UNMETRO
+    je .close
+    mov dword [bz_filter], 0
     mov dword [tool], T_POWERLN
     cmp ebx, SI_POWERLN
     je .close
@@ -5328,6 +5400,20 @@ FUNC submenu_is_active
     sete al
     RETURN
 .u:
+    cmp ebx, SI_METRO
+    jne .um
+    cmp dword [tool], T_METRO
+    sete al
+    RETURN
+.um:
+    cmp ebx, SI_UNMETRO
+    jne .um2
+    cmp dword [tool], T_BULLDOZE
+    jne .o
+    cmp dword [bz_filter], 3
+    sete al
+    RETURN
+.um2:
     cmp ebx, SI_POWERLN
     jne .p
     cmp dword [tool], T_POWERLN
@@ -5362,7 +5448,7 @@ FUNC draw_submenu, 48
     mov eax, [submenu]
     cmp eax, -1
     je .out
-    mov r15, [submenu_lists+rax*8]
+    call submenu_list
     xor ecx, ecx
 .cnt:
     cmp dword [r15+rcx*4], -1
@@ -5857,6 +5943,7 @@ FUNC draw_inspect, 32
     mov ecx, UI_TEXT
     call row_text
 .sveh:
+    call metro_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6440,15 +6527,22 @@ FUNC draw_stats, 16
     mov r13d, [ui_h]
     sub r13d, 250
     shr r13d, 1
+    mov ecx, 236
+    mov dword [rbp-48], ST_ROWS
+    cmp dword [beta_on], 0
+    je .sh
+    add ecx, 22
+    mov dword [rbp-48], ST_ROWS_BETA
+.sh:
+    mov [rbp-52], ecx
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 236
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 260
-    mov ecx, 236
+    mov ecx, [rbp-52]
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+10]
@@ -6505,7 +6599,7 @@ FUNC draw_stats, 16
     call draw_text_right
     add r13d, 11
     inc ebx
-    cmp ebx, ST_ROWS
+    cmp ebx, [rbp-48]
     jl .r
     RETURN
 
@@ -6649,6 +6743,10 @@ FUNC draw_tool_hint, 16
     jne .nbz
     cmp dword [bz_filter], 0
     je .nbz
+    lea r12, [ti_unmetro]
+    lea r13, [hx_unmetro]
+    cmp dword [bz_filter], 3
+    je .draw
     lea r12, [ti_unpipe]
     lea r13, [hx_unpipe]
     cmp dword [bz_filter], 1
@@ -6657,6 +6755,12 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_METRO
+    jne .nbzm
+    lea r12, [ti_metro]
+    lea r13, [hx_metro]
+    jmp .draw
+.nbzm:
     cmp eax, T_ZONETOOL
     jne .t
     call zone_demand_text
@@ -6998,9 +7102,11 @@ count_lines:
 ;  problem icons above buildings (screen positions from the renderer)
 ; ---------------------------------------------------------------------
 FUNC draw_problem_icons, 32
-    ; beta: none while a road's routes are shown
+    ; beta: none while a road's routes, or the metro, are shown
     cmp dword [route_sel], 0
     jge .out
+    cmp dword [eff_overlay], OV_METRO
+    je .out
     ; beta: none over the spot a building is being placed on
     mov dword [rbp-56], -1000
     mov dword [rbp-60], -1000
@@ -7686,6 +7792,12 @@ FUNC draw_ms_card, 32
 .b:
     cmp ebx, BK_COUNT
     jge .zones
+    ; (buildings still in testing only with ?beta)
+    cmp ebx, BK_FIRST_BETA
+    jl .bb
+    cmp dword [beta_on], 0
+    je .bn
+.bb:
     mov edi, ebx
     call bld_rec
     mov ecx, [rax+BI_UNLOCK]
@@ -7935,7 +8047,7 @@ FUNC render_ui
 .out:
     RETURN
 section .data
-tool_icon db ICON_INSPECT, ICON_BULLDOZE, ICON_ROAD, ICON_POWERLINE, ICON_ZONE_R, ICON_WATER, ICON_BUS, ICON_DEZONE, ICON_POWER, ICON_TREE, ICON_LAND, ICON_ROAD
+tool_icon db ICON_INSPECT, ICON_BULLDOZE, ICON_ROAD, ICON_POWERLINE, ICON_ZONE_R, ICON_WATER, ICON_BUS, ICON_DEZONE, ICON_POWER, ICON_TREE, ICON_LAND, ICON_ROAD, ICON_BUS
 section .text
 
 ; =====================================================================
