@@ -244,6 +244,14 @@ Features still in testing, off unless you ask for them:
     wanted, and a launch every summer that brings $15,000.
   - Expo Centre (Global City; 5,000 air passengers a month): $8,000 a
     month from visitors, and shops wanted.
+- **Coverage at the cursor:** placing a police or fire station, clinic,
+  school or park, the price says how many buildings or homes it would
+  reach that aren't served well now ("$800 +9 homes").
+- **Photo mode** (`F`): the interface goes, the city stays; `F` or Esc
+  brings it back.
+- **Follow camera:** click a car or train (on its road or track), a ship
+  or a plane with the inspector and the view follows it; moving the view
+  or Esc lets go.
 - **Deathcare** (Health): every month about one in 400 people dies.
   Cemeteries (3x3, from Large Town) take them until full (6,000 graves
   each); Crematoriums (2x2, powered, from Large City) take 200 a month

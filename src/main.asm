@@ -503,6 +503,7 @@ FUNC main
     jmp .steps
 .render:
     PERF_MARK 0                     ; simulation
+    call follow_update              ; (beta)
     call update_hover
     call palette_update
     ; screen shake: offset the camera for this frame only.  Only the
@@ -1475,6 +1476,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "wonders.asm"
 %include "achieve.asm"
 %include "deathcare.asm"
+%include "qol.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

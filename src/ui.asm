@@ -4365,6 +4365,8 @@ FUNC tool_apply
 ; ---------------------------------------------------------------------
 FUNC draw_tool_preview, 16
     call set_target_world
+    cmp dword [photo_mode], 0
+    jne .out
     call freehand_track
     call route_keep
     call jam_marks
@@ -4646,6 +4648,10 @@ FUNC world_input
     mov dword [drag_active], 1
     jmp .out
 .inspect:
+    ; beta: a car, a train, a plane, a ship: follow it
+    call follow_pick
+    test eax, eax
+    jnz .out
     ; clicking bare land closes the inspector
     mov edi, [hover_tx]
     mov esi, [hover_ty]
@@ -7147,6 +7153,11 @@ FUNC draw_cursor_cost
     lea rdi, [s_tiles]
     call tb_str
 .d:
+    ; beta: the homes a service would reach
+    cmp dword [tool], T_BUILD
+    jne .d2
+    call cov_gain_text
+.d2:
     lea rdi, [textbuf]
     call text_width
     lea r12d, [rax+6]
@@ -8102,9 +8113,16 @@ FUNC render_ui
     je .ui
     mov dword [click_pending], 0
 .ui:
+    ; beta: photo mode - nothing over the city
+    cmp dword [photo_mode], 0
+    je .nphoto
+    call photo_draw
+    jmp .out
+.nphoto:
     call draw_problem_icons
     call draw_floats
     call region_labels
+    call follow_draw
     cmp dword [welcome], 0
     je .game
     call draw_welcome
@@ -8308,6 +8326,28 @@ FUNC ui_key
     call redo_do
     jmp .out
 .ny0:
+    ; beta: photo mode (F; Esc also leaves it)
+    cmp dword [beta_on], 0
+    je .nph
+    cmp eax, SC_F
+    jne .nph1
+    test dword [key_mod], 0xC0
+    jnz .nph
+    call photo_toggle
+    jmp .out
+.nph1:
+    cmp eax, SC_ESCAPE
+    jne .nph
+    cmp dword [follow_kind], 0
+    je .nph2
+    mov dword [follow_kind], 0
+    jmp .out
+.nph2:
+    cmp dword [photo_mode], 0
+    je .nph
+    call photo_toggle
+    jmp .out
+.nph:
     cmp eax, SC_ESCAPE
     jne .k1
     cmp dword [welcome], 0
