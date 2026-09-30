@@ -475,6 +475,7 @@ FUNC hist_month
     add eax, [metro_riders]
     add eax, [train_riders]
     add eax, [tram_riders]
+    add eax, [ferry_riders]
     mov [hist_series+3*256+rbx*4], eax
     mov eax, [trade_last]
     mov [hist_series+4*256+rbx*4], eax

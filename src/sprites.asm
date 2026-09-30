@@ -1800,7 +1800,7 @@ bld_models:
     dq bld_park, bld_plaza, bld_stadium, bld_cityhall, bld_landmark
     dq bld_metro, bld_railstn, bld_freight, bld_airport, bld_port, bld_plow
     dq bld_gcentral, bld_exchange, bld_opera, bld_space, bld_expo, bld_treat
-    dq bld_cemetery, bld_crem, bld_tramdepot, bld_hotel, bld_icstn
+    dq bld_cemetery, bld_crem, bld_tramdepot, bld_hotel, bld_icstn, bld_pier
 section .text
 
 ; =====================================================================
@@ -2158,6 +2158,7 @@ FUNC sprites_init
     call port_sprites_init
     call weather_sprites_init
     call tram_sprites_init
+    call ferry_sprites_init
     xor edi, edi
     call gen_signal
     mov [spr_signal], eax

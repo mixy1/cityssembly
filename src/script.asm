@@ -145,7 +145,7 @@ pf_report13 db "PLAY econ red %d hist %x grade %d declined %d fund %d tax %d", 1
 pf_report14 db "PLAY weather kind %d days %d snow %d tornado %d hits %d at %d", 0
 pf_report15 db ",%d plowed %d", 10, 0
 pf_report16 db "PLAY trams lines %d riders %d (this month) trams %d raw %d (this month) tourists %d", 0
-pf_report17 db " guests %d intercity %d", 10, 0
+pf_report17 db " guests %d intercity %d piers %d ferry riders %d (this month)", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -1059,6 +1059,8 @@ FUNC play_tick, 16
     lea rdi, [pf_report17]
     mov esi, [guests]
     mov edx, [ic_live]
+    mov ecx, [fe_n]
+    mov r8d, [ferry_riders_month]
     xor eax, eax
     CALLC printf
     jmp .done

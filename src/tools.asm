@@ -1296,6 +1296,7 @@ extra_reset:
     call achv_reset
     call hist_reset
     call trams_reset
+    call ferries_reset
     call scen_reset
     call dist_reset
     push rdi

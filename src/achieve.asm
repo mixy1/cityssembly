@@ -218,6 +218,7 @@ FUNC achv_test
     add ecx, [metro_riders]
     add ecx, [train_riders]
     add ecx, [tram_riders]
+    add ecx, [ferry_riders]
     imul ecx, ecx, 5
     cmp ecx, eax
 .ge:

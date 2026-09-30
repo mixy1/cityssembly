@@ -312,6 +312,11 @@ Features still in testing, off unless you ask for them:
   People within 4 tiles of a line whose trip ends near the same line may
   ride: quicker than the bus, slower than the metro, held up by jams like
   the cars. The trams run on the rails, going straight on where they can.
+- **Ferries** (Public transport, from Large City): a Ferry Pier (1x1,
+  touching water) joins the other piers on the same water. People within
+  6 tiles of a pier whose trip ends near another pier on that water may
+  take the ferry - no traffic, 3,000 a month per pier. Ferries sail
+  between the piers and wait at each.
 - **Bus capacity:** each Bus Depot's buses carry 3,000 riders a month;
   when they're full, people drive. A growing city needs more depots.
 - **Water Treatment** (Water, from City; 2x2, touching water, powered):

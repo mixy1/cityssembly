@@ -534,7 +534,8 @@ ST_ROWS equ 18
     dq s_st_tram, tram_riders, 0
     dq s_st_raw, raw_last, 0
     dq s_st_tour, tourists, 0
-ST_ROWS_BETA equ 27
+    dq s_st_ferry, ferry_riders, 0
+ST_ROWS_BETA equ 28
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -641,7 +642,7 @@ hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
         dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo, hb_treat
-        dq hb_cemetery, hb_crem, hb_tramdepot, hb_hotel, hb_icstn
+        dq hb_cemetery, hb_crem, hb_tramdepot, hb_hotel, hb_icstn, hb_pier
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -6232,6 +6233,7 @@ FUNC draw_inspect, 32
     call death_inspect
     call tram_inspect
     call hotel_inspect
+    call ferry_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6847,7 +6849,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 117
+    add ecx, 128
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx
