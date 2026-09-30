@@ -31,6 +31,7 @@ PANEL_LOAD     equ 8
 PANEL_REGION   equ 9            ; beta: the neighbours
 PANEL_SERVICES equ 10           ; beta: services' funding
 PANEL_ACHV     equ 11           ; beta: achievements
+PANEL_HIST     equ 12           ; beta: history graphs
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -2733,6 +2734,9 @@ save_chunks:
     db "ACHV"
     dq achv_state
     dd achv_state_end - achv_state
+    db "HIST"
+    dq hist_state
+    dd hist_state_end - hist_state
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 3
 SC_SIMS equ 4
@@ -6796,10 +6800,13 @@ FUNC draw_stats, 16
     inc ebx
     cmp ebx, [rbp-48]
     jl .r
-    ; beta: the achievements
+    ; beta: the achievements, the history
     lea edi, [r12+10]
     lea esi, [r13+3]
     call achv_button
+    lea edi, [r12+120]
+    lea esi, [r13+3]
+    call hist_button
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -8178,8 +8185,13 @@ FUNC render_ui
     jmp .hud
 .p6a:
     cmp eax, PANEL_ACHV
-    jne .p7
+    jne .p6h
     call draw_achievements
+    jmp .hud
+.p6h:
+    cmp eax, PANEL_HIST
+    jne .p7
+    call draw_history
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE

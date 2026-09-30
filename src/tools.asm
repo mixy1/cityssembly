@@ -1294,6 +1294,7 @@ extra_reset:
     call ports_reset
     call weather_reset
     call achv_reset
+    call hist_reset
     call region_reset
     mov dword [cam_prev+8], 0
     pop rdi

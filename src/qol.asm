@@ -419,3 +419,166 @@ FUNC follow_draw
     call draw_text_centered
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  history (beta): six more monthly graphs, beside the budget's two -
+;  traffic flow, commute, happiness, transit riders, trade and jams.
+;  Saved with the city ("HIST"), on the same 64-month ring.
+; ---------------------------------------------------------------------
+HS_N        equ 6
+
+section .bss
+alignb 4
+hist_state:
+hist_series resd HS_N*64
+hist_state_end:
+
+section .data
+hs_names    dq hsn0, hsn1, hsn2, hsn3, hsn4, hsn5
+hsn0        db "Traffic flow (%)", 0
+hsn1        db "Commute", 0
+hsn2        db "Happiness (%)", 0
+hsn3        db "Transit riders / month", 0
+hsn4        db "Trade / month ($)", 0
+hsn5        db "Jammed roads", 0
+hs_cols     dd UI_GOOD, UI_WARN, UI_GOLD, UI_ACCENT, UI_GOOD, UI_BAD
+s_hs_title  db "History", 0
+s_hs_btn    db "History", 0
+s_hs_now    db "now ", 0
+
+section .text
+
+hist_reset:
+    push rdi
+    push rcx
+    lea rdi, [hist_state]
+    mov ecx, (hist_state_end - hist_state)/4
+    xor eax, eax
+    rep stosd
+    pop rcx
+    pop rdi
+    ret
+
+; the month's samples (beta; at hist_count, before it moves on)
+FUNC hist_month
+    cmp dword [beta_on], 0
+    je .out
+    mov ebx, [hist_count]
+    and ebx, 63
+    mov eax, [flow_pct]
+    mov [hist_series+0*256+rbx*4], eax
+    mov eax, [avg_commute]
+    mov [hist_series+1*256+rbx*4], eax
+    mov eax, [happy_avg]
+    mov [hist_series+2*256+rbx*4], eax
+    mov eax, [bus_riders]
+    add eax, [metro_riders]
+    add eax, [train_riders]
+    mov [hist_series+3*256+rbx*4], eax
+    mov eax, [trade_last]
+    mov [hist_series+4*256+rbx*4], eax
+    ; jammed road tiles
+    xor edx, edx
+    xor ecx, ecx
+.j:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .jn
+    cmp byte [tiles+rax+T_JAM], 150
+    jb .jn
+    inc edx
+.jn:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .j
+    mov [hist_series+5*256+rbx*4], edx
+.out:
+    RETURN
+
+HS_W        equ 340
+HS_H        equ 232
+
+FUNC draw_history, 16
+    mov r12d, [ui_w]
+    sub r12d, HS_W
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, HS_H
+    shr r13d, 1
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, HS_W
+    mov ecx, HS_H
+    call draw_panel
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, HS_W
+    mov ecx, HS_H
+    call ui_over
+    mov dword [font_scale], 2
+    lea edi, [r12+10]
+    lea esi, [r13+6]
+    lea rdx, [s_hs_title]
+    mov ecx, UI_GOLD
+    call draw_text
+    mov dword [font_scale], 1
+    add r13d, 28
+    xor ebx, ebx
+.s:
+    ; two columns
+    mov eax, ebx
+    and eax, 1
+    imul r14d, eax, 165
+    add r14d, r12d
+    add r14d, 10
+    mov eax, ebx
+    shr eax, 1
+    imul r15d, eax, 66
+    add r15d, r13d
+    ; the name and the latest value
+    mov rdx, [hs_names+rbx*8]
+    mov edi, r14d
+    mov esi, r15d
+    mov ecx, UI_TEXT
+    call draw_text
+    call tb_reset
+    mov eax, [hist_count]
+    dec eax
+    and eax, 63
+    mov ecx, ebx
+    shl ecx, 6
+    add eax, ecx
+    movsxd rdi, dword [hist_series+rax*4]
+    call tb_num
+    lea edi, [r14+150]
+    mov esi, r15d
+    lea rdx, [textbuf]
+    mov ecx, UI_DIM
+    call draw_text_right
+    ; the graph
+    mov edi, r14d
+    lea esi, [r15+10]
+    mov eax, ebx
+    shl eax, 8
+    lea rdx, [hist_series+rax]
+    mov ecx, [hs_cols+rbx*4]
+    call draw_chart
+    inc ebx
+    cmp ebx, HS_N
+    jl .s
+    RETURN
+
+; the statistics panel's button to it (beta; edi x, esi y)
+FUNC hist_button
+    cmp dword [beta_on], 0
+    je .out
+    mov edx, 80
+    lea rcx, [s_hs_btn]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .out
+    mov dword [panel], PANEL_HIST
+.out:
+    RETURN

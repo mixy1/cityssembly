@@ -252,6 +252,9 @@ Features still in testing, off unless you ask for them:
 - **Follow camera:** click a car or train (on its road or track), a ship
   or a plane with the inspector and the view follows it; moving the view
   or Esc lets go.
+- **History** (statistics panel, F4): monthly graphs of traffic flow,
+  commute, happiness, transit riders, trade and jammed roads, over the
+  same 64 months as the budget's population and money.
 - **Deathcare** (Health): every month about one in 400 people dies.
   Cemeteries (3x3, from Large Town) take them until full (6,000 graves
   each); Crematoriums (2x2, powered, from Large City) take 200 a month
