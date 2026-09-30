@@ -142,6 +142,10 @@ FUNC weather_day
     cmp dword [disasters_on], 0
     je .out
     mov edi, 45
+    cmp dword [scen_id], 5          ; (the Flood Plain scenario)
+    jne .fl
+    mov edi, 15
+.fl:
     mov r13d, WX_FLOOD
     jmp .roll
 .n2:

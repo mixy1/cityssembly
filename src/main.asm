@@ -1478,6 +1478,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "deathcare.asm"
 %include "qol.asm"
 %include "tram.asm"
+%include "scen.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

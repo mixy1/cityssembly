@@ -3828,6 +3828,7 @@ FUNC month_end, 32
     call econ_month                 ; (beta)
     call achv_month
     call hist_month
+    call scen_month
     mov eax, [hist_count]
     and eax, 63
     mov ecx, [population]

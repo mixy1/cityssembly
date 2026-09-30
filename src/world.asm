@@ -233,6 +233,21 @@ tile_at:
 ; ---------------------------------------------------------------------
 ;  world_generate: terrain, water, river, forests, highway
 ; ---------------------------------------------------------------------
+; beta map types: the valley (classic), an island, lakes, dry plains,
+; a river delta
+MT_VALLEY   equ 0
+MT_ISLAND   equ 1
+MT_LAKES    equ 2
+MT_PLAINS   equ 3
+MT_DELTA    equ 4
+MT_TYPES    equ 5
+section .data
+mt_sea      dd 78, 78, 96, 60, 74, 78, 78, 78   ; height below which it's water
+mt_forest   dd 150, 150, 150, 185, 150, 150, 150, 150
+section .bss
+map_type    resd 1
+section .text
+
 FUNC world_generate, 32
     lea rdi, [tiles]
     xor eax, eax
@@ -253,6 +268,27 @@ FUNC world_generate, 32
     mov edx, 11
     call fbm
     mov ebx, eax
+    ; beta map types: an island sinks toward the edges
+    cmp dword [map_type], MT_ISLAND
+    jne .nisl
+    mov eax, r12d
+    sub eax, 64
+    cdq
+    xor eax, edx
+    sub eax, edx
+    mov ecx, r13d
+    sub ecx, 64
+    mov edx, ecx
+    sar edx, 31
+    xor ecx, edx
+    sub ecx, edx
+    cmp eax, ecx
+    cmovl eax, ecx
+    sub eax, 38
+    jle .nisl
+    lea eax, [rax*4]
+    sub ebx, eax
+.nisl:
     ; push the map border up a little less so lakes can touch edges
     mov edi, r12d
     mov esi, r13d
@@ -261,7 +297,9 @@ FUNC world_generate, 32
     call rand
     and eax, 255
     mov [r14+T_VARIANT], al
-    cmp ebx, 78
+    mov eax, [map_type]
+    and eax, 7
+    cmp ebx, [mt_sea+rax*4]
     jge .land
     mov byte [r14+T_TERRAIN], TER_WATER
     jmp .nextx
@@ -272,7 +310,9 @@ FUNC world_generate, 32
     mov esi, r13d
     mov edx, 57
     call fbm
-    cmp eax, 150
+    mov ecx, [map_type]
+    and ecx, 7
+    cmp eax, [mt_forest+rcx*4]
     jl .scatter
     call rand
     and eax, 7
@@ -304,8 +344,11 @@ FUNC world_generate, 32
     xor r13d, r13d                  ; y
     xor r15d, r15d                  ; drift
 .river:
-    ; carve width 2..3
+    ; carve width 2..3 (a delta: 6)
     mov ebx, -1
+    cmp dword [map_type], MT_DELTA
+    jne .rw
+    mov ebx, -3
 .rw:
     lea edi, [r12+rbx]
     mov esi, r13d
@@ -318,6 +361,11 @@ FUNC world_generate, 32
     inc ebx
     cmp ebx, 2
     jl .rw
+    cmp dword [map_type], MT_DELTA
+    jne .rwd
+    cmp ebx, 3
+    jl .rw
+.rwd:
     ; meander
     call rand
     and eax, 7

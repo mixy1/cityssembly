@@ -262,6 +262,19 @@ Features still in testing, off unless you ask for them:
   and never fill. Homes with neither within 30 tiles are less happy, and
   when the city has more dead than it can take, everyone is - the city
   issues say "Not enough deathcare".
+- **Map types** (on the welcome card): Valley (the classic map), Island
+  (sea all round, the highway on a causeway), Lakes, Plains (dry, few
+  forests) and Delta (a wide river). Picking one makes the map again
+  behind the card.
+- **Scenarios** (menu): five challenges, each a new city on its own map
+  with its own difficulty and a goal before a year - Boom Town (Hard,
+  20,000 people in 10 years), Island Resort (12,000 people and 2,000 air
+  passengers a month in 15), Transit Utopia (15,000 people, a third of
+  trips not by car, in 15), Green Valley (25,000 people on dry plains
+  without ever a coal plant, in 20), Flood Plain (15,000 people by a wide
+  river that floods three times as often, in 12). The goal stands above
+  the dock; the city says when it's met or the time is up, and play goes
+  on.
 - **Achievements:** twenty for each city (the list is in the statistics
   panel, F4), announced as they're earned: population marks, transit
   riders, an airport with jets, a port, free-flowing traffic, clean air,

@@ -33,6 +33,7 @@ PANEL_REGION   equ 9            ; beta: the neighbours
 PANEL_SERVICES equ 10           ; beta: services' funding
 PANEL_ACHV     equ 11           ; beta: achievements
 PANEL_HIST     equ 12           ; beta: history graphs
+PANEL_SCEN     equ 13           ; beta: scenarios
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -1702,6 +1703,12 @@ FUNC draw_menu, 16
     call new_sandbox_city
     mov dword [panel], PANEL_NONE
 .m41:
+    MBTN s_sc_menu
+    test eax, eax
+    jz .m4s
+    mov dword [panel], PANEL_SCEN
+    jmp .out
+.m4s:
 %ifdef WEB
     MBTN s_m_export
     test eax, eax
@@ -2168,10 +2175,10 @@ FUNC draw_welcome
     mov esi, r13d
     mov edx, 330
     mov ecx, 150
-    ; beta: a row for the difficulty
+    ; beta: rows for the difficulty and the land
     cmp dword [beta_on], 0
     je .ph
-    add ecx, 20
+    add ecx, 40
 .ph:
     call draw_panel
     mov dword [font_scale], 2
@@ -2190,6 +2197,9 @@ FUNC draw_welcome
     lea edi, [r12+12]
     lea esi, [r13+150]
     call welcome_difficulty
+    lea edi, [r12+12]
+    lea esi, [r13+170]
+    call welcome_maps
     ; pick up where you left off
     cmp dword [has_save], 0
     je .out
@@ -2742,6 +2752,9 @@ save_chunks:
     db "HIST"
     dq hist_state
     dd hist_state_end - hist_state
+    db "SCEN"
+    dq scen_state
+    dd scen_state_end - scen_state
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 3
 SC_SIMS equ 4
@@ -8176,6 +8189,7 @@ FUNC render_ui
     call draw_floats
     call region_labels
     call follow_draw
+    call scen_draw
     cmp dword [welcome], 0
     je .game
     call draw_welcome
@@ -8236,8 +8250,13 @@ FUNC render_ui
     jmp .hud
 .p6h:
     cmp eax, PANEL_HIST
-    jne .p7
+    jne .p6c
     call draw_history
+    jmp .hud
+.p6c:
+    cmp eax, PANEL_SCEN
+    jne .p7
+    call draw_scenarios
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE
