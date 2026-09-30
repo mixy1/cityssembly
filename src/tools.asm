@@ -1298,6 +1298,14 @@ extra_reset:
     call trams_reset
     call scen_reset
     call dist_reset
+    push rdi
+    push rcx
+    lea rdi, [map_raw]
+    mov ecx, MAP_TILES/8
+    xor eax, eax
+    rep stosq
+    pop rcx
+    pop rdi
     call region_reset
     mov dword [cam_prev+8], 0
     pop rdi

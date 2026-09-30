@@ -192,6 +192,13 @@ Features still in testing, off unless you ask for them:
     summary its linked cities read: they show as "your city" with their
     population, and their unemployed commute in to fill your jobs (and
     yours to theirs). "Visit" saves this city and opens the other.
+- **Raw materials:** farms, forestry and mines (industry on fertile land,
+  forest or ore) send raw materials by truck to the factories (the other
+  industry). A factory without materials works at half speed, with
+  enough at full (the inspector shows its stock). With no farms, forests
+  or mines, materials come in from the region - more trucks from the
+  highway. Exports fetch $16 a truck for what factories made and $8 for
+  raw materials, so working them up pays.
 - **Cargo Port** (Public transport, from Capital; 3x3 on the shore,
   powered): when ships can reach it (water all the way to the map edge),
   three in five export trucks go to the port instead of the highway, and

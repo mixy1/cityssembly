@@ -556,6 +556,7 @@ FUNC daily_tiles
     imul ecx, [staff_basic]
     shr ecx, 12
     inc ecx
+    call raw_production             ; (beta: factories need materials)
     movzx eax, byte [rbx+T_GOODS]
     add eax, ecx
     CLAMP eax, 0, 255
@@ -3695,6 +3696,7 @@ FUNC apply_staffing
 ; =====================================================================
 FUNC month_end, 32
     call airport_month              ; (beta)
+    call raw_month_end
     call tram_month
     call wonders_month
     call death_month

@@ -532,7 +532,8 @@ ST_ROWS equ 18
     dq s_st_air, air_pax, 0
     dq s_st_port, port_trade, 2
     dq s_st_tram, tram_riders, 0
-ST_ROWS_BETA equ 25
+    dq s_st_raw, raw_last, 0
+ST_ROWS_BETA equ 26
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -6071,6 +6072,7 @@ FUNC draw_inspect, 32
     lea rdx, [textbuf]
     mov ecx, UI_TEXT
     call row_text
+    call supply_inspect             ; (beta: materials)
     ; utilities
     lea rdx, [s_power_ok]
     mov ecx, UI_GOOD
@@ -6843,7 +6845,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 95
+    add ecx, 106
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx

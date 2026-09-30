@@ -1092,6 +1092,8 @@ FUNC vehicle_arrive
     je .garb
     cmp eax, PU_BUS
     je .bus
+    cmp eax, PU_RAW
+    je .raw
     cmp eax, PU_HOME
     jne .free                       ; returns and patrols
     call note_commute
@@ -1131,6 +1133,13 @@ FUNC vehicle_arrive
     add dword [goods_sold_month], 12
     mov rdi, r15
     call port_arrive
+    mov rdi, r15
+    call export_value
+    inc dword [trips_ok]
+    jmp .free
+.raw:
+    mov rdi, r15
+    call raw_arrive
     inc dword [trips_ok]
     jmp .free
 .fire:

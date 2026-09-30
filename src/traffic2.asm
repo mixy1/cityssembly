@@ -231,7 +231,15 @@ FUNC generate_trip_beta
     movzx eax, byte [r15+2]
     cmp ebx, eax
     jl .shop
-    ; goods, exports, imports and visitors as before
+    ; goods, exports, imports and visitors as before - and one in
+    ; four of them, raw materials to a factory
+    call rand
+    and eax, 3
+    jnz .cl
+    call raw_trip
+    test eax, eax
+    jnz .out
+.cl:
     call generate_trip
     RETURN
 .commute:
