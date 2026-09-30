@@ -640,7 +640,7 @@ FUNC disasters_month
     ; an epidemic: health care overloaded or water dirty
     cmp dword [population], 3000
     jl .riot
-    cmp dword [cov_scale+CV_HEALTH*4], 200
+    cmp dword [cov_scale+CV_HEALTH*4], 180
     jl .ep1
     cmp dword [iss_count+PR_DIRTY*4], 50
     jl .riot
@@ -680,10 +680,13 @@ FUNC epidemic
     jne .n
     cmp byte [map_health+rbx], 40
     jae .n
-    mov byte [r13+T_HAPPY], 10
+    cmp byte [r13+T_HAPPY], 30
+    jbe .sick
+    mov byte [r13+T_HAPPY], 30
+.sick:
     inc r12d
     ; some move away
-    mov edi, 4
+    mov edi, 8
     call rand_range
     test eax, eax
     jnz .n
@@ -872,6 +875,15 @@ FUNC tornado_step
 .dy:
     mov r15d, -1
 .dx:
+    ; the middle always, the tiles round it one time in three
+    mov eax, r14d
+    or eax, r15d
+    jz .mid
+    mov edi, 3
+    call rand_range
+    test eax, eax
+    jnz .dn
+.mid:
     lea edi, [r12+r15]
     lea esi, [r13+r14]
     call tile_at

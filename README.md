@@ -201,12 +201,13 @@ Features still in testing, off unless you ask for them:
   region, and the line's exports pay the port's price. Ships sail in from
   the edge, tie up at the quay and sail away.
 - **Services have room for so many:** a police or fire station takes
-  4,000 people, a clinic 1,500, a hospital 6,000, a school 2,500, a high
-  school 4,000, a university 10,000 (students: half the people). When the
-  city outgrows what its buildings of a kind can take, that service
-  reaches everyone less well (down to about a third), and the city
-  issues say so ("High schools overloaded" - click for the Services
-  panel). The inspector shows the city-wide places and people.
+  10,000 people, a clinic 3,000, a hospital 12,000, a school 5,000, a
+  high school 8,000, a university 20,000 (students: half the people).
+  When the city outgrows what its buildings of a kind can take, that
+  service reaches everyone less well (half the shortfall is felt, down to
+  62% at worst), and the city issues say so ("High schools overloaded" -
+  click for the Services panel). The inspector shows the city-wide places
+  and people.
 - **Service funding** (Services panel, from the budget): 50% to 150% for
   police, fire, health, schools, high schools and universities. It sets
   their places, how far they reach, and their upkeep.

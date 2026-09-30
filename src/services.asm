@@ -3,15 +3,15 @@
 ;
 ;  Every police station, fire station, clinic, hospital and school has
 ;  room for so many people.  When the city outgrows what its buildings
-;  of a kind can take, that service reaches everyone less well (down to
-;  about a third): a growing city keeps needing new ones.
+;  of a kind can take, that service reaches everyone less well (by half
+;  the shortfall, to 62% at worst): a growing city keeps needing new ones.
 ;
 ;  Funding (50% to 150% for each service, in the Services panel) sets
 ;  both the room and the reach - and the upkeep.
 ; =====================================================================
 SV_FIRST    equ CV_POLICE       ; the services with room: police ..
 SV_LAST     equ CV_UNIV         ; .. universities
-SV_FLOOR    equ 96              ; the least an overloaded service gives (/256)
+SV_FLOOR    equ 160             ; the least an overloaded service gives (/256)
 ISSUE_LOAD  equ 12
 
 section .bss
@@ -23,8 +23,8 @@ sv_worst    resd 1              ; the most overloaded kind, 0 if none
 section .data
 ; room in each building, by kind (people)
 svc_room    dd 0,0,0,0,0,0,0,0,0                ; power .. incinerator
-            dd 4000, 4000, 1500, 6000            ; police, fire, clinic, hospital
-            dd 2500, 4000, 10000                 ; schools, high school, university
+            dd 10000, 10000, 3000, 12000         ; police, fire, clinic, hospital
+            dd 5000, 8000, 20000                 ; schools, high school, university
             times BK_MAX-16 dd 0
 sv_names    dq 0, svn1, svn2, svn3, svn4, svn5, svn6
 svn1        db "Police", 0
@@ -113,12 +113,14 @@ FUNC svc_load
     jz .f
     cmp eax, r12d
     jle .f
-    ; overloaded: room / need
+    ; overloaded: half the shortfall (room / need) is felt
     mov ecx, eax
     mov eax, r12d
     shl eax, 8
     xor edx, edx
     div ecx
+    add eax, 256
+    shr eax, 1
     CLAMP eax, SV_FLOOR, 256
     mov r15d, eax
     cmp eax, 230
