@@ -343,6 +343,13 @@ FUNC storm_damage
     shl eax, TILE_SHIFT
     cmp byte [tiles+rax+T_OBJ], OBJ_POWER
     jne .t
+    mov edi, r12d
+    and edi, MAP_W-1
+    mov esi, r12d
+    shr esi, MAP_SHIFT
+    call rebuild_note
+    mov eax, r12d
+    shl eax, TILE_SHIFT
     mov byte [tiles+rax+T_OBJ], OBJ_NONE
     mov byte [tiles+rax+T_SUB], 0
     dec r14d
@@ -914,10 +921,20 @@ FUNC tornado_step
 .wreck:
     lea edi, [r12+r15]
     lea esi, [r13+r14]
+    call rebuild_note
+    lea edi, [r12+r15]
+    lea esi, [r13+r14]
     call destroy_to_rubble
     inc dword [tor_hits]
     jmp .dn
 .clear:
+    push rax
+    push rax
+    lea edi, [r12+r15]
+    lea esi, [r13+r14]
+    call rebuild_note
+    pop rax
+    pop rax
     mov byte [rax+T_OBJ], OBJ_NONE
     mov byte [rax+T_SUB], 0
     mov dword [net_dirty], 1

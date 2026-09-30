@@ -83,7 +83,7 @@ pf_tile     db "PLAY tile %d,%d obj %d zone %d sub %d level %d", 0
 pf_tile2    db " flags %d flags2 %d road %d pop %d", 10, 0
 pf_state    db "PLAY state money %lld population %d tool %d acts %d", 0
 pf_state2   db " redo %d day %d month %d cam %d,%d", 0
-pf_state3   db " sprites %d arena %d", 10, 0
+pf_state3   db " sprites %d arena %d wires %d plan %d", 10, 0
 pf_shot     db "PLAY shot %s", 10, 0
 
 ; commands, in handler order
@@ -756,6 +756,8 @@ FUNC play_tick, 16
     lea rdi, [pf_state3]
     mov esi, [spr_count]
     mov edx, [arena_used]
+    mov ecx, [n_wires]
+    mov r8d, [plan_n]
     xor eax, eax
     CALLC printf
     jmp .done

@@ -607,6 +607,9 @@ FUNC daily_tiles
     jb .next
     mov edi, r12d
     mov esi, r13d
+    call rebuild_note               ; (beta: into the plan)
+    mov edi, r12d
+    mov esi, r13d
     call destroy_to_rubble
 .next:
     inc r14d
@@ -4205,6 +4208,9 @@ FUNC meteor_strike
     je .dirt
     cmp cl, OBJ_RUBBLE
     je .dirt
+    lea edi, [r12+r15]
+    lea esi, [r13+r14]
+    call rebuild_note               ; (beta: into the plan)
     lea edi, [r12+r15]
     lea esi, [r13+r14]
     call destroy_to_rubble

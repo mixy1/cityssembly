@@ -6,8 +6,12 @@
 ;  left) shows what it will cost; Build puts up what the money covers now,
 ;  in the order it was drawn, and the rest is built at the months' ends as
 ;  money comes in.  Clear throws the plan away.
+;
+;  What a storm, a tornado, a meteor or a fire wrecks - services, roads,
+;  power lines - goes into the plan as well, so the player sees what was
+;  lost and can put it back with Build (nothing is rebuilt on its own).
 ; =====================================================================
-PLAN_MAX    equ 16
+PLAN_MAX    equ 32
 PLAN_TILES  equ 16384
 
 section .bss
@@ -27,6 +31,9 @@ plan_start  resd PLAN_MAX
 plan_cnt    resd PLAN_MAX
 plan_xy     resw PLAN_TILES     ; x | y << 8
 plan_save   resd 8              ; the player's own tool, kept while building
+rb_last     resd 1              ; the last action is a disaster's (its number)
+rb_told     resd 1              ; the day the player was last told
+rb_wires    resd 4
 
 section .data
 s_pl_on     db "PLAN MODE (Shift+P)", 0
@@ -38,10 +45,12 @@ s_pl_full   db "The plan is full - build or clear it first.", 0
 s_pl_waits  db "The rest of the plan waits for money: it's built as it comes in.", 0
 s_pl_done   db "The plan is built.", 0
 s_pl_gone   db "A planned piece can't be built there any more - it was dropped.", 0
+s_rb_note   db "What was wrecked is in the plan (bottom left): Build puts it back.", 0
 
 section .text
 
 plan_reset:
+    mov dword [rb_last], 0
     mov dword [plan_n], 0
     mov dword [plan_used], 0
     mov dword [plan_auto], 0
@@ -112,6 +121,7 @@ FUNC plan_record
     jmp .t
 .td:
     inc dword [plan_n]
+    mov dword [rb_last], 0
     mov edi, SFX_CLICK
     call sfx_play
     mov eax, 1
@@ -170,6 +180,7 @@ FUNC plan_drop_first
     jmp .a
 .ad:
     dec dword [plan_n]
+    mov dword [rb_last], 0
 .out:
     RETURN
 
@@ -421,5 +432,216 @@ FUNC draw_plan_box, 16
     mov dword [plan_n], 0
     mov dword [plan_used], 0
     mov dword [plan_auto], 0
+    mov dword [rb_last], 0
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  the rebuild assist
+; ---------------------------------------------------------------------
+; a disaster is about to wreck tile (edi x, esi y): what stands there
+; goes into the plan, to be built again when the player says (beta)
+FUNC rebuild_note, 32
+    cmp dword [beta_on], 0
+    je .out
+    mov [rbp-48], edi
+    mov [rbp-52], esi
+    call tile_at
+    test rax, rax
+    jz .out
+    movzx ecx, byte [rax+T_OBJ]
+    cmp ecx, OBJ_SERVICE
+    je .svc
+    cmp ecx, OBJ_POWER
+    je .pow
+    cmp ecx, OBJ_ROAD
+    jne .out
+    ; a road (not the highway)
+    test byte [rax+T_FLAGS], F_HIGHWAY
+    jnz .out
+    movzx r13d, byte [rax+T_ROADTYPE]
+    cmp r13d, RT_HIGHWAY
+    jae .out
+    mov r12d, T_ROAD
+    mov r14d, [road_costs+r13*4]
+    xor r15d, r15d
+    ; with the last one, if that's the same disaster's road
+    mov eax, [plan_n]
+    test eax, eax
+    jz .new
+    cmp eax, [rb_last]
+    jne .new
+    dec eax
+    cmp dword [plan_tool+rax*4], T_ROAD
+    jne .new
+    cmp [plan_rt+rax*4], r13d
+    jne .new
+    cmp dword [plan_cnt+rax*4], MAX_TL
+    jge .new
+    cmp dword [plan_used], PLAN_TILES
+    jge .out
+    inc dword [plan_cnt+rax*4]
+    add [plan_cost+rax*4], r14d
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call rb_put
+    jmp .told
+.svc:
+    movzx r15d, byte [rax+T_SUB]
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call anchor_of
+    mov [rbp-48], eax
+    mov [rbp-52], edx
+    ; not twice
+    shl edx, 8
+    or edx, eax
+    xor ecx, ecx
+.dup:
+    cmp ecx, [plan_n]
+    jge .nd
+    cmp dword [plan_tool+rcx*4], T_BUILD
+    jne .dn
+    mov eax, [plan_start+rcx*4]
+    cmp [plan_xy+rax*2], dx
+    je .out
+.dn:
+    inc ecx
+    jmp .dup
+.nd:
+    mov edi, r15d
+    call bld_rec
+    mov r14d, [rax+BI_COST]
+    mov r12d, T_BUILD
+    xor r13d, r13d
+    jmp .new
+.pow:
+    ; a pylon, and the wires to its neighbours (strung again in order:
+    ; n1, pylon, n2, pylon, n3)
+    mov r12d, T_POWERLN
+    xor r13d, r13d
+    mov r14d, PYLON_COST
+    xor r15d, r15d
+    mov eax, [rbp-52]
+    shl eax, MAP_SHIFT
+    add eax, [rbp-48]
+    mov [rbp-56], eax               ; the pylon's index
+    mov dword [rbp-60], 0           ; neighbours
+    xor ebx, ebx
+.w:
+    cmp ebx, [n_wires]
+    jge .wd
+    cmp dword [rbp-60], 3
+    jge .wd
+    movzx eax, word [wire_a+rbx*2]
+    movzx ecx, word [wire_b+rbx*2]
+    cmp eax, [rbp-56]
+    je .wb
+    cmp ecx, [rbp-56]
+    jne .wn
+    mov ecx, eax
+.wb:
+    mov eax, [rbp-60]
+    mov [rb_wires+rax*4], ecx
+    inc dword [rbp-60]
+.wn:
+    inc ebx
+    jmp .w
+.wd:
+    ; room for it all?
+    cmp dword [plan_n], PLAN_MAX
+    jge .out
+    mov eax, [plan_used]
+    add eax, 6
+    cmp eax, PLAN_TILES
+    jge .out
+    call rb_action
+    mov ebx, [plan_n]
+    dec ebx
+    xor r12d, r12d                  ; tiles in the run
+    cmp dword [rbp-60], 0
+    je .p0
+    mov edi, [rb_wires]
+    call rb_put_idx
+    inc r12d
+.p0:
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call rb_put
+    inc r12d
+    xor r13d, r13d
+.p1:
+    inc r13d
+    cmp r13d, [rbp-60]
+    jge .p2
+    cmp r13d, 1
+    je .p1n
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call rb_put
+    inc r12d
+.p1n:
+    mov edi, [rb_wires+r13*4]
+    call rb_put_idx
+    inc r12d
+    jmp .p1
+.p2:
+    mov [plan_cnt+rbx*4], r12d
+    jmp .told
+.new:
+    cmp dword [plan_n], PLAN_MAX
+    jge .out
+    cmp dword [plan_used], PLAN_TILES
+    jge .out
+    call rb_action
+    mov eax, [plan_n]
+    dec eax
+    mov dword [plan_cnt+rax*4], 1
+    mov edi, [rbp-48]
+    mov esi, [rbp-52]
+    call rb_put
+.told:
+    ; tell the player, once a day
+    mov eax, [day_count]
+    cmp eax, [rb_told]
+    je .out
+    mov [rb_told], eax
+    lea rdi, [s_rb_note]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+.out:
+    RETURN
+
+; a new action for the plan (r12d tool, r13d road type, r14d cost,
+; r15d building kind), no tiles yet
+rb_action:
+    mov eax, [plan_n]
+    mov [plan_tool+rax*4], r12d
+    mov [plan_kind+rax*4], r15d
+    mov [plan_rt+rax*4], r13d
+    mov dword [plan_zt+rax*4], 0
+    mov dword [plan_up+rax*4], 0
+    mov dword [plan_bz+rax*4], 0
+    mov [plan_cost+rax*4], r14d
+    mov ecx, [plan_used]
+    mov [plan_start+rax*4], ecx
+    mov dword [plan_cnt+rax*4], 0
+    inc eax
+    mov [plan_n], eax
+    mov [rb_last], eax
+    ret
+
+; the next tile of the plan: (edi x, esi y), or a tile index edi
+rb_put_idx:
+    mov esi, edi
+    shr esi, MAP_SHIFT
+    and edi, MAP_W-1
+rb_put:
+    shl esi, 8
+    or esi, edi
+    mov eax, [plan_used]
+    mov [plan_xy+rax*2], si
+    inc dword [plan_used]
+    ret

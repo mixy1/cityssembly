@@ -281,6 +281,9 @@ Features still in testing, off unless you ask for them:
   what the money covers now, in the order it was drawn, and the rest goes
   up at the months' ends as the money comes in. Clear throws the plan
   away; a piece that can't go where it was drawn any more is dropped.
+  What a storm, a tornado, a meteor or a fire wrecks - services, roads,
+  power lines with their wires - goes into the plan too, so the ghosts
+  show what was lost; nothing is rebuilt until Build is pressed.
 - **Recent tools:** the last five things picked from the menus sit in a
   row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,
