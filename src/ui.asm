@@ -629,7 +629,7 @@ hx_tree db "Trees raise land value and", 10
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
-        dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo
+        dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo, hb_treat
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -4337,7 +4337,7 @@ FUNC tool_apply
     mov eax, [last_tool_err]
     cmp eax, TE_ROAD
     jb .e3
-    cmp eax, TE_HIGHWAY
+    cmp eax, TE_WXP
     ja .e3
     mov rdi, [te_msgs+rax*8]
     mov esi, UI_WARN
@@ -7107,7 +7107,7 @@ FUNC draw_cursor_cost
     mov eax, [last_tool_err]
     cmp eax, TE_NEEDW
     jb .out
-    cmp eax, TE_HIGHWAY
+    cmp eax, TE_WXP
     ja .out
     mov rdi, [te_short+rax*8]
     mov esi, UI_BAD

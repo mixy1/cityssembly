@@ -46,10 +46,18 @@ nudge_off   db 1,0, -1,0, 0,1, 0,-1, 1,1, 1,-1, -1,1, -1,-1
 NUDGE_N     equ 24
 ; upgrades in place: from, to
 upgrade_t   dd BK_CLINIC, BK_HOSPITAL, BK_PARK, BK_PLAZA
-            dd BK_LANDFILL, BK_INCIN, BK_COAL, BK_NUCLEAR, -1
+            dd BK_LANDFILL, BK_INCIN, BK_COAL, BK_NUCLEAR
+            dd BK_SEWAGE, BK_TREAT, -1
 te_msgs     dq 0, 0, 0, 0, s_te_road, s_te_water, s_te_bld, s_te_hwy
             dq s_te_one, s_te_wgc, s_te_wex, s_te_wop, s_te_wsp, s_te_wxp
 te_short    dq 0, 0, s_ts_needw, s_ts_owned, s_ts_road, s_ts_water, s_ts_bld, s_ts_hwy
+            dq s_ts_one, s_ts_wgc, s_ts_wex, s_ts_wop, s_ts_wsp, s_ts_wxp
+s_ts_one    db "only one per city", 0
+s_ts_wgc    db "needs trains and a metro", 0
+s_ts_wex    db "needs jets and offices", 0
+s_ts_wop    db "needs City Hall and Stadium", 0
+s_ts_wsp    db "needs two universities", 0
+s_ts_wxp    db "needs air passengers", 0
 s_te_road   db "A road is in the way - hold Ctrl to build over it.", 0
 s_te_water  db "That can't be built on water.", 0
 s_te_bld    db "Another service is in the way.", 0

@@ -17,6 +17,7 @@ MT_REACH    equ 6
 MT_CAP      equ 4000
 MT_MAX      equ 255                 ; stations counted
 MT_COST     equ 40                  ; a tunnel tile
+BUS_CAP     equ 3000                ; bus riders a month per depot (beta)
 TM_CAR      equ 0
 TM_BUS      equ 1
 TM_METRO    equ 2
@@ -41,7 +42,8 @@ tm_same            resd 1           ; (the same station)
 tm_lost            resd 1           ; (the car was quicker)
 
 section .data
-sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE, -1
+sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE
+                dd BK_TREAT, -1
 sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
 sm_leisure_beta dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK
                 dd BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
@@ -305,6 +307,11 @@ FUNC travel_mode, 32
     ; the bus: both ends near stops; waits, and sits in the same traffic
     cmp dword [svc_count+BK_BUSDEPOT*4], 0
     je .nbus
+    ; each depot's buses carry so many a month
+    mov eax, [svc_count+BK_BUSDEPOT*4]
+    imul eax, eax, BUS_CAP
+    cmp [riders_month], eax
+    jge .nbus
     cmp byte [map_transit+r12], 40
     jb .nbus
     cmp byte [map_transit+r13], 40

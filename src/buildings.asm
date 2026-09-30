@@ -36,7 +36,8 @@ BK_EXCHANGE  equ 29
 BK_OPERA     equ 30
 BK_SPACE     equ 31
 BK_EXPO      equ 32         ; .. beta
-BK_COUNT     equ 33
+BK_TREAT     equ 33         ; beta
+BK_COUNT     equ 34
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -125,6 +126,7 @@ bld_info:
     BINFO  3, CV_PARK, 22, 0, 50000, 700, 0, 0, 50000, nm_opera, 0, 10, 0, CAT_LEISURE, 0, ds_opera
     BINFO  3, CV_NONE, 0, 10, 90000, 1200, 0, 0, 80000, nm_space, 0, 50, 0, CAT_EDU, 0, ds_space
     BINFO  3, CV_NONE, 0, 0, 80000, 1000, 0, 0, 80000, nm_expo, 0, 30, 0, CAT_LEISURE, 0, ds_expo
+    BINFO  2, CV_NONE, 0, 0, 6000, 300, 0, 3000, 2500, nm_treat, 0, 15, 1, CAT_WATER, 0, ds_treat
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0
@@ -151,6 +153,12 @@ nm_landmark  db "Asm Tower", 0
 nm_metro     db "Metro Station", 0
 nm_railstn   db "Railway Station", 0
 nm_freight   db "Freight Yard", 0
+nm_treat     db "Water Treatment", 0
+ds_treat     db "Takes sewage like an outlet, but cleans it.", 0
+hb_treat     db "Must touch water. Takes the sewage", 10
+             db "of the pipes touching it and lets", 10
+             db "clean water out: nothing downstream", 10
+             db "gets dirty. Needs power.", 0
 
 ds_coal      db "Cheap, strong power. Very polluting.", 0
 ds_wind      db "Clean but weak. Output varies by season.", 0

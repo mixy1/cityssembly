@@ -238,6 +238,12 @@ Features still in testing, off unless you ask for them:
     wanted, and a launch every summer that brings $15,000.
   - Expo Centre (Global City; 5,000 air passengers a month): $8,000 a
     month from visitors, and shops wanted.
+- **Bus capacity:** each Bus Depot's buses carry 3,000 riders a month;
+  when they're full, people drive. A growing city needs more depots.
+- **Water Treatment** (Water, from City; 2x2, touching water, powered):
+  takes the sewage of the pipes touching it like an outlet, but nothing
+  downstream gets dirty. A sewage outlet can be upgraded to one from the
+  inspector.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

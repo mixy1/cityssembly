@@ -327,3 +327,25 @@ FUNC bld_expo
     BOX 45,45,2,46,46,12
     call finish_model
     RETURN
+
+; a water treatment plant: settling tanks and a works building
+FUNC bld_treat
+    BEGIN 32, 20, 9600
+    MAT M_CONCRETE
+    BOX 0,0,0,32,32,1
+    ; round tanks
+    MAT M_CONCRETE
+    CYL 18,18,1,14,5
+    CYL 46,18,1,14,5
+    CYL 18,46,1,14,5
+    MAT M_WATER
+    CYL 18,18,4,12,5
+    CYL 46,18,4,12,5
+    CYL 18,46,4,12,5
+    ; the works
+    MAT M_WHITE_WIN
+    BOX 18,18,1,30,30,10
+    MAT M_BLUE
+    RFX 17,17,10,31,31,4
+    call finish_model
+    RETURN
