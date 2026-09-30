@@ -8336,6 +8336,7 @@ FUNC render_ui
     call scen_draw
     call dist_labels
     call draw_dist_bar
+    call draw_palette_cmd
     cmp dword [welcome], 0
     je .game
     call draw_welcome
@@ -8529,6 +8530,14 @@ section .text
 ;  keyboard
 ; =====================================================================
 FUNC ui_key
+    ; beta: the command palette takes the keys while it's open
+    push rdi
+    push rdi
+    call palette_key
+    pop rdi
+    pop rdi
+    test eax, eax
+    jnz .out
     mov eax, edi
     ; Ctrl+Z: undo (beta: Ctrl+Shift+Z and Ctrl+Y redo)
     cmp eax, SC_Z
