@@ -885,7 +885,8 @@ FUNC draw_planes, 32
     mov edx, 8
     call world_proj
     call .onscreen
-    jc .body
+    test r9d, r9d
+    jnz .body
     mov dword [blit_dither], 1
     mov r8d, [rbp-52]
     mov edi, [spr_pshadow+r8*4]
@@ -900,7 +901,8 @@ FUNC draw_planes, 32
     add edx, 16
     call world_proj
     call .onscreen
-    jc .pn
+    test r9d, r9d
+    jnz .pn
     mov r8d, [rbp-56]
     mov [blit_dither], r8d
     mov r8d, [rbp-52]
@@ -915,8 +917,9 @@ FUNC draw_planes, 32
     jl .p
 .out:
     RETURN
-; (eax sx, edx sy) on the screen, with a margin? carry set if not
+; (eax sx, edx sy) on the screen, with a margin? r9d 1 if not
 .onscreen:
+    xor r9d, r9d
     cmp eax, -80
     jl .off
     mov r8d, [fb_w]
@@ -929,10 +932,9 @@ FUNC draw_planes, 32
     add r8d, 80
     cmp edx, r8d
     jg .off
-    clc
     ret
 .off:
-    stc
+    mov r9d, 1
     ret
 
 ; forget the planes (a new or loaded city)
