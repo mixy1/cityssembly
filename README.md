@@ -294,6 +294,10 @@ Features still in testing, off unless you ask for them:
   what it brings, and what holds the city back - demand, buildings
   without power, water or a road, abandoned ones, garbage, shops short
   of goods, overloaded services and jammed roads.
+- **Keys** (Menu > Keys...): click an action, then press its new key.
+  Keys swap - the old key takes over what the new one did - so nothing
+  is ever lost; W A S D and the arrows stay with the camera. Saved with
+  the settings; Reset puts every key back.
 - **Recent tools:** the last five things picked from the menus sit in a
   row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,

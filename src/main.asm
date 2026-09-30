@@ -1490,6 +1490,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "palette_cmd.asm"
 %include "plan.asm"
 %include "warehouse.asm"
+%include "keys.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

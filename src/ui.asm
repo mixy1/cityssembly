@@ -39,6 +39,7 @@ PANEL_HIST     equ 12           ; beta: history graphs
 PANEL_SCEN     equ 13           ; beta: scenarios
 PANEL_TRANSIT  equ 14           ; beta: transit lines
 PANEL_MSPLAN   equ 15           ; beta: the milestone planner
+PANEL_KEYS     equ 16           ; beta: the keys
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -1729,6 +1730,12 @@ FUNC draw_menu, 16
     mov dword [panel], PANEL_SCEN
     jmp .out
 .m4s:
+    MBTN s_kb_menu
+    test eax, eax
+    jz .m4k
+    mov dword [panel], PANEL_KEYS
+    jmp .out
+.m4k:
 %ifdef WEB
     MBTN s_m_export
     test eax, eax
@@ -2317,6 +2324,8 @@ tile_to_minimap:
 
 FUNC draw_minimap, 16
     cmp dword [minimap_on], 0
+    je .out
+    cmp dword [panel], PANEL_KEYS   ; (beta: it would cover the keys)
     je .out
     ; rebuild the cached image twice a second
     dec dword [minimap_age]
@@ -2991,7 +3000,7 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
 SET_N     equ 15                ; append new settings at the end
-CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
+CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4+128   ; (+ the keys, beta)
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
 section .bss
@@ -3017,6 +3026,9 @@ FUNC settings_save
     lea rsi, [set_music]
     mov ecx, SET_N*4
     rep movsb
+    lea rsi, [key_map]
+    mov ecx, 128
+    rep movsb
     mov rdi, r12
     lea rsi, [settings_buf]
     mov edx, CFG_SIZE
@@ -3028,6 +3040,7 @@ FUNC settings_save
     RETURN
 
 FUNC settings_load
+    call keys_init
     lea rdi, [settings_file]
     lea rsi, [str_rb]
     CALLC SDL_RWFromFile
@@ -3060,6 +3073,10 @@ FUNC settings_load
     mov ecx, SET_N*4
 .n:
     rep movsb
+    ; the keys, when the file has them (and they make sense)
+    cmp r13, CFG_SIZE
+    jb .o
+    call keys_from_cfg
 .o:
     call apply_volumes
     mov eax, [set_light]
@@ -8507,8 +8524,13 @@ FUNC render_ui
     jmp .hud
 .p6m:
     cmp eax, PANEL_MSPLAN
-    jne .p7
+    jne .p6k
     call draw_msplan
+    jmp .hud
+.p6k:
+    cmp eax, PANEL_KEYS
+    jne .p7
+    call draw_keys
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE
@@ -8630,6 +8652,11 @@ section .text
 ;  keyboard
 ; =====================================================================
 FUNC ui_key
+    ; beta: the keys as rebound (and a key being bound)
+    call keys_key
+    cmp eax, -1
+    je .out
+    mov edi, eax
     ; beta: the command palette takes the keys while it's open
     push rdi
     push rdi

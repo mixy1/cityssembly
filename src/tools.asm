@@ -2389,7 +2389,7 @@ menu_extra_rows:
     xor eax, eax
     cmp dword [beta_on], 0
     je .o
-    add eax, 2                      ; sandbox, scenarios
+    add eax, 3                      ; sandbox, scenarios, keys
 %ifdef WEB
     add eax, 2
 %endif
