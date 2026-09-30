@@ -7740,6 +7740,10 @@ FUNC draw_problem_icons, 32
 
 ; minimap colour for a tile (rdi tile) -> eax
 minimap_colour:                     ; -> eax colour, edx priority
+    ; (beta: the minimap's filters)
+    cmp dword [mm_filter], 0
+    jne mm_filter_colour
+minimap_plain:
     movzx eax, byte [rdi+T_OBJ]
     cmp eax, OBJ_ROAD
     jne .a
@@ -8419,6 +8423,7 @@ FUNC render_ui
     call draw_palette_cmd
     call draw_recent
     call draw_plan_box
+    call draw_mm_filters
     cmp dword [welcome], 0
     je .game
     call draw_welcome

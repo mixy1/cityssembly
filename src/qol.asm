@@ -1369,3 +1369,171 @@ FUNC photo_after
 %endif
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  minimap filters (beta): chips over the minimap - the map, jammed
+;  roads, power, water, land value
+; ---------------------------------------------------------------------
+MMF_N       equ 5
+MMF_W       equ 33
+
+section .bss
+mm_filter   resd 1
+
+section .data
+mmf_names   dq s_mmf0, s_mmf1, s_mmf2, s_mmf3, s_mmf4
+s_mmf0      db "Map", 0
+s_mmf1      db "Jams", 0
+s_mmf2      db "Power", 0
+s_mmf3      db "Water", 0
+s_mmf4      db "Value", 0
+
+section .text
+
+; the chips (beta, ui; after the minimap)
+FUNC draw_mm_filters, 16
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [minimap_on], 0
+    je .out
+    cmp dword [photo_mode], 0
+    jne .out
+    call minimap_pos
+    sub r13d, 15
+    xor ebx, ebx
+.c:
+    imul edi, ebx, MMF_W
+    add edi, r12d
+    mov esi, r13d
+    mov edx, MMF_W
+    mov rcx, [mmf_names+rbx*8]
+    xor r8d, r8d
+    cmp ebx, [mm_filter]
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .n
+    mov [mm_filter], ebx
+    mov dword [minimap_age], 0
+.n:
+    inc ebx
+    cmp ebx, MMF_N
+    jl .c
+.out:
+    RETURN
+
+; a tile's minimap colour through the filter (rdi tile) -> eax colour,
+; edx priority (a leaf, like minimap_colour)
+mm_filter_colour:
+    movzx ecx, byte [rdi+T_OBJ]
+    mov eax, [mm_filter]
+    cmp eax, 1
+    je .jams
+    cmp eax, 2
+    je .power
+    cmp eax, 3
+    je .water
+    ; land value, on land
+    cmp byte [rdi+T_TERRAIN], TER_WATER
+    je minimap_plain
+    ; (the city's lots and buildings)
+    cmp byte [rdi+T_ZONE], 0
+    je .dim
+    cmp ecx, OBJ_ROAD
+    je .dim
+    mov r8, rdi
+    sub r8, tiles
+    shr r8, TILE_SHIFT
+    movzx eax, byte [map_lv+r8]
+    mov edx, 3
+    cmp ecx, OBJ_ZONEBLD
+    jne .v
+    mov edx, 5
+.v:
+    cmp eax, 64
+    jae .v1
+    mov eax, UI_BAD
+    ret
+.v1:
+    cmp eax, 128
+    jae .v2
+    mov eax, UI_WARN
+    ret
+.v2:
+    cmp eax, 192
+    jae .v3
+    mov eax, RAMP(R_YELLOW, 6)
+    ret
+.v3:
+    mov eax, UI_GOOD
+    ret
+.jams:
+    cmp ecx, OBJ_ROAD
+    jne .dim
+    mov edx, 7
+    movzx ecx, byte [rdi+T_JAM]
+    mov eax, UI_GOOD
+    cmp ecx, 48
+    jb .o
+    mov eax, RAMP(R_YELLOW, 6)
+    cmp ecx, 128
+    jb .o
+    mov eax, UI_WARN
+    cmp ecx, 200
+    jb .o
+    mov eax, UI_BAD
+.o: ret
+.power:
+    cmp ecx, OBJ_POWER
+    jne .p1
+    mov eax, RAMP(R_YELLOW, 7)
+    mov edx, 6
+    ret
+.p1:
+    cmp ecx, OBJ_ZONEBLD
+    je .p2
+    cmp ecx, OBJ_SERVICE
+    jne .dim
+.p2:
+    call .anchor
+    mov edx, 5
+    mov eax, UI_GOOD
+    test byte [r8+T_FLAGS], F_POWER
+    jnz .o
+    mov eax, UI_BAD
+    ret
+.water:
+    cmp ecx, OBJ_ZONEBLD
+    je .w2
+    cmp ecx, OBJ_SERVICE
+    je .w2
+    test byte [rdi+T_FLAGS2], F2_PIPE
+    jz .dim
+    mov eax, RAMP(R_BLUE, 4)
+    mov edx, 4
+    ret
+.w2:
+    call .anchor
+    mov edx, 5
+    mov eax, RAMP(R_BLUE, 7)
+    test byte [r8+T_FLAGS], F_WATER
+    jnz .o
+    mov eax, UI_BAD
+    ret
+.dim:
+    call minimap_plain
+    movzx eax, byte [remap_dim+rax]
+    movzx eax, byte [remap_dim+rax]
+    ret
+.anchor:
+    ; r8: the building's anchor tile (it holds the flags)
+    movzx ecx, byte [rdi+T_ANCHOR]
+    mov eax, ecx
+    and eax, 15
+    shr ecx, 4
+    shl ecx, MAP_SHIFT
+    add ecx, eax
+    shl rcx, TILE_SHIFT
+    mov r8, rdi
+    sub r8, rcx
+    ret
