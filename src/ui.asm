@@ -30,6 +30,7 @@ PANEL_SAVE     equ 7
 PANEL_LOAD     equ 8
 PANEL_REGION   equ 9            ; beta: the neighbours
 PANEL_SERVICES equ 10           ; beta: services' funding
+PANEL_ACHV     equ 11           ; beta: achievements
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -2723,6 +2724,9 @@ save_chunks:
     db "RGON"
     dq region_state
     dd region_state_end - region_state
+    db "ACHV"
+    dq achv_state
+    dd achv_state_end - achv_state
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 2
 SC_SIMS equ 3
@@ -6709,7 +6713,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 66
+    add ecx, 84
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx
@@ -6779,6 +6783,10 @@ FUNC draw_stats, 16
     inc ebx
     cmp ebx, [rbp-48]
     jl .r
+    ; beta: the achievements
+    lea edi, [r12+10]
+    lea esi, [r13+3]
+    call achv_button
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -8140,8 +8148,13 @@ FUNC render_ui
     jmp .hud
 .p6s:
     cmp eax, PANEL_SERVICES
-    jne .p7
+    jne .p6a
     call draw_services
+    jmp .hud
+.p6a:
+    cmp eax, PANEL_ACHV
+    jne .p7
+    call draw_achievements
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE

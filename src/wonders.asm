@@ -30,7 +30,7 @@ w_off       resd 1              ; offices wanted because of wonders
 w_com       resd 1              ; shops wanted
 
 section .data
-nm_gcentral db "Grand Central Station", 0
+nm_gcentral db "Grand Central", 0
 nm_exchange db "Stock Exchange", 0
 nm_opera    db "Opera House", 0
 nm_space    db "Space Centre", 0

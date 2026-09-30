@@ -196,6 +196,7 @@ FUNC weather_start
     RETURN
 
 FUNC weather_end
+    inc dword [ach_wx]
     mov r12d, [wx_kind]
     mov dword [wx_kind], 0
     mov dword [wx_days], 0

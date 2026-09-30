@@ -563,6 +563,7 @@ FUNC deal_month
 .left:
     dec dword [ct_left]
     jnz .out
+    inc dword [ach_deals]
     mov dword [ct_kind], 0
     mov dword [ct_cool], 3
     call tb_reset

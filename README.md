@@ -228,7 +228,7 @@ Features still in testing, off unless you ask for them:
 - **Two more milestones:** World City (50,000, $80,000 reward) and Global
   City (80,000, $120,000), and the wonders they unlock (Leisure, one of
   each, each needing something first):
-  - Grand Central Station (World City; 1,000 train riders a month and a
+  - Grand Central (World City; 1,000 train riders a month and a
     metro): trips by train and metro cost a quarter less, so more ride.
   - Stock Exchange (World City; an airport flying jets and 4,000 office
     jobs): offices wanted, and half a dollar a month per office job.
@@ -238,6 +238,15 @@ Features still in testing, off unless you ask for them:
     wanted, and a launch every summer that brings $15,000.
   - Expo Centre (Global City; 5,000 air passengers a month): $8,000 a
     month from visitors, and shops wanted.
+- **Achievements:** twenty for each city (the list is in the statistics
+  panel, F4), announced as they're earned: population marks, transit
+  riders, an airport with jets, a port, free-flowing traffic, clean air,
+  a million in the bank, AAA credit, the wonders, weathering hazards,
+  happiness, a deal kept, three universities, a fifth of the people on
+  transit.
+- **The City Herald:** a headline when the month has news - jams, an
+  empty treasury, unhappiness, a recession or a boom, snow, floods,
+  heat, free-flowing traffic, tourists, growth.
 - **Bus capacity:** each Bus Depot's buses carry 3,000 riders a month;
   when they're full, people drive. A growing city needs more depots.
 - **Water Treatment** (Water, from City; 2x2, touching water, powered):

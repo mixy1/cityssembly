@@ -189,12 +189,12 @@ FUNC econ_month
     call notify
 .decl:
     ; many buildings fell a level: say so
-    mov eax, [declined_month]
+    mov r12d, [declined_month]
     mov dword [declined_month], 0
-    cmp eax, 10
+    cmp r12d, 10
     jl .out
     call tb_reset
-    movsxd rdi, eax
+    movsxd rdi, r12d
     call tb_num
     lea rdi, [s_ec_decl]
     call tb_str
