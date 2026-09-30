@@ -49,6 +49,7 @@ rl_block    resb MAP_TILES      ; a level crossing a train is at / near
 train_riders_month  resd 1
 train_riders        resd 1
 rail_visitors_month resd 1
+rail_visitors_last resd 1
 rail_freight_month  resd 1
 rail_freight        resd 1
 ; trains
@@ -367,6 +368,8 @@ FUNC rail_update, 32
     xor edx, edx
     cmp ecx, BK_RAILSTN
     je .sk
+    cmp ecx, BK_ICSTN
+    je .sk
     mov edx, 1
     cmp ecx, BK_FREIGHT
     jne .sn
@@ -384,7 +387,7 @@ FUNC rail_update, 32
     mov esi, ebx
     shr esi, MAP_SHIFT
     mov edx, 2
-    cmp byte [rl_sfrt+r12], 0
+    cmp ecx, BK_RAILSTN
     je .sz
     mov edx, 3
 .sz:
@@ -1273,6 +1276,8 @@ rail_month:
     mov eax, [rail_freight_month]
     mov [rail_freight], eax
     mov dword [rail_freight_month], 0
+    mov eax, [rail_visitors_month]
+    mov [rail_visitors_last], eax
     mov dword [rail_visitors_month], 0
 .o: ret
 

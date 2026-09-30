@@ -1800,7 +1800,7 @@ bld_models:
     dq bld_park, bld_plaza, bld_stadium, bld_cityhall, bld_landmark
     dq bld_metro, bld_railstn, bld_freight, bld_airport, bld_port, bld_plow
     dq bld_gcentral, bld_exchange, bld_opera, bld_space, bld_expo, bld_treat
-    dq bld_cemetery, bld_crem, bld_tramdepot
+    dq bld_cemetery, bld_crem, bld_tramdepot, bld_hotel, bld_icstn
 section .text
 
 ; =====================================================================

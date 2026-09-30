@@ -40,7 +40,9 @@ BK_TREAT     equ 33         ; beta
 BK_CEMETERY  equ 34         ; beta
 BK_CREM      equ 35         ; beta
 BK_TRAMDEPOT equ 36         ; beta
-BK_COUNT     equ 37
+BK_HOTEL     equ 37         ; beta
+BK_ICSTN     equ 38         ; beta
+BK_COUNT     equ 39
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -133,6 +135,8 @@ bld_info:
     BINFO  3, CV_NONE, 30, 0, 4000, 150, 0, 0, 1200, nm_cemetery, 0, 0, 0, CAT_HEALTH, 0, ds_cemetery
     BINFO  2, CV_NONE, 30, 15, 6000, 250, 0, 0, 5000, nm_crem, 0, 10, 0, CAT_HEALTH, 0, ds_crem
     BINFO  2, CV_NONE, 0, 0, 2500, 150, 0, 0, 2500, nm_tramdepot, 0, 20, 0, CAT_TRANSIT, 0, ds_tramdepot
+    BINFO  2, CV_NONE, 0, 0, 8000, 60, 0, 0, 5000, nm_hotel, 0, 15, 0, CAT_LEISURE, 0, ds_hotel
+    BINFO  3, CV_NONE, 8, 0, 20000, 600, 0, 0, 30000, nm_icstn, 0, 30, 0, CAT_TRANSIT, 0, ds_icstn
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

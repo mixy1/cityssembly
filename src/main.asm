@@ -1481,6 +1481,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "scen.asm"
 %include "district.asm"
 %include "supply.asm"
+%include "hotels.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

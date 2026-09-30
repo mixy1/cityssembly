@@ -173,6 +173,13 @@ Features still in testing, off unless you ask for them:
   of all under the flight path past their ends (see the noise view).
   Planes come in over the end, land, roll to a stop and taxi off; others
   line up, take off and climb out.
+- **Hotels** (Leisure, from Large City): tourists come by air (half the
+  passengers), by train (visitors) and for the sights (the Asm Tower,
+  stadiums, plazas, wonders, intercity stations). Each hotel puts up
+  1,200 a month at $3 a night, and shops are wanted for the guests.
+- **Intercity Station** (Public transport, from Megalopolis; 3x3): a
+  railway station for fast trains. On a line that reaches the map edge
+  it brings business (offices wanted) and 2,000 tourists a month.
 - **Neighbours** (`C`, or the button in the budget): every map edge leads
   to a neighbouring city with a name, a character (industrial town,
   farming county, resort, capital) and a population that grows. A

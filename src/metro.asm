@@ -52,10 +52,10 @@ sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE
 sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
 sm_health_beta  dd BK_CLINIC, BK_HOSPITAL, BK_CEMETERY, BK_CREM, -1
 sm_leisure_beta dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK
-                dd BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
+                dd BK_HOTEL, BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
                 dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, BK_PORT
-                dd SI_TRAM, BK_TRAMDEPOT, -1
+                dd SI_TRAM, BK_TRAMDEPOT, BK_ICSTN, -1
 ti_metro    db "Metro tunnel", 0
 ti_unmetro  db "Remove tunnels", 0
 hx_metro    db "Drag to dig: tunnels go under", 10
