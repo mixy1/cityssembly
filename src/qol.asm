@@ -1142,3 +1142,43 @@ FUNC impact_text
     call tb_str
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  colour-blind views (beta setting): the info views' heat scale runs
+;  blue to orange instead of green to red, and "good"/"bad" become blue
+;  and orange
+; ---------------------------------------------------------------------
+section .data
+tint_std:
+    dd 0
+    dd 0x1E328C, 0x1E50AA, 0x1E78BE, 0x1EA0B4, 0x28B48C, 0x3CBE5A, 0x64C83C, 0x96D232
+    dd 0xC8D232, 0xE6BE28, 0xF0A028, 0xF0781E, 0xE6501E, 0xD2321E, 0xB41E1E, 0x8C141E
+    dd 0xFFD23C, 0x3C96FF, 0xF03228, 0x50E6FF, 0x969696, 0x96642A, 0x50DC5A
+    dd 0xFF8C1E, 0xFF50DC, 0, 0, 0, 0, 0, 0
+tint_cb:
+    dd 0
+    dd 0x2846B4, 0x2A5AC8, 0x3C74D2, 0x508CDC, 0x64A0E6, 0x82B4E6, 0xA0C4DC, 0xBED2C8
+    dd 0xDCD8A0, 0xF0D278, 0xF5C350, 0xF5AF3C, 0xF0962D, 0xE67D23, 0xD2641E, 0xB44B19
+    dd 0xFFD23C, 0x3C96FF, 0xFF9A00, 0x50E6FF, 0x969696, 0x96642A, 0x3C96FF
+    dd 0xFF8C1E, 0xFF50DC, 0, 0, 0, 0, 0, 0
+s_st_cblind db "Colour-blind views: ", 0
+section .text
+
+apply_cblind:
+    push rsi
+    push rdi
+    push rcx
+    lea rsi, [tint_std]
+    cmp dword [beta_on], 0
+    je .c
+    cmp dword [set_cblind], 0
+    je .c
+    lea rsi, [tint_cb]
+.c:
+    lea rdi, [tint_rgb]
+    mov ecx, 32
+    rep movsd
+    pop rcx
+    pop rdi
+    pop rsi
+    ret

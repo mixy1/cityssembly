@@ -277,6 +277,8 @@ Features still in testing, off unless you ask for them:
   again later. Undo takes a stamp back.
 - **Command palette** (`/`): type any part of a tool's, building's or
   info view's name ("hosp"), Up/Down to choose, Enter to take it.
+- **Colour-blind views** (Settings): the info views' scale runs from
+  blue to orange instead of green to red.
 - **Photo mode** (`F`): the interface goes, the city stays; `F` or Esc
   brings it back.
 - **Follow camera:** click a car or train (on its road or track), a ship

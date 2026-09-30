@@ -1817,11 +1817,11 @@ FUNC ui_slider, 16
     RETURN
 
 FUNC draw_settings, 16
-    ; beta: three more rows (the assists)
+    ; beta: four more rows (the assists, colour-blind views)
     mov eax, 226
     cmp dword [beta_on], 0
     je .h
-    add eax, 3*18
+    add eax, 4*18
 .h:
     mov [rbp-48], eax
     mov r12d, [ui_w]
@@ -2027,6 +2027,24 @@ FUNC draw_settings, 16
     xor dword [set_emerg_pause], 1
     mov dword [settings_dirty], 1
 .b55:
+    cmp dword [beta_on], 0
+    je .b56
+    call tb_reset
+    lea rdi, [s_st_cblind]
+    call tb_str
+    lea rdi, [s_on]
+    cmp dword [set_cblind], 0
+    jne .cb1
+    lea rdi, [s_off]
+.cb1:
+    call tb_str
+    SETBTN
+    test eax, eax
+    jz .b56
+    xor dword [set_cblind], 1
+    mov dword [settings_dirty], 1
+    call apply_cblind
+.b56:
     call tb_reset
     lea rdi, [s_m_full]
     call tb_str
@@ -2124,6 +2142,7 @@ set_zone_mode dd 0          ; beta: area, fill a block, along a road
 set_clear_abandoned dd 1    ; beta: abandoned buildings are cleared away
 set_sweep_rubble dd 1       ; beta: rubble is swept up every month
 set_emerg_pause dd 0        ; beta: fires, meteors, an empty treasury pause
+set_cblind  dd 0            ; beta: info views in colour-blind colours
 section .data
 up_type        dd 1                 ; the upgrade tool's target road type
 section .bss
@@ -2961,14 +2980,14 @@ cat_view db OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE, OV_HEALTH, OV_EDU, OV_TRA
 ; which info views open by themselves (the player can flip each; saved)
 auto_on  db 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 AUTO_ON_N equ 20
-SET_N     equ 14                ; append new settings at the end
+SET_N     equ 15                ; append new settings at the end
 CFG_SIZE  equ 4+AUTO_ON_N+SET_N*4
 settings_file db "cityssembly.cfg", 0
 settings_magic db "CSC3"
 section .bss
 auto_view resd 1
 ov_last   resd 1
-settings_buf resb 64
+settings_buf resb 256           ; (CFG_SIZE and room to grow)
 section .text
 
 ; settings: the remembered info-view switches
@@ -3036,6 +3055,7 @@ FUNC settings_load
     mov eax, [set_light]
     xor eax, 1
     mov [light_off], eax
+    call apply_cblind
     RETURN
 
 ; =====================================================================
