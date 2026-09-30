@@ -103,6 +103,7 @@ FUNC traffic_tick_beta
     PERF_MARK 27
     call vehicles_update
     call trains_update
+    call planes_update
     PERF_MARK 28
     RETURN
 
@@ -186,6 +187,18 @@ FUNC pick_job_near, 16
 
 ; one trip, chosen by the time of day
 FUNC generate_trip_beta
+    ; to and from the airport
+    cmp dword [ap_trip_pm], 0
+    je .nair
+    call rand
+    xor edx, edx
+    mov ecx, 1000
+    div ecx
+    cmp edx, [ap_trip_pm]
+    jae .nair
+    call airport_trip
+    RETURN
+.nair:
     lea r15, [trips_day]
     call day_phase
     cmp eax, 64

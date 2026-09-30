@@ -1269,6 +1269,7 @@ extra_reset:
     xor eax, eax
     rep stosd
     call trains_reset
+    call planes_reset
     mov dword [cam_prev+8], 0
     pop rdi
     ret
@@ -1717,6 +1718,8 @@ FUNC road_blocked_msg
     cmp dword [beta_on], 0
     je .out
     cmp dword [tool], T_RAIL
+    je .r
+    cmp dword [tool], T_RUNWAY
     je .r
     cmp dword [tool], T_ROAD
     jne .out

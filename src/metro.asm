@@ -42,7 +42,7 @@ tm_lost            resd 1           ; (the car was quicker)
 
 section .data
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
-                dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, -1
+                dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, -1
 ti_metro    db "Metro tunnel", 0
 ti_unmetro  db "Remove tunnels", 0
 hx_metro    db "Drag to dig: tunnels go under", 10

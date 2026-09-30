@@ -307,6 +307,12 @@ FUNC ground_sprite
     call rail_ground
     RETURN
 .nrl:
+    cmp eax, OBJ_RUNWAY
+    jne .nrw
+    mov rdi, rbx
+    call runway_ground
+    RETURN
+.nrw:
     cmp eax, OBJ_RUBBLE
     jne .nrub
     mov eax, [spr_rubble]

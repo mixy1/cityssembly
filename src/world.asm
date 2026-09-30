@@ -716,6 +716,14 @@ FUNC update_tile_mask
     mov [rbx+T_SUB], al
     jmp .out
 .npr:
+    cmp al, OBJ_RUNWAY
+    jne .npw
+    mov edi, r12d
+    mov esi, r13d
+    call runway_mask
+    mov [rbx+T_SUB], al
+    jmp .out
+.npw:
     cmp al, OBJ_POWER
     jne .out
     mov edi, r12d

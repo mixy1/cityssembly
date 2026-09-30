@@ -28,7 +28,8 @@ BK_FIRST_BETA equ 22        ; kinds from here on are only in ?beta
 BK_METRO     equ 22         ; beta
 BK_RAILSTN   equ 23         ; beta
 BK_FREIGHT   equ 24         ; beta
-BK_COUNT     equ 25
+BK_AIRPORT   equ 25         ; beta
+BK_COUNT     equ 26
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -109,6 +110,7 @@ bld_info:
     BINFO  1, CV_NONE, 6, 0, 3000, 150, 0, 0, 5000, nm_metro, 0, 5, 0, CAT_TRANSIT, 0, ds_metro
     BINFO  2, CV_NONE, 8, 0, 6000, 300, 0, 0, 9000, nm_railstn, 0, 25, 0, CAT_TRANSIT, 0, ds_railstn
     BINFO  3, CV_NONE, 10, 20, 8000, 350, 0, 0, 9000, nm_freight, 0, 40, 0, CAT_TRANSIT, 0, ds_freight
+    BINFO  3, CV_NONE, 0, 10, 30000, 900, 0, 0, AP_UNLOCK, nm_airport, 0, 60, 0, CAT_TRANSIT, 0, ds_airport
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

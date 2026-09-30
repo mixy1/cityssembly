@@ -137,6 +137,10 @@ OBJ_SERVICE  equ 5     ; placed service building (sub = building kind)
 OBJ_RUBBLE   equ 6
 OBJ_RAIL     equ 7     ; beta: railway track (sub = track mask)
 MISC_RAILX   equ 32    ; T_MISC: a level crossing on this road (beta)
+OBJ_RUNWAY   equ 8     ; beta: airport runway (sub = runway mask)
+MISC_RWLIVE  equ 64    ; T_MISC: a runway an airport flies from (beta)
+MISC_RWINTL  equ 128   ;   ... with jets
+MISC_RWKEEP  equ 0x3F  ; (the other bits)
 
 F_POWER      equ 1
 F_WATER      equ 2

@@ -79,7 +79,8 @@ pf_echo     db "PLAY %s", 10, 0
 pf_tile     db "PLAY tile %d,%d obj %d zone %d sub %d level %d", 0
 pf_tile2    db " flags %d flags2 %d road %d pop %d", 10, 0
 pf_state    db "PLAY state money %lld population %d tool %d acts %d", 0
-pf_state2   db " redo %d day %d month %d cam %d,%d", 10, 0
+pf_state2   db " redo %d day %d month %d cam %d,%d", 0
+pf_state3   db " sprites %d arena %d", 10, 0
 pf_shot     db "PLAY shot %s", 10, 0
 
 ; commands, in handler order
@@ -132,6 +133,7 @@ pf_report4  db " power %d/%d water %d/%d sewage %d reds %d", 10, 0
 pf_report5  db "PLAY spend roads %d services %d policies %d loans %d | income res %d com %d ind %d off %d other %d", 10, 0
 pf_report6  db "PLAY travel bus %d metro %d walk %d (this month) stations %d weighed %d near %d same %d lost %d", 10, 0
 pf_report7  db "PLAY rail riders %d visitors %d freight %d (this month) lines %d stations %d trains %d", 10, 0
+pf_report8  db "PLAY air airports %d flying %d runway %d passengers %d trips %d (this month)", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -733,6 +735,11 @@ FUNC play_tick, 16
     mov r9d, [cam_y]
     xor eax, eax
     CALLC printf
+    lea rdi, [pf_state3]
+    mov esi, [spr_count]
+    mov edx, [arena_used]
+    xor eax, eax
+    CALLC printf
     jmp .done
 .echo:
     lea rdi, [pf_echo]
@@ -929,6 +936,14 @@ FUNC play_tick, 16
     CALLC printf
     pop rax
     pop rax
+    lea rdi, [pf_report8]
+    mov esi, [ap_n]
+    movzx edx, byte [ap_live]
+    movzx ecx, byte [ap_rwlen]
+    mov r8d, [air_pax]
+    mov r9d, [air_trips]
+    xor eax, eax
+    CALLC printf
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row

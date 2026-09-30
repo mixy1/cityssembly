@@ -16,6 +16,7 @@ T_LAND      equ 10
 T_UPGRADE   equ 11
 T_METRO     equ 12              ; beta: metro tunnels
 T_RAIL      equ 13              ; beta: railway track
+T_RUNWAY    equ 14              ; beta: airport runway
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -46,6 +47,7 @@ SI_UNPOWER  equ 123
 SI_METRO    equ 124             ; beta
 SI_UNMETRO  equ 125             ; beta
 SI_RAIL     equ 126             ; beta
+SI_RUNWAY   equ 127             ; beta
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -514,7 +516,8 @@ ST_ROWS equ 18
     dq s_st_walk, walkers, 0
     dq s_st_train, train_riders, 0
     dq s_st_frt, rail_freight, 0
-ST_ROWS_BETA equ 22
+    dq s_st_air, air_pax, 0
+ST_ROWS_BETA equ 23
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -619,7 +622,7 @@ hx_tree db "Trees raise land value and", 10
 ; extra hints by building kind
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-        dq hb_metro, hb_railstn, hb_freight
+        dq hb_metro, hb_railstn, hb_freight, hb_airport
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -1111,6 +1114,8 @@ FUNC tool_collect, 16
     je .line
     cmp eax, T_RAIL
     je .line
+    cmp eax, T_RUNWAY
+    je .lineS
     cmp eax, T_INSPECT
     je .single
     ; beta: a row of small buildings / bus stops along the drag
@@ -1178,6 +1183,7 @@ FUNC tool_collect, 16
     je .out
     cmp eax, 2
     jne .lineL
+.lineS:
     ; straight: the end moves onto the start's row or column
     mov eax, r12d
     sub eax, r14d
@@ -3783,6 +3789,14 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_RUNWAY
+    jne .t8w
+    call runway_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8w:
     cmp eax, T_RAIL
     jne .t8r
     call rail_tile_cost
@@ -4081,8 +4095,13 @@ FUNC tool_apply
     jmp .n
 .a6r:
     cmp eax, T_RAIL
-    jne .a7
+    jne .a6w
     call rail_lay_tile
+    jmp .upd
+.a6w:
+    cmp eax, T_RUNWAY
+    jne .a7
+    call runway_lay_tile
     jmp .upd
 .a7:
     cmp eax, T_BUSSTOP
@@ -4110,8 +4129,11 @@ FUNC tool_apply
 .done:
     cmp dword [tool], T_ROAD
     je .dr
+    cmp dword [tool], T_RUNWAY
+    je .drl
     cmp dword [tool], T_RAIL
     jne .dnr
+.drl:
     call rail_after
     jmp .dnr
 .dr:
@@ -5270,6 +5292,13 @@ FUNC submenu_item_info
 .zz:
     RETURN
 .u:
+    cmp ebx, SI_RUNWAY
+    jne .uw
+    mov edx, RW_COST
+    lea rax, [ti_runway]
+    mov ecx, AP_UNLOCK
+    RETURN
+.uw:
     cmp ebx, SI_RAIL
     jne .u0
     mov edx, RL_COST
@@ -5371,6 +5400,9 @@ FUNC submenu_select
     jmp .close
 .u:
     mov dword [bz_filter], 0
+    mov dword [tool], T_RUNWAY
+    cmp ebx, SI_RUNWAY
+    je .close
     mov dword [tool], T_RAIL
     cmp ebx, SI_RAIL
     je .close
@@ -5452,6 +5484,12 @@ FUNC submenu_is_active
     sete al
     RETURN
 .u:
+    cmp ebx, SI_RUNWAY
+    jne .urw
+    cmp dword [tool], T_RUNWAY
+    sete al
+    RETURN
+.urw:
     cmp ebx, SI_RAIL
     jne .ur
     cmp dword [tool], T_RAIL
@@ -5710,6 +5748,9 @@ FUNC draw_inspect, 32
 .tpl:
     lea rdi, [s_rail]
     cmp eax, OBJ_RAIL
+    je .tstr
+    lea rdi, [s_runway]
+    cmp eax, OBJ_RUNWAY
     je .tstr
     lea rdi, [s_powerline]
     cmp eax, OBJ_POWER
@@ -6006,6 +6047,7 @@ FUNC draw_inspect, 32
 .sveh:
     call metro_inspect
     call rail_inspect
+    call airport_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6599,7 +6641,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 44
+    add ecx, 55
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx
@@ -6823,6 +6865,12 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_RUNWAY
+    jne .nbzw
+    lea r12, [ti_runway]
+    lea r13, [hx_runway]
+    jmp .draw
+.nbzw:
     cmp eax, T_RAIL
     jne .nbzr
     lea r12, [ti_rail]

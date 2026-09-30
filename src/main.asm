@@ -1466,6 +1466,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "requests.asm"
 %include "metro.asm"
 %include "rail.asm"
+%include "air.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

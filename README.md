@@ -163,6 +163,16 @@ Features still in testing, off unless you ask for them:
   truck. Trains run on the track: passenger trains between stations,
   freight trains between a yard and the edge. The rail view shows lines,
   stations and their reach.
+- **Airport** (Public transport, from Metropolis): a terminal (3x3,
+  $30,000) next to a runway you drag, straight, on land ($150 a tile).
+  10 tiles fly small planes (3,000 passengers a month), 16 fly jets
+  (9,000). Passengers are a third of the people plus the sights (Asm
+  Tower, stadium). Each pays $1, tourists make shops wanted and flights
+  make offices wanted, and up to 6% of the city's trips go to or from
+  the terminal - by car unless a station is near. Runways are loud, most
+  of all under the flight path past their ends (see the noise view).
+  Planes come in over the end, land, roll to a stop and taxi off; others
+  line up, take off and climb out.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take
