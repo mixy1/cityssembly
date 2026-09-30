@@ -42,7 +42,8 @@
 ;     save FILE / load FILE
 ;     speed N             game speed 0..3
 ;     report              one line: date, population, jobs, money, traffic
-;     mapdump             print the map as text (. land ~ water # road ...)
+;     mapdump             print the map as text (. land ~ water # road,
+;                         R C I O zoned buildings ...)
 ;     quit
 ; =====================================================================
 %ifndef WEB
@@ -146,6 +147,8 @@ pf_report14 db "PLAY weather kind %d days %d snow %d tornado %d hits %d at %d", 
 pf_report15 db ",%d plowed %d", 10, 0
 pf_report16 db "PLAY trams lines %d riders %d (this month) trams %d raw %d (this month) tourists %d", 0
 pf_report17 db " guests %d intercity %d piers %d ferry riders %d (this month)", 10, 0
+md_class    db "RCIObbbb"
+pf_report18 db "PLAY warehouses %d stored %d to shops %d exported %d (this month) stock %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -1063,6 +1066,26 @@ FUNC play_tick, 16
     mov r8d, [ferry_riders_month]
     xor eax, eax
     CALLC printf
+    ; the warehouses' stock
+    xor r9d, r9d
+    xor ebx, ebx
+.whs:
+    cmp ebx, [wh_n]
+    jge .whd
+    mov eax, [wh_tile+rbx*4]
+    shl eax, TILE_SHIFT
+    movzx eax, word [tiles+rax+T_POP]
+    add r9d, eax
+    inc ebx
+    jmp .whs
+.whd:
+    lea rdi, [pf_report18]
+    mov esi, [wh_n]
+    mov edx, [wh_in]
+    mov ecx, [wh_out]
+    mov r8d, [wh_bulk]
+    xor eax, eax
+    CALLC printf
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row
@@ -1102,9 +1125,14 @@ FUNC play_tick, 16
     mov dl, '+'
     cmp ecx, OBJ_POWER
     je .mput
-    mov dl, 'b'
     cmp ecx, OBJ_ZONEBLD
-    je .mput
+    jne .mo3
+    ; its zone's class: R C I O
+    movzx ecx, byte [rbx+T_ZONE]
+    movzx ecx, byte [zone_class+rcx]
+    mov dl, [md_class+rcx]
+    jmp .mput
+.mo3:
     mov dl, 'S'
     cmp ecx, OBJ_SERVICE
     je .mput

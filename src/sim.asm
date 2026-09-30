@@ -234,12 +234,12 @@ use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
 bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0, 0, 0, 0
-              db 0, 0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0
+              db 0, 0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
               times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
 svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1, 1, 1, 0
-                db 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0
+                db 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1
                 times BK_MAX-BK_COUNT db 0
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000
@@ -444,6 +444,7 @@ FUNC sim_day
     PERF_MARK 23
     mov dword [cov_dirty], 0
     call stats_update
+    call wh_day                     ; (beta)
     PERF_MARK 24
     call dispatch_services
     PERF_MARK 25
@@ -3273,6 +3274,7 @@ FUNC stats_update, 48
     mov [n_ind], eax
     mov [n_off], eax
     mov [n_svc], eax
+    mov [wh_n], eax                 ; (beta)
     mov [garbage_total], eax
     mov [landfill_cap], eax
     lea rdi, [svc_count]
@@ -3305,6 +3307,12 @@ FUNC stats_update, 48
     jz .n
     movzx eax, byte [rbx+T_SUB]
     inc dword [svc_count+rax*4]
+    cmp eax, BK_WAREHOUSE
+    jne .nwh
+    mov edi, r15d
+    call wh_note
+    movzx eax, byte [rbx+T_SUB]
+.nwh:
     ; services that need electricity show it
     mov byte [rbx+T_PROBLEM], 0
     test byte [rbx+T_FLAGS], F_FIRE
@@ -3698,6 +3706,7 @@ FUNC apply_staffing
 FUNC month_end, 32
     call airport_month              ; (beta)
     call raw_month_end
+    call wh_month
     call ferry_month
     call tram_month
     call wonders_month

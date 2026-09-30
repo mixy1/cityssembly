@@ -303,6 +303,13 @@ Features still in testing, off unless you ask for them:
 - **History** (statistics panel, F4): monthly graphs of traffic flow,
   commute, happiness, transit riders, trade and jammed roads, over the
   same 64 months as the budget's population and money.
+- **Warehouses** (Zones, from 1,200 people; they need power): each holds
+  up to 200 truckloads of goods. Factories within its reach (24 tiles)
+  that would truck their goods out of town store them there instead, and
+  shops within its reach that run short restock from it rather than
+  importing from the region. It keeps 40 loads back for the shops and
+  exports the rest in bulk: four loads a truck at $15 a load (factories
+  get $12), or $20 by rail when it's near a freight yard on a line out.
 - **Deathcare** (Health): every month about one in 400 people dies.
   Cemeteries (3x3, from Large Town) take them until full (6,000 graves
   each); Crematoriums (2x2, powered, from Large City) take 200 a month

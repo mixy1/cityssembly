@@ -646,6 +646,7 @@ hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
         dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo, hb_treat
         dq hb_cemetery, hb_crem, hb_tramdepot, hb_hotel, hb_icstn, hb_pier
+        dq hb_wh
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -6323,6 +6324,7 @@ FUNC draw_inspect, 32
     call tram_inspect
     call hotel_inspect
     call ferry_inspect
+    call wh_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps

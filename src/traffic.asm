@@ -1094,6 +1094,8 @@ FUNC vehicle_arrive
     je .bus
     cmp eax, PU_RAW
     je .raw
+    cmp eax, PU_STORE
+    je .store
     cmp eax, PU_HOME
     jne .free                       ; returns and patrols
     call note_commute
@@ -1140,6 +1142,11 @@ FUNC vehicle_arrive
 .raw:
     mov rdi, r15
     call raw_arrive
+    inc dword [trips_ok]
+    jmp .free
+.store:
+    mov rdi, r15
+    call wh_arrive
     inc dword [trips_ok]
     jmp .free
 .fire:
@@ -1623,6 +1630,11 @@ FUNC generate_trip
     call rail_export
     test eax, eax
     jnz .out
+    ; (beta: or to a warehouse in reach)
+    mov edi, r12d
+    call wh_store
+    test eax, eax
+    jnz .out
     ; (beta: by ship, from a port)
     mov edi, r12d
     call port_export
@@ -1645,6 +1657,11 @@ FUNC generate_trip
     shl eax, TILE_SHIFT
     cmp byte [tiles+rax+T_GOODS], 100
     jae .out
+    ; (beta: from a warehouse in reach)
+    mov edi, r12d
+    call wh_supply
+    test eax, eax
+    jnz .out
     ; (beta: through a port)
     mov edi, r12d
     call port_import

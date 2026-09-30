@@ -43,7 +43,8 @@ BK_TRAMDEPOT equ 36         ; beta
 BK_HOTEL     equ 37         ; beta
 BK_ICSTN     equ 38         ; beta
 BK_PIER      equ 39         ; beta
-BK_COUNT     equ 40
+BK_WAREHOUSE equ 40         ; beta
+BK_COUNT     equ 41
 BK_MAX       equ 48         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -139,6 +140,7 @@ bld_info:
     BINFO  2, CV_NONE, 0, 0, 8000, 60, 0, 0, 5000, nm_hotel, 0, 15, 0, CAT_LEISURE, 0, ds_hotel
     BINFO  3, CV_NONE, 8, 0, 20000, 600, 0, 0, 30000, nm_icstn, 0, 30, 0, CAT_TRANSIT, 0, ds_icstn
     BINFO  1, CV_NONE, 6, 0, 3000, 100, 0, 0, 5000, nm_pier, 0, 5, 1, CAT_TRANSIT, 0, ds_pier
+    BINFO  2, CV_NONE, WH_REACH, 10, 3000, 120, 0, 0, 1200, nm_wh, 0, 25, 0, CAT_TRANSIT, 0, ds_wh
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0
