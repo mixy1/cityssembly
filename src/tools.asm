@@ -1297,6 +1297,7 @@ extra_reset:
     call hist_reset
     call trams_reset
     call scen_reset
+    call dist_reset
     call region_reset
     mov dword [cam_prev+8], 0
     pop rdi

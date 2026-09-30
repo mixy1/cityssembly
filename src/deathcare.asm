@@ -160,14 +160,17 @@ FUNC death_month
 .out:
     RETURN
 
-; unhappiness from the dead (edi a home's tile) -> eax (beta)
+; unhappiness from the dead, and the home's district (edi a home's
+; tile) -> eax (beta)
 death_penalty:
-    xor eax, eax
+    push rdi
+    call dist_unhappy
+    pop rdi
     cmp dword [population], 2000
     jl .o
     cmp byte [map_death+rdi], 0
     jne .s
-    mov eax, 6
+    add eax, 6
 .s:
     cmp dword [dc_short], 20
     jl .o

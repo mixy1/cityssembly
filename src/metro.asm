@@ -43,8 +43,10 @@ tm_lost            resd 1           ; (the car was quicker)
 
 section .data
 ; beta menus in place of the classic ones (0: the same)
-sm_beta         dq 0, 0, 0, sm_water_beta, 0, sm_safety_beta, sm_health_beta
+sm_beta         dq 0, sm_zones_beta, 0, sm_water_beta, 0, sm_safety_beta, sm_health_beta
                 dq 0, sm_transit_beta, sm_leisure_beta
+sm_zones_beta   dd SI_ZONE+ZONE_R, SI_ZONE+ZONE_RH, SI_ZONE+ZONE_C, SI_ZONE+ZONE_CH
+                dd SI_ZONE+ZONE_I, SI_ZONE+ZONE_O, SI_DEZONE, SI_DIST, SI_UNDIST, -1
 sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE
                 dd BK_TREAT, -1
 sm_safety_beta  dd BK_POLICE, BK_FIRE, BK_PLOW, -1
@@ -328,7 +330,7 @@ FUNC travel_mode, 32
     mov ecx, 48
     div ecx
     add eax, 90
-    test dword [policies], P_FREEBUS
+    call free_ride
     jz .bf
     sub eax, 30
 .bf:
@@ -373,7 +375,7 @@ FUNC travel_mode, 32
     imul eax, eax, 10               ; the walk to and from
     lea eax, [rax+r14*4]            ; the ride, quick
     add eax, 40                     ; the wait
-    test dword [policies], P_FREEBUS
+    call free_ride
     jz .mf
     sub eax, 30
 .mf:
@@ -433,7 +435,7 @@ FUNC travel_mode, 32
     cmp eax, TM_TRAM
     jne .pkt2
     inc dword [tram_riders_month]
-    test dword [policies], P_FREEBUS
+    call free_ride
     jnz .pk1
     inc dword [fares_month]
     jmp .pk1
@@ -450,7 +452,7 @@ FUNC travel_mode, 32
     cmp eax, TM_BUS
     jne .pm
     inc dword [riders_month]
-    test dword [policies], P_FREEBUS
+    call free_ride
     jnz .ret
     inc dword [fares_month]
     jmp .ret
@@ -458,7 +460,7 @@ FUNC travel_mode, 32
     cmp eax, TM_METRO
     jne .ret
     inc dword [metro_riders_month]
-    test dword [policies], P_FREEBUS
+    call free_ride
     jnz .ret
     add dword [fares_month], 2
 .ret:

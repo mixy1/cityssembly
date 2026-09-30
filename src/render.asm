@@ -1288,6 +1288,13 @@ FUNC overlay_tint
     mov eax, TINT_BROWN
     RETURN
 .p0:
+    cmp eax, OV_DISTRICT
+    jne .p0d
+    mov rdi, rbx
+    mov esi, r12d
+    call dist_tint
+    RETURN
+.p0d:
     cmp eax, OV_RAIL
     jne .p0l
     mov rdi, rbx

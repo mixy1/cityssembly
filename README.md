@@ -262,6 +262,14 @@ Features still in testing, off unless you ask for them:
   and never fill. Homes with neither within 30 tiles are less happy, and
   when the city has more dead than it can take, everyone is - the city
   issues say "Not enough deathcare".
+- **Districts** (Zones > Districts): paint areas into eight named
+  districts (Downtown, Old Town, Harbour ...; "Erase district" takes tiles
+  out). While painting, a bar above the dock picks the district and its
+  policies, $1 a building a month each: High-rise ban (dense zones stop at
+  level 3 there), Quiet streets (homes happier, industry wants to be there
+  less), Free transit (trips from there by bus, tram or metro cost
+  nothing: more riders, no fares), Tourism zone (shops do well, homes put
+  up with the crowds). The districts view colours them and names them.
 - **Map types** (on the welcome card): Valley (the classic map), Island
   (sea all round, the highway on a causeway), Lakes, Plains (dry, few
   forests) and Delta (a wide river). Picking one makes the map again

@@ -19,6 +19,7 @@ T_RAIL      equ 13              ; beta: railway track
 T_RUNWAY    equ 14              ; beta: airport runway
 T_LEVEE     equ 15              ; beta: levees
 T_TRAM      equ 16              ; beta: tram rails
+T_DISTRICT  equ 17              ; beta: districts
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -57,6 +58,8 @@ SI_RAIL     equ 126             ; beta
 SI_RUNWAY   equ 127             ; beta
 SI_LEVEE    equ 128             ; beta
 SI_TRAM     equ 129             ; beta
+SI_DIST     equ 130             ; beta
+SI_UNDIST   equ 131             ; beta
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -162,7 +165,7 @@ submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
-    dq ov16, ov17, ov18, ov19, ov20, ov21, ov_metro_n, ov_rail_n
+    dq ov16, ov17, ov18, ov19, ov20, ov21, ov_metro_n, ov_rail_n, ov_dist_n
 ov21 db "Routes through this road", 0
 ov20 db "Land", 0
 ov0  db "No info view", 0
@@ -187,7 +190,7 @@ ov18 db "Industrial desirability", 0
 ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
-    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21, oh_metro, oh_rail
+    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21, oh_metro, oh_rail, oh_dist
 oh21 db 7, "where they come from  ", 2, "where they go  ", 4, "route  ", 3, "busy route", 0
 oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
@@ -2755,6 +2758,9 @@ save_chunks:
     db "SCEN"
     dq scen_state
     dd scen_state_end - scen_state
+    db "DIST"
+    dq dist_state
+    dd dist_state_end - dist_state
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 3
 SC_SIMS equ 4
@@ -2800,6 +2806,9 @@ FUNC compute_eff_overlay
     test eax, eax
     jnz .set2
     call rail_view_wanted
+    test eax, eax
+    jnz .set2
+    call dist_view_wanted
     test eax, eax
     jnz .set2
     mov ecx, [submenu]
@@ -3833,6 +3842,14 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_DISTRICT
+    jne .t8d
+    call dist_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8d:
     cmp eax, T_TRAM
     jne .t8m
     call tram_tile_cost
@@ -4170,6 +4187,11 @@ FUNC tool_apply
     call levee_lay_tile
     jmp .upd
 .a6t:
+    cmp eax, T_DISTRICT
+    jne .a6x
+    call dist_lay_tile
+    jmp .n
+.a6x:
     cmp eax, T_TRAM
     jne .a7
     call tram_lay_tile
@@ -5373,6 +5395,20 @@ FUNC submenu_item_info
 .zz:
     RETURN
 .u:
+    cmp ebx, SI_DIST
+    jne .ud1
+    xor edx, edx
+    lea rax, [ti_dist]
+    mov ecx, 1200
+    RETURN
+.ud1:
+    cmp ebx, SI_UNDIST
+    jne .ud2
+    xor edx, edx
+    lea rax, [ti_undist]
+    mov ecx, 1200
+    RETURN
+.ud2:
     cmp ebx, SI_TRAM
     jne .ut
     mov edx, TRM_COST
@@ -5495,6 +5531,14 @@ FUNC submenu_select
     jmp .close
 .u:
     mov dword [bz_filter], 0
+    mov dword [tool], T_DISTRICT
+    mov dword [dist_erase], 0
+    cmp ebx, SI_DIST
+    je .close
+    mov dword [dist_erase], 1
+    cmp ebx, SI_UNDIST
+    je .close
+    mov dword [dist_erase], 0
     mov dword [tool], T_TRAM
     cmp ebx, SI_TRAM
     je .close
@@ -5585,6 +5629,22 @@ FUNC submenu_is_active
     sete al
     RETURN
 .u:
+    cmp ebx, SI_DIST
+    jne .uds
+    cmp dword [tool], T_DISTRICT
+    jne .o
+    cmp dword [dist_erase], 0
+    sete al
+    RETURN
+.uds:
+    cmp ebx, SI_UNDIST
+    jne .udu
+    cmp dword [tool], T_DISTRICT
+    jne .o
+    cmp dword [dist_erase], 0
+    setne al
+    RETURN
+.udu:
     cmp ebx, SI_TRAM
     jne .utr
     cmp dword [tool], T_TRAM
@@ -7014,6 +7074,16 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_DISTRICT
+    jne .nbzd
+    lea r12, [ti_dist]
+    lea r13, [hx_dist]
+    cmp dword [dist_erase], 0
+    je .draw
+    lea r12, [ti_undist]
+    lea r13, [hx_undist]
+    jmp .draw
+.nbzd:
     cmp eax, T_TRAM
     jne .nbzt
     lea r12, [ti_tram]
@@ -8190,6 +8260,8 @@ FUNC render_ui
     call region_labels
     call follow_draw
     call scen_draw
+    call dist_labels
+    call draw_dist_bar
     cmp dword [welcome], 0
     je .game
     call draw_welcome

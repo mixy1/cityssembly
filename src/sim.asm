@@ -958,6 +958,11 @@ FUNC zone_update, 48
     shr eax, 2
     sub r15d, eax
 .dd:
+    ; beta: its district
+    mov edi, r14d
+    mov esi, [rbp-60]
+    call dist_score
+    add r15d, eax
     CLAMP r15d, 0, 255
     mov [rbx+T_SCORE], r15b
 
@@ -991,7 +996,17 @@ FUNC zone_update, 48
     jl .tdone
     mov ecx, 3
     test dword [policies], P_HIGHRISE
+    jnz .hrz
+    ; beta: this district's high-rise ban
+    push rcx
+    push rcx
+    mov edi, r14d
+    call dist_pol_of
+    pop rcx
+    pop rcx
+    test eax, DP_HIGHRISE
     jz .nohr
+.hrz:
     mov eax, [rbp-48]
     cmp eax, ZONE_R
     je .nohr
@@ -3783,6 +3798,9 @@ FUNC month_end, 32
     inc ebx
     cmp ebx, POLICY_COUNT
     jl .pol
+    ; beta: the districts' policies
+    call dist_month
+    add r12d, eax
     mov [exp_policies], r12d
     ; loan repayments
     xor ecx, ecx

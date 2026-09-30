@@ -210,6 +210,8 @@ FUNC scen_month
 FUNC scen_draw
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tool], T_DISTRICT    ; (the districts' bar is there)
+    je .out
     mov eax, [scen_id]
     test eax, eax
     jz .out
