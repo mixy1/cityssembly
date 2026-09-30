@@ -52,8 +52,17 @@ ct_cool     resd 1              ; months until the next offer
 rg_ready    resd 1
 goods_sold_month resd 1         ; what exports fetched this month
 trade_last  resd 1              ; and last month, at market prices
+rg_link     resd NB_N           ; the edge leads to your city in slot n-1
+rg_id       resd 1              ; the region the city belongs to
 region_state_end:
-nb_links    resb NB_N           ; 1 highway, 2 railway, 4 by air
+; this city, for the others of its region (saved: "SUMM", read by them)
+SUMM_BYTES  equ 64
+region_summ resb SUMM_BYTES     ; pop, jobs, unemployed, spare power,
+                                ; spare water, exports, links (4), id
+lk_summ     resb NB_N*SUMM_BYTES ; the linked cities' summaries
+lk_ok       resb NB_N
+region_workers resd 1           ; commuters from your other cities
+nb_links    resb NB_N           ; 1 highway, 2 railway, 4 by air, 8 yours
 nb_tile     resd NB_N           ; a link on its edge (for its name), -1
 
 section .data
@@ -138,6 +147,15 @@ s_rg_boomm  db "Boom in the region: exports fetch more.", 0
 s_rg_recend db "The recession is over.", 0
 s_rg_boomend db "The boom is over.", 0
 s_rg_btn    db "Neighbours", 0
+s_rg_yours  db "your city: City ", 0
+s_rg_city   db "City ", 0
+s_rg_found  db "Found a city", 0
+s_rg_visit  db "Visit", 0
+s_rg_noslot db "No free save slot for a new city - free one in Load city.", 0
+s_rg_founded db "A new city, next to your other one. Welcome, Mayor!", 0
+s_rg_ftip   db "Start a new city beyond this edge, in a free save slot. Your cities share workers.", 0
+s_rg_vtip   db "Save this city and go to that one", 0
+s_rg_share  db " workers commute in from your other cities", 0
 s_rg_tip    db "The neighbouring cities, the market for your exports, deals (C)", 0
 
 section .text
@@ -293,6 +311,16 @@ FUNC region_links
 .air:
     or dword [nb_links], 0x04040404
 .out:
+    ; your own cities
+    xor ebx, ebx
+.y:
+    cmp dword [rg_link+rbx*4], 0
+    je .yn
+    or byte [nb_links+rbx], 8
+.yn:
+    inc ebx
+    cmp ebx, NB_N
+    jl .y
     RETURN
 
 ; a notice with a neighbour's name in front (edi neighbour, rsi text,
@@ -319,10 +347,13 @@ FUNC region_month, 16
     cmp dword [beta_on], 0
     je .out
     call region_ensure
+    call region_read
     call region_links
     ; the neighbours grow
     xor ebx, ebx
 .g:
+    cmp dword [rg_link+rbx*4], 0
+    jne .gn
     mov ecx, [nb_kind+rbx*4]
     and ecx, 3
     mov r12d, [nb_grow+rcx*4]
@@ -794,6 +825,20 @@ FUNC draw_region, 32
     mov esi, r13d
     lea rdx, [textbuf]
     call draw_text
+    ; workers from your other cities
+    cmp dword [region_workers], 0
+    je .nw
+    call tb_reset
+    movsxd rdi, dword [region_workers]
+    call tb_num
+    lea rdi, [s_rg_share]
+    call tb_str
+    lea edi, [r12+200]
+    mov esi, r13d
+    lea rdx, [textbuf]
+    mov ecx, UI_GOOD
+    call draw_text
+.nw:
     add r13d, 18
     ; the four neighbours
     xor ebx, ebx
@@ -803,6 +848,15 @@ FUNC draw_region, 32
     call tb_str
     lea rdi, [s_rg_colon]
     call tb_str
+    mov eax, [rg_link+rbx*4]
+    test eax, eax
+    jz .nmine
+    lea rdi, [s_rg_yours]
+    call tb_str
+    movsxd rdi, dword [rg_link+rbx*4]
+    call tb_num
+    jmp .nnd
+.nmine:
     mov eax, [nb_name+rbx*4]
     and eax, 15
     mov rdi, [nb_names+rax*8]
@@ -813,11 +867,13 @@ FUNC draw_region, 32
     and eax, 3
     mov rdi, [nb_kinds+rax*8]
     call tb_str
+.nnd:
     lea edi, [r12+10]
     mov esi, r13d
     lea rdx, [textbuf]
     mov ecx, UI_TEXT
     call draw_text
+    call region_row_buttons
     add r13d, 11
     call tb_reset
     movsxd rdi, dword [nb_pop+rbx*4]
@@ -1062,10 +1118,19 @@ FUNC region_labels
     cmp r13d, [ui_h]
     jg .n
     call tb_reset
+    cmp dword [rg_link+rbx*4], 0
+    je .lbn
+    lea rdi, [s_rg_city]
+    call tb_str
+    movsxd rdi, dword [rg_link+rbx*4]
+    call tb_num
+    jmp .lbp
+.lbn:
     mov eax, [nb_name+rbx*4]
     and eax, 15
     mov rdi, [nb_names+rax*8]
     call tb_str
+.lbp:
     mov edi, ' '
     call tb_char
     mov edi, '('
@@ -1083,5 +1148,305 @@ FUNC region_labels
     inc ebx
     cmp ebx, NB_N
     jl .l
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  region play: your own cities side by side
+; ---------------------------------------------------------------------
+RG_FOUND_POP equ 16000          ; founding a city: from Metropolis
+
+; this city's summary, before a save
+FUNC region_summarise
+    lea rdi, [region_summ]
+    mov ecx, SUMM_BYTES
+    xor eax, eax
+    rep stosb
+    mov eax, [population]
+    mov [region_summ], eax
+    mov eax, [jobs+ZC_COM*4]
+    add eax, [jobs+ZC_IND*4]
+    add eax, [jobs+ZC_OFF*4]
+    mov [region_summ+4], eax
+    mov eax, [unemployed]
+    mov [region_summ+8], eax
+    mov eax, [power_supply]
+    sub eax, [power_demand]
+    mov [region_summ+12], eax
+    mov eax, [water_supply]
+    sub eax, [water_demand]
+    mov [region_summ+16], eax
+    mov eax, [trade_last]
+    mov [region_summ+20], eax
+    xor ecx, ecx
+.l:
+    mov eax, [rg_link+rcx*4]
+    mov [region_summ+24+rcx*4], eax
+    inc ecx
+    cmp ecx, NB_N
+    jl .l
+    mov eax, [rg_id]
+    mov [region_summ+40], eax
+    RETURN
+
+; the summary in slot edi's file -> rsi (SUMM_BYTES) ; eax 1 if found
+FUNC region_peek
+    mov r15, rsi
+    xor ebx, ebx                    ; found
+    mov rdi, [slot_files+rdi*8]
+    lea rsi, [str_rb]
+    CALLC SDL_RWFromFile
+    test rax, rax
+    jz .out
+    mov r12, rax
+    mov rdi, r12
+    lea rsi, [peek_buf]
+    mov edx, 1
+    mov ecx, PEEK_MAX
+    CALLC SDL_RWread
+    mov r13, rax
+    mov rdi, r12
+    CALLC SDL_RWclose
+    cmp r13, 8
+    jb .out
+    mov rax, [peek_buf]
+    cmp rax, [save_magic]
+    jne .out
+    mov r12d, 8
+.c:
+    lea eax, [r12+8]
+    cmp rax, r13
+    ja .out
+    mov ecx, [peek_buf+r12]
+    mov edx, [peek_buf+r12+4]
+    cmp ecx, 'TILE'
+    je .out
+    lea eax, [r12+8]
+    add rax, rdx
+    cmp rax, r13
+    ja .out
+    cmp ecx, 'SUMM'
+    jne .n
+    cmp edx, SUMM_BYTES
+    jne .n
+    mov rdi, r15
+    lea rsi, [peek_buf+r12+8]
+    mov ecx, SUMM_BYTES
+    rep movsb
+    mov ebx, 1
+    jmp .out
+.n:
+    lea r12d, [r12+rdx+8]
+    jmp .c
+.out:
+    mov eax, ebx
+    RETURN
+
+; read your other cities' summaries (beta; after a load, each month)
+FUNC region_read
+    cmp dword [beta_on], 0
+    je .out
+    mov dword [region_workers], 0
+    xor ebx, ebx
+.e:
+    mov byte [lk_ok+rbx], 0
+    mov eax, [rg_link+rbx*4]
+    test eax, eax
+    jz .en
+    dec eax
+    cmp eax, AUTO_SLOT
+    jae .en
+    mov edi, eax
+    imul esi, ebx, SUMM_BYTES
+    lea rsi, [lk_summ+rsi]
+    call region_peek
+    test eax, eax
+    jz .en
+    mov byte [lk_ok+rbx], 1
+    ; it stands for the neighbour on that edge
+    imul eax, ebx, SUMM_BYTES
+    mov ecx, [lk_summ+rax]
+    mov [nb_pop+rbx*4], ecx
+    ; its unemployed come to work here
+    mov ecx, [lk_summ+rax+8]
+    CLAMP ecx, 0, 1000000
+    add [region_workers], ecx
+.en:
+    inc ebx
+    cmp ebx, NB_N
+    jl .e
+.out:
+    RETURN
+
+; a free save slot other than this one -> eax, or -1
+FUNC region_free_slot
+    call slots_scan
+    xor ebx, ebx
+.l:
+    cmp ebx, [current_slot]
+    je .n
+    cmp byte [slot_has+rbx], 0
+    je .have
+.n:
+    inc ebx
+    cmp ebx, AUTO_SLOT
+    jl .l
+    mov eax, -1
+    RETURN
+.have:
+    mov eax, ebx
+    RETURN
+
+; found a city beyond edge edi: this one is saved, the new one started
+; in a free slot and saved too
+FUNC region_found, 16
+    mov r12d, edi
+    call region_free_slot
+    cmp eax, -1
+    jne .ok
+    lea rdi, [s_rg_noslot]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    RETURN
+.ok:
+    mov r13d, eax                   ; its slot
+    mov r14d, [current_slot]        ; ours
+    cmp dword [rg_id], 0
+    jne .id
+    call rand
+    or eax, 1
+    mov [rg_id], eax
+.id:
+    lea eax, [r13+1]
+    mov [rg_link+r12*4], eax
+    mov dword [save_quiet], 1
+    call save_current
+    ; the new city: its own land, the same region and difficulty
+    mov eax, [rg_id]
+    mov [rbp-48], eax
+    mov eax, [difficulty]
+    mov [rbp-52], eax
+    mov edi, [world_seed]
+    imul eax, r12d, 7919
+    add edi, eax
+    add edi, 101
+    call hash32
+    mov edi, eax
+    call new_city_seed
+    mov eax, [rbp-48]
+    mov [rg_id], eax
+    mov eax, [rbp-52]
+    mov [difficulty], eax
+    lea eax, [r12+2]
+    and eax, 3                      ; the edge back
+    lea ecx, [r14+1]
+    mov [rg_link+rax*4], ecx
+    mov [current_slot], r13d
+    mov dword [save_quiet], 1
+    call save_current
+    call region_read
+    mov dword [panel], PANEL_NONE
+    lea rdi, [s_rg_founded]
+    mov esi, UI_GOLD
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    RETURN
+
+; go to your city beyond edge edi (this one is saved first)
+FUNC region_visit
+    mov r12d, [rg_link+rdi*4]
+    test r12d, r12d
+    jz .out
+    dec r12d
+    mov dword [save_quiet], 1
+    call save_current
+    mov [current_slot], r12d
+    mov rdi, [slot_files+r12*8]
+    call load_city_from
+    call region_read
+    mov dword [panel], PANEL_NONE
+.out:
+    RETURN
+
+; a new city from a seed (edi) - as the menu's, but that land
+FUNC new_city_seed
+    mov r12d, edi
+    call tut_abort
+    call undo_reset
+    call extra_reset
+    mov dword [sandbox], 0
+    mov [world_seed], r12d
+    call world_generate
+    lea rdi, [money]
+    mov ecx, sim_state_end - money
+    xor eax, eax
+    rep stosb
+    call sim_init
+    call agents_init
+    mov rax, [money]
+    mov [money_shown], rax
+    mov dword [sel_x], -1
+    mov dword [welcome], 1
+    mov edi, 38
+    mov esi, [hwy_row]
+    call camera_center_tile
+    RETURN
+
+; the region buttons of the Neighbours panel's row for edge ebx
+; (r12d panel x, r13d the row's y)
+FUNC region_row_buttons
+    cmp dword [rg_link+rbx*4], 0
+    jne .visit
+    cmp dword [population], RG_FOUND_POP
+    jl .out
+    cmp dword [sandbox], 0
+    jne .out
+    lea edi, [r12+RG_W-100]
+    lea esi, [r13-2]
+    mov edx, 90
+    lea rcx, [s_rg_found]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .ft
+    mov edi, ebx
+    call region_found
+    jmp .out
+.ft:
+    lea edi, [r12+RG_W-100]
+    lea esi, [r13-2]
+    mov edx, 90
+    mov ecx, 14
+    call ui_over
+    test eax, eax
+    jz .out
+    lea rax, [s_rg_ftip]
+    mov [tooltip], rax
+    jmp .out
+.visit:
+    lea edi, [r12+RG_W-100]
+    lea esi, [r13-2]
+    mov edx, 90
+    lea rcx, [s_rg_visit]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .vt
+    mov edi, ebx
+    call region_visit
+    jmp .out
+.vt:
+    lea edi, [r12+RG_W-100]
+    lea esi, [r13-2]
+    mov edx, 90
+    mov ecx, 14
+    call ui_over
+    test eax, eax
+    jz .out
+    lea rax, [s_rg_vtip]
+    mov [tooltip], rax
 .out:
     RETURN

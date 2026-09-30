@@ -186,6 +186,12 @@ Features still in testing, off unless you ask for them:
     Keep your side (the spare capacity, room in the landfill or an
     incinerator) and it pays every month; three missed months and it's
     called off.
+  - **Your own cities** (from Metropolis): "Found a city" on an edge
+    starts a new city beyond it in a free save slot (this one is saved
+    first); the two are linked both ways. Each save carries a short
+    summary its linked cities read: they show as "your city" with their
+    population, and their unemployed commute in to fill your jobs (and
+    yours to theirs). "Visit" saves this city and opens the other.
 - **Cargo Port** (Public transport, from Capital; 3x3 on the shore,
   powered): when ships can reach it (water all the way to the map edge),
   three in five export trucks go to the port instead of the highway, and

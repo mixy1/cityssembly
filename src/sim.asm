@@ -3506,6 +3506,7 @@ FUNC stats_update, 48
     shr eax, 1
     add ebx, eax
 .nc:
+    add ebx, [region_workers]       ; (beta: from your other cities)
     mov edi, ebx
     mov esi, [rbp-60]
     call fill_ratio

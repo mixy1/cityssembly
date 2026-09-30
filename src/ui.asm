@@ -2463,6 +2463,7 @@ FUNC save_city_to, 16
     push rdi
     push rdi
     call save_prepare
+    call region_summarise
     pop rdi
     pop rdi
     lea rsi, [str_wb]
@@ -2661,6 +2662,7 @@ FUNC load_city_from, 32
 .nocam:
     mov dword [welcome], 0
     mov dword [slots_start], 0
+    call region_read                ; (beta: your other cities)
     call tut_abort
     call agents_init
     call scenic_init
@@ -2704,6 +2706,9 @@ save_chunks:
     db "THMB"
     dq save_thumb
     dd THUMB_BYTES
+    db "SUMM"                       ; (for your other cities; beta)
+    dq region_summ
+    dd SUMM_BYTES
     db "TILE"
     dq tiles
     dd MAP_TILES*TILE_BYTES
@@ -2729,10 +2734,10 @@ save_chunks:
     dq achv_state
     dd achv_state_end - achv_state
 SAVE_CHUNKS equ ($-save_chunks)/16
-SC_TILE equ 2
-SC_SIMS equ 3
-SC_SEED equ 4
-SC_CAMR equ 5
+SC_TILE equ 3
+SC_SIMS equ 4
+SC_SEED equ 5
+SC_CAMR equ 6
 section .text
 
 
