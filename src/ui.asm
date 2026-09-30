@@ -6517,6 +6517,8 @@ FUNC draw_budget, 32
     jz .lnext
     mov eax, [loan_months+rbx*4]
     mov [loan_left+rbx*4], eax
+    mov edi, ebx
+    call loan_taken
     movsxd rax, dword [loan_amount+rbx*4]
     add [money], rax
     call tb_reset
@@ -6541,6 +6543,9 @@ FUNC draw_budget, 32
     lea edi, [r12+10]
     mov esi, r13d
     call services_button
+    lea edi, [r12+112]
+    lea esi, [r13+3]
+    call credit_line
     RETURN
 
 ; the budget panel's height -> ecx (taller in beta)

@@ -204,6 +204,15 @@ Features still in testing, off unless you ask for them:
 - **Service funding** (Services panel, from the budget): 50% to 150% for
   police, fire, health, schools, high schools and universities. It sets
   their places, how far they reach, and their upkeep.
+- **Decline:** a building a level above what its surroundings support
+  loses that level after months of it (classic only let buildings two
+  levels too high fall). A month with many is reported.
+- **Credit rating** (AAA to B, in the budget): months in the red over the
+  last year and loans running lower it, six months of expenses in the
+  bank raises it. New loans cost up to 75% more at a low rating.
+- **An empty treasury:** two months in the red brings a warning, three
+  cut the services back to 70%, six and the region bails the city out
+  (back to $25,000) - with taxes 2% higher.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

@@ -138,6 +138,7 @@ pf_report9  db "PLAY region price %d event %d deal %d offer %d trade %d ext %d",
 pf_report10 db " links %x tiles N %d W %d", 10, 0
 pf_report11 db "PLAY port ports %d live %d way %d ship %d trade %d (this month)", 10, 0
 pf_report12 db "PLAY services worst %d reach police %d fire %d health %d schools %d high %d", 10, 0
+pf_report13 db "PLAY econ red %d hist %x grade %d declined %d fund %d tax %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -982,6 +983,20 @@ FUNC play_tick, 16
     mov r8d, [cov_scale+CV_HEALTH*4]
     mov r9d, [cov_scale+CV_ELEM*4]
     mov eax, [cov_scale+CV_HIGH*4]
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
+    call credit_grade
+    mov ecx, eax
+    lea rdi, [pf_report13]
+    mov esi, [months_red]
+    mov edx, [red_hist]
+    mov r8d, [declined_month]
+    mov r9d, [svc_fund+CV_POLICE*4]
+    mov eax, [tax_rate]
     push rax
     push rax
     xor eax, eax

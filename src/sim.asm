@@ -200,6 +200,9 @@ req_reward      resd 1
 req_last        resd 1                  ; the kind asked last
 req_cool        resd 1                  ; months until the next request
 svc_fund        resd CV_COUNT           ; beta: funding, in 10% steps from 100%
+months_red      resd 1                  ; beta: months in a row in the red
+red_hist        resd 1                  ; beta: the last 12 months, 1 = red
+loan_pay_cur    resd 3                  ; beta: what each loan costs a month
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 svc_count       resd BK_MAX     ; buildings of each kind (rebuilt daily)
@@ -1227,10 +1230,25 @@ FUNC zone_update, 48
     mov ecx, [rbp-56]
     add ecx, 1
     cmp eax, ecx
+    jg .mdf
+    ; beta: a level too high falls too, after months of it
+    cmp dword [beta_on], 0
+    je .out
+    cmp eax, [rbp-56]
     jle .out
+    call rand
+    and eax, 31
+    jnz .out
+    jmp .mdc
+.mdf:
     call rand
     and eax, 7
     jnz .out
+.mdc:
+    cmp dword [beta_on], 0
+    je .md2
+    inc dword [declined_month]
+.md2:
     cmp byte [rbx+T_SIZE], 2
     jne .dec1
     cmp byte [rbx+T_LEVEL], 3
@@ -3731,7 +3749,7 @@ FUNC month_end, 32
     cmp dword [loan_left+rcx*4], 0
     je .lnn
     dec dword [loan_left+rcx*4]
-    add edx, [loan_payment+rcx*4]
+    call loan_due
 .lnn:
     inc ecx
     cmp ecx, 3
@@ -3765,6 +3783,7 @@ FUNC month_end, 32
     call notify
     call emergency_pause
 .solvent:
+    call econ_month                 ; (beta)
     mov eax, [hist_count]
     and eax, 63
     mov ecx, [population]
