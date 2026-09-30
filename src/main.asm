@@ -1486,6 +1486,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "ferry.asm"
 %include "blueprint.asm"
 %include "palette_cmd.asm"
+%include "plan.asm"
 %include "agents.asm"
 %include "audio.asm"
 %include "music.asm"

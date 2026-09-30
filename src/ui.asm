@@ -4089,6 +4089,12 @@ FUNC tool_apply
 .forced:
     cmp dword [tl_valid], 0
     je .err
+    ; beta: plan mode draws it for later
+    call plan_record
+    test eax, eax
+    jz .npl
+    RETURN
+.npl:
     movsxd rax, dword [tl_cost]
     cmp rax, [money]
     jg .broke
@@ -4516,6 +4522,7 @@ FUNC draw_tool_preview, 16
     call freehand_track
     call route_keep
     call jam_marks
+    call plan_draw
     ; a move ends when the build tool is put down
     cmp dword [tool], T_BUILD
     je .mvk
@@ -8386,6 +8393,7 @@ FUNC render_ui
     call draw_dist_bar
     call draw_palette_cmd
     call draw_recent
+    call draw_plan_box
     cmp dword [welcome], 0
     je .game
     call draw_welcome
@@ -8628,10 +8636,18 @@ FUNC ui_key
     jmp .out
 .nbp1:
     cmp eax, SC_R
-    jne .nbp
+    jne .npl
     cmp dword [tool], T_PASTE
     jne .nbp
     call bp_turn_key
+    jmp .out
+.npl:
+    ; beta: Shift+P, plan mode
+    cmp eax, SC_P
+    jne .nbp
+    test dword [key_mod], 3
+    jz .nbp
+    call plan_toggle
     jmp .out
 .nbp:
     ; beta: photo mode (F; Esc also leaves it; [ ] the clock, P a picture)

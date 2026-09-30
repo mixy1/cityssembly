@@ -1250,7 +1250,7 @@ FUNC draw_recent, 16
     jne .out
     ; a row above the dock, in the middle
     mov eax, [rt_n]
-    imul eax, eax, 84
+    imul eax, eax, 106
     mov r12d, [ui_w]
     sub r12d, eax
     shr r12d, 1
@@ -1261,10 +1261,10 @@ FUNC draw_recent, 16
     mov edi, [rt_list+rbx*4]
     call submenu_item_info
     mov rcx, rax
-    imul edi, ebx, 84
+    imul edi, ebx, 106
     add edi, r12d
     mov esi, r13d
-    mov edx, 82
+    mov edx, 104
     xor r8d, r8d
     call text_button
     test eax, eax

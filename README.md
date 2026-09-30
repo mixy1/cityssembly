@@ -275,6 +275,12 @@ Features still in testing, off unless you ask for them:
   the zones grow them again. The copy then follows the cursor: click to
   stamp it (paying for what it lays), R to turn it; Ctrl+V picks it up
   again later. Undo takes a stamp back.
+- **Plan mode** (`Shift+P`): roads, zones, pipes, services and the rest
+  are drawn as blue ghosts - not built, not paid for. The plan box
+  (bottom left) counts the actions and what they'll cost; Build puts up
+  what the money covers now, in the order it was drawn, and the rest goes
+  up at the months' ends as the money comes in. Clear throws the plan
+  away; a piece that can't go where it was drawn any more is dropped.
 - **Recent tools:** the last five things picked from the menus sit in a
   row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,

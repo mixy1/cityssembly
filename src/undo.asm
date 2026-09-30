@@ -220,7 +220,7 @@ undo_reset:
     mov dword [n_redo], 0
     mov dword [undo_top], 0
     mov dword [undo_armed], 0
-    ret
+    jmp plan_reset                  ; (and the plan)
 
 ; swap the tiles and wires of action edi with the map's: what the action
 ; put back comes out, and the other way round (undo and redo alike)
