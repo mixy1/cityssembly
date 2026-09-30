@@ -41,7 +41,8 @@ tm_same            resd 1           ; (the same station)
 tm_lost            resd 1           ; (the car was quicker)
 
 section .data
-sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO, -1
+sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
+                dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, -1
 ti_metro    db "Metro tunnel", 0
 ti_unmetro  db "Remove tunnels", 0
 hx_metro    db "Drag to dig: tunnels go under", 10
@@ -376,7 +377,29 @@ FUNC travel_mode, 32
     mov [rbp-48], eax
     mov dword [rbp-52], TM_METRO
 .pick:
+    ; the train: stations near both ends on one line
+    call rail_trip_cost
+    cmp eax, -1
+    je .pk0
+    push rax
+    push rax
+    call rand
+    mov ecx, eax
+    pop rax
+    pop rax
+    and ecx, 31
+    add eax, ecx
+    cmp eax, [rbp-48]
+    jge .pk0
+    mov [rbp-48], eax
+    mov dword [rbp-52], TM_TRAIN
+.pk0:
     mov eax, [rbp-52]
+    cmp eax, TM_TRAIN
+    jne .pk1
+    inc dword [train_riders_month]
+    add dword [fares_month], 3
+.pk1:
     test eax, eax
     jz .pk
     add dword [ghost_trips], 256

@@ -34,6 +34,7 @@ OV_DESIRE_O equ 19
 OV_LAND     equ 20
 OV_ROUTES   equ 21      ; beta: the inspected road's routes
 OV_METRO    equ 22      ; beta: tunnels, stations and their reach
+OV_RAIL     equ 23      ; beta: railway stations, their reach, freight
 OV_COUNT    equ 16      ; user-cyclable overlays
 
 MISC_NET    equ 1       ; road reaches the outside
@@ -224,11 +225,11 @@ spec_poll   db 0, 8, 25, 45
 use_power   dd 0, 2, 3, 6, 12, 24
 use_water   dd 0, 2, 3, 6, 12, 24
 cov_strength db 0, 220, 220, 200, 200, 200, 220, 150, 255, 0
-bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0
+bld_cov_boost db 0,0,0,0,0,0,0,0,0, 0,0,0,40, 0,20,50, 0, 0,20,40,20,60, 0, 0, 0
               times BK_MAX-BK_COUNT db 0
 policy_cost_div dd 100, 80, 0, 0, 150, 0, 60, 120
 ; which services stop working without power
-svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1
+svc_needs_power db 0,0,0,0, 1,1,0, 0,1, 1,1,1,1, 1,1,1, 1, 0,0,1,1,1, 1, 1, 1
                 times BK_MAX-BK_COUNT db 0
 
 milestone_pop   dd 0, 60, 250, 600, 1200, 2500, 5000, 9000, 16000, 30000, 0x7fffffff
@@ -2655,6 +2656,8 @@ FUNC networks_update
 .lf:
     WARN_ONCE landfull_warned, msg_landfull, UI_BAD
     call metro_update
+    call rail_update
+    call trains_manage
     RETURN
 
 ; =====================================================================
@@ -3752,6 +3755,7 @@ FUNC month_end, 32
     call age_buildings
     call assists_month
     call metro_month
+    call rail_month
     call requests_month
     call check_milestone
     call random_event

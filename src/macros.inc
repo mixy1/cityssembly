@@ -135,6 +135,8 @@ OBJ_POWER    equ 3     ; power line
 OBJ_ZONEBLD  equ 4     ; grown zone building
 OBJ_SERVICE  equ 5     ; placed service building (sub = building kind)
 OBJ_RUBBLE   equ 6
+OBJ_RAIL     equ 7     ; beta: railway track (sub = track mask)
+MISC_RAILX   equ 32    ; T_MISC: a level crossing on this road (beta)
 
 F_POWER      equ 1
 F_WATER      equ 2

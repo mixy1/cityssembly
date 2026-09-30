@@ -1798,7 +1798,7 @@ bld_models:
     dq bld_police, bld_fire, bld_clinic, bld_hospital
     dq bld_elem, bld_school, bld_univ, bld_busdepot
     dq bld_park, bld_plaza, bld_stadium, bld_cityhall, bld_landmark
-    dq bld_metro
+    dq bld_metro, bld_railstn, bld_freight
 section .text
 
 ; =====================================================================
@@ -2151,6 +2151,7 @@ FUNC sprites_init
     jl .v2
     call gen_busstop
     mov [spr_busstop], eax
+    call rail_sprites_init
     xor edi, edi
     call gen_signal
     mov [spr_signal], eax

@@ -623,6 +623,7 @@ zpixel:
 
 FUNC draw_agents, 16
     call draw_vehicles
+    call draw_trains
 .peeps:
     xor ebx, ebx
 .p:

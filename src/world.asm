@@ -708,6 +708,14 @@ FUNC update_tile_mask
     mov [rbx+T_SUB], al
     jmp .out
 .np:
+    cmp al, OBJ_RAIL
+    jne .npr
+    mov edi, r12d
+    mov esi, r13d
+    call rail_mask
+    mov [rbx+T_SUB], al
+    jmp .out
+.npr:
     cmp al, OBJ_POWER
     jne .out
     mov edi, r12d

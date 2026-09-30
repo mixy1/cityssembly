@@ -102,6 +102,7 @@ FUNC traffic_tick_beta
 .mv:
     PERF_MARK 27
     call vehicles_update
+    call trains_update
     PERF_MARK 28
     RETURN
 
@@ -345,6 +346,10 @@ signal_red:
     xor eax, eax
     cmp dword [beta_on], 0
     je .o
+    ; a level crossing with a train at it or coming
+    call crossing_closed
+    test eax, eax
+    jnz .o
     ; lights on the avenues (streets give way; highways are interchanges)
     cmp byte [r8+T_ROADTYPE], RT_AVENUE
     jne .o

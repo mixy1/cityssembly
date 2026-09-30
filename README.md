@@ -152,10 +152,22 @@ Features still in testing, off unless you ask for them:
   fast, never in traffic, 4,000 riders a month per station. The metro
   view shows the tunnels (with trains running), the stations and where
   they're a walk away.
+- **Railways** (Public transport, from Capital): drag to lay track ($60 a
+  tile, three times that over water, as a bridge). Where it crosses a
+  road the road gets a level crossing, and cars wait while a train goes
+  over. Ctrl lays it through homes and shops. Stations (2x2) go next to
+  the track: people within 8 tiles ride to other stations on the line,
+  6,000 a month per station, and when the line reaches the map edge,
+  visitors arrive by train. Freight yards (3x3) on track that reaches the
+  edge ship the goods of industry around them by train instead of by
+  truck. Trains run on the track: passenger trains between stations,
+  freight trains between a yard and the edge. The rail view shows lines,
+  stations and their reach.
 - **How people travel:** every trip weighs walking (short hops), the car
-  (slower as jams grow), the bus (both ends near stops) and the metro,
-  and takes the quickest, give or take. Trips not made by car take cars
-  off the road; the statistics count metro riders and trips on foot.
+  (slower as jams grow), the bus (both ends near stops), the metro and the
+  train, and takes the quickest, give or take. Trips not made by car take
+  cars off the road; the statistics count metro and train riders, trips on
+  foot and freight by rail.
 - **Difficulty** (on the welcome card, and in the budget panel):
   Relaxed keeps the classic costs. Normal: services cost 1.5x and more
   as the city grows (about 2.4x at 35,000 people), roads cost $1 / $2 /

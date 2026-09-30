@@ -1505,7 +1505,13 @@ FUNC generate_trip
     call pick_from
     cmp eax, -1
     je .out
-    mov esi, eax
+    ; (beta: by train, when a station near it is on a line to the edge)
+    mov r12d, eax
+    mov edi, eax
+    call rail_visitor
+    test eax, eax
+    jnz .out
+    mov esi, r12d
     mov edi, -1
     mov edx, VT_CAR
     mov ecx, PU_VISIT
@@ -1594,6 +1600,11 @@ FUNC generate_trip
     cmp byte [tiles+rax+T_GOODS], 60
     jb .out
     sub byte [tiles+rax+T_GOODS], 60
+    ; (beta: by rail from a freight yard on a line to the edge)
+    mov edi, r12d
+    call rail_export
+    test eax, eax
+    jnz .out
     mov edi, r12d
     mov esi, -1
     mov edx, VT_TRUCK

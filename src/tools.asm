@@ -1268,6 +1268,7 @@ extra_reset:
     mov ecx, BOOKMARKS*3
     xor eax, eax
     rep stosd
+    call trains_reset
     mov dword [cam_prev+8], 0
     pop rdi
     ret
@@ -1607,6 +1608,11 @@ road_pipe_cost:
 road_through_cost:
     cmp dword [beta_on], 0
     je .no
+    cmp ecx, OBJ_RAIL
+    jne .nrl
+    mov eax, 20                     ; over the track: a level crossing
+    ret
+.nrl:
     cmp ecx, OBJ_ZONEBLD
     je .z
     cmp ecx, OBJ_POWER
@@ -1636,6 +1642,11 @@ road_through_cost:
 ; before a road goes on a tile (r12 tile; r13d, r14d its x, y): what
 ; was built there comes down (beta, Ctrl)
 FUNC road_clear_tile
+    cmp byte [r12+T_OBJ], OBJ_RAIL
+    jne .nr
+    or byte [r12+T_MISC], MISC_RAILX
+    jmp .out
+.nr:
     cmp byte [r12+T_OBJ], OBJ_ZONEBLD
     jne .out
     mov edi, r13d
@@ -1705,8 +1716,11 @@ FUNC road_after_beta, 16
 FUNC road_blocked_msg
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tool], T_RAIL
+    je .r
     cmp dword [tool], T_ROAD
     jne .out
+.r:
     cmp dword [tl_blocked], 0
     je .out
     test dword [ev_keys], 2

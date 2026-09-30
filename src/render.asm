@@ -269,6 +269,8 @@ FUNC water_mask
     je .n
     cmp byte [rax+T_OBJ], OBJ_ROAD
     je .n                           ; bridges keep the water open
+    cmp byte [rax+T_OBJ], OBJ_RAIL
+    je .n
     bts ebx, r14d
 .n:
     inc r14d
@@ -299,6 +301,12 @@ FUNC ground_sprite
     mov eax, [spr_road+rax*4]
     RETURN
 .nr:
+    cmp eax, OBJ_RAIL
+    jne .nrl
+    mov rdi, rbx
+    call rail_ground
+    RETURN
+.nrl:
     cmp eax, OBJ_RUBBLE
     jne .nrub
     mov eax, [spr_rubble]
@@ -498,6 +506,14 @@ FUNC render_world, 32
     mov edi, [spr_busstop]
     jmp .blitobj
 .sig:
+    ; beta: rails over a level crossing
+    mov rdi, rbx
+    call railx_sprite
+    test eax, eax
+    jz .sig2
+    mov edi, eax
+    jmp .blitobj
+.sig2:
     ; beta: traffic lights at avenue junctions
     mov rdi, rbx
     call signal_sprite
@@ -1240,6 +1256,13 @@ FUNC overlay_tint
     mov eax, TINT_BROWN
     RETURN
 .p0:
+    cmp eax, OV_RAIL
+    jne .p0l
+    mov rdi, rbx
+    mov esi, r12d
+    call rail_tint
+    RETURN
+.p0l:
     cmp eax, OV_METRO
     jne .p0m
     mov rdi, rbx
