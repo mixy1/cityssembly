@@ -38,6 +38,7 @@ PANEL_ACHV     equ 11           ; beta: achievements
 PANEL_HIST     equ 12           ; beta: history graphs
 PANEL_SCEN     equ 13           ; beta: scenarios
 PANEL_TRANSIT  equ 14           ; beta: transit lines
+PANEL_MSPLAN   equ 15           ; beta: the milestone planner
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -8215,6 +8216,13 @@ FUNC ms_progress_bar
     jnz .cp
     lea rax, [ms_tipbuf]
     mov [tooltip], rax
+    ; beta: a click opens the planner
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [click_pending], 0
+    je .out
+    mov dword [click_pending], 0
+    mov dword [panel], PANEL_MSPLAN
 .out:
     RETURN
 
@@ -8494,8 +8502,13 @@ FUNC render_ui
     jmp .hud
 .p6t:
     cmp eax, PANEL_TRANSIT
-    jne .p7
+    jne .p6m
     call draw_transit
+    jmp .hud
+.p6m:
+    cmp eax, PANEL_MSPLAN
+    jne .p7
+    call draw_msplan
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE

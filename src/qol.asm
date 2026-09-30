@@ -1398,6 +1398,8 @@ FUNC draw_mm_filters, 16
     je .out
     cmp dword [photo_mode], 0
     jne .out
+    cmp dword [panel], PANEL_NONE
+    jne .out
     call minimap_pos
     sub r13d, 15
     xor ebx, ebx
@@ -1537,3 +1539,323 @@ mm_filter_colour:
     mov r8, rdi
     sub r8, rcx
     ret
+
+; ---------------------------------------------------------------------
+;  milestone planner (beta): a click on the city's name and its progress
+;  bar - the next milestone, how far, how soon at the recent pace, what
+;  it brings, and what's holding the city back
+; ---------------------------------------------------------------------
+MP_W        equ 320
+MP_H        equ 244
+
+section .data
+s_mp_next   db "Next: ", 0
+s_mp_of     db " of ", 0
+s_mp_people db " people", 0
+s_mp_year   db "The last year: ", 0
+s_mp_months db " people - about ", 0
+s_mp_months2 db " months to go", 0
+s_mp_soon   db " people - within the month", 0
+s_mp_flat   db "Not growing lately", 0
+s_mp_early  db "Too early to tell how fast it grows", 0
+s_mp_unl    db "It brings:", 0
+s_mp_back   db "What holds the city back:", 0
+s_mp_want   db "Wanted: homes ", 0
+s_mp_shops  db ", shops ", 0
+s_mp_ind    db ", industry ", 0
+s_mp_off    db ", offices ", 0
+s_mp_pow    db "Buildings without power: ", 0
+s_mp_wat    db "Buildings without water: ", 0
+s_mp_road   db "Buildings without a road: ", 0
+s_mp_aband  db "Abandoned buildings: ", 0
+s_mp_garb   db "Buildings with garbage piling up: ", 0
+s_mp_goods  db "Shops short of goods: ", 0
+s_mp_jams   db "Jammed road tiles: ", 0
+s_mp_fine   db "Nothing much - the city is doing well.", 0
+s_mp_all    db "Every milestone reached.", 0
+s_mp_close  db "Close", 0
+mp_counts   dq cnt_unpowered, s_mp_pow, cnt_nowater, s_mp_wat
+            dq cnt_noroad, s_mp_road, cnt_abandon, s_mp_aband
+            dq cnt_garbage, s_mp_garb, cnt_nogoods, s_mp_goods, 0
+
+section .text
+
+; a line of the planner (rdx text, ecx colour; r14d the row's y)
+mp_line:
+    lea edi, [r12+10]
+    mov esi, r14d
+    add r14d, 11
+    jmp draw_text
+
+FUNC draw_msplan, 32
+    mov r12d, [ui_w]
+    sub r12d, MP_W
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, MP_H
+    shr r13d, 1
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, MP_W
+    mov ecx, MP_H
+    call draw_panel
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, MP_W
+    mov ecx, MP_H
+    call ui_over
+    lea r14d, [r13+8]
+    call ms_top
+    mov ecx, eax
+    mov eax, [milestone]
+    cmp eax, ecx
+    jl .next
+    lea rdx, [s_mp_all]
+    mov ecx, UI_GOLD
+    call mp_line
+    jmp .close
+.next:
+    inc eax
+    mov [rbp-48], eax               ; the next milestone
+    mov ecx, [milestone_pop+rax*4]
+    mov [rbp-52], ecx               ; its population
+    ; its name, big
+    call tb_reset
+    lea rdi, [s_mp_next]
+    call tb_str
+    mov eax, [rbp-48]
+    mov rdi, [milestone_names+rax*8]
+    call tb_str
+    mov dword [font_scale], 2
+    lea edi, [r12+10]
+    mov esi, r14d
+    lea rdx, [textbuf]
+    mov ecx, UI_GOLD
+    call draw_text
+    mov dword [font_scale], 1
+    add r14d, 22
+    ; how far
+    call tb_reset
+    movsxd rdi, dword [population]
+    call tb_num
+    lea rdi, [s_mp_of]
+    call tb_str
+    movsxd rdi, dword [rbp-52]
+    call tb_num
+    lea rdi, [s_mp_people]
+    call tb_str
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call mp_line
+    mov eax, [population]
+    shl eax, 8
+    xor edx, edx
+    mov ecx, [rbp-52]
+    test ecx, ecx
+    jz .m0
+    div ecx
+.m0:
+    mov ecx, eax
+    lea edi, [r12+10]
+    mov esi, r14d
+    mov edx, MP_W-20
+    mov r8d, UI_GOLD
+    call meter
+    add r14d, 10
+    ; how soon: the last twelve months' growth
+    mov ecx, [hist_count]
+    cmp ecx, 2
+    jge .h
+    lea rdx, [s_mp_early]
+    mov ecx, UI_DIM
+    call mp_line
+    jmp .unl
+.h:
+    mov r15d, ecx
+    dec r15d
+    CLAMP r15d, 1, 12               ; months looked back
+    mov eax, [hist_count]
+    dec eax
+    and eax, 63
+    mov edx, [hist_pop+rax*4]
+    mov eax, [hist_count]
+    dec eax
+    sub eax, r15d
+    and eax, 63
+    sub edx, [hist_pop+rax*4]       ; growth over them
+    mov [rbp-56], edx
+    test edx, edx
+    jg .grow
+    lea rdx, [s_mp_flat]
+    mov ecx, UI_WARN
+    call mp_line
+    jmp .unl
+.grow:
+    call tb_reset
+    lea rdi, [s_mp_year]
+    call tb_str
+    mov edi, '+'
+    call tb_char
+    movsxd rdi, dword [rbp-56]
+    call tb_num
+    ; months to go = still needed * months / growth, rounded up
+    mov eax, [rbp-52]
+    sub eax, [population]
+    jg .need
+    lea rdi, [s_mp_soon]
+    call tb_str
+    jmp .gl
+.need:
+    imul eax, r15d
+    mov ecx, [rbp-56]
+    add eax, ecx
+    dec eax
+    xor edx, edx
+    div ecx
+    mov [rbp-60], eax
+    lea rdi, [s_mp_months]
+    call tb_str
+    movsxd rdi, dword [rbp-60]
+    call tb_num
+    lea rdi, [s_mp_months2]
+    call tb_str
+.gl:
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call mp_line
+.unl:
+    ; what it brings: the buildings that unlock there, two columns
+    add r14d, 4
+    lea rdx, [s_mp_unl]
+    mov ecx, UI_ACCENT
+    call mp_line
+    xor ebx, ebx
+    mov dword [rbp-64], 0           ; listed
+.b:
+    cmp ebx, BK_COUNT
+    jge .bd
+    mov edi, ebx
+    call bld_rec
+    mov ecx, [rax+BI_UNLOCK]
+    cmp ecx, [rbp-52]
+    jne .bn
+    mov rdx, [rax+BI_NAME]
+    mov eax, [rbp-64]
+    mov ecx, eax
+    and ecx, 1
+    imul ecx, ecx, 150
+    lea edi, [r12+rcx+16]
+    shr eax, 1
+    imul eax, eax, 11
+    lea esi, [r14+rax]
+    mov ecx, UI_TEXT
+    call draw_text
+    inc dword [rbp-64]
+    cmp dword [rbp-64], 8
+    jge .bd
+.bn:
+    inc ebx
+    jmp .b
+.bd:
+    mov eax, [rbp-64]
+    inc eax
+    shr eax, 1
+    imul eax, eax, 11
+    add r14d, eax
+    ; what holds it back
+    add r14d, 4
+    lea rdx, [s_mp_back]
+    mov ecx, UI_ACCENT
+    call mp_line
+    mov dword [rbp-64], 0           ; problems listed
+    call tb_reset
+    lea rdi, [s_mp_want]
+    call tb_str
+    movsxd rdi, dword [demand]
+    call tb_num
+    lea rdi, [s_mp_shops]
+    call tb_str
+    movsxd rdi, dword [demand+4]
+    call tb_num
+    lea rdi, [s_mp_ind]
+    call tb_str
+    movsxd rdi, dword [demand+8]
+    call tb_num
+    lea rdi, [s_mp_off]
+    call tb_str
+    movsxd rdi, dword [demand+12]
+    call tb_num
+    lea rdx, [textbuf]
+    mov ecx, UI_DIM
+    call mp_line
+    ; the counts
+    xor ebx, ebx
+.c:
+    mov rax, [mp_counts+rbx*8]
+    test rax, rax
+    jz .cd
+    mov eax, [rax]
+    test eax, eax
+    jz .cn
+    mov [rbp-60], eax
+    call tb_reset
+    mov rdi, [mp_counts+rbx*8+8]
+    call tb_str
+    movsxd rdi, dword [rbp-60]
+    call tb_num
+    lea rdx, [textbuf]
+    mov ecx, UI_WARN
+    call mp_line
+    inc dword [rbp-64]
+.cn:
+    add ebx, 2
+    jmp .c
+.cd:
+    ; overloaded services
+    mov eax, [sv_worst]
+    test eax, eax
+    jz .j
+    mov rdx, [sv_over+rax*8]
+    mov ecx, UI_WARN
+    call mp_line
+    inc dword [rbp-64]
+.j:
+    ; jammed roads last month
+    mov eax, [hist_count]
+    test eax, eax
+    jz .f
+    dec eax
+    and eax, 63
+    mov eax, [hist_series+5*256+rax*4]
+    test eax, eax
+    jz .f
+    mov [rbp-60], eax
+    call tb_reset
+    lea rdi, [s_mp_jams]
+    call tb_str
+    movsxd rdi, dword [rbp-60]
+    call tb_num
+    lea rdx, [textbuf]
+    mov ecx, UI_WARN
+    call mp_line
+    inc dword [rbp-64]
+.f:
+    cmp dword [rbp-64], 0
+    jne .close
+    lea rdx, [s_mp_fine]
+    mov ecx, UI_GOOD
+    call mp_line
+.close:
+    mov edi, r12d
+    add edi, MP_W/2-35
+    mov esi, r13d
+    add esi, MP_H-20
+    mov edx, 70
+    lea rcx, [s_mp_close]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .out
+    mov dword [panel], PANEL_NONE
+.out:
+    RETURN

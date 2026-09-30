@@ -289,6 +289,11 @@ Features still in testing, off unless you ask for them:
 - **Minimap filters** (chips over the minimap): the map, jammed roads
   (green to red), power and water (which buildings have them, the lines
   and pipes) and the land value of the city's lots.
+- **Milestone planner** (a click on the city's name, top left): the next
+  milestone and how far off it is, how soon at the last year's pace,
+  what it brings, and what holds the city back - demand, buildings
+  without power, water or a road, abandoned ones, garbage, shops short
+  of goods, overloaded services and jammed roads.
 - **Recent tools:** the last five things picked from the menus sit in a
   row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,
