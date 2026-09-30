@@ -44,7 +44,9 @@ tm_lost            resd 1           ; (the car was quicker)
 section .data
 ; beta menus in place of the classic ones (0: the same)
 sm_beta         dq 0, sm_zones_beta, 0, sm_water_beta, 0, sm_safety_beta, sm_health_beta
-                dq 0, sm_transit_beta, sm_leisure_beta
+                dq 0, sm_transit_beta, sm_leisure_beta, sm_overlay_beta
+sm_overlay_beta dd 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009
+                dd 1010, 1011, 1012, 1013, 1014, 1015, 1000+OV_GROWTH, 1000+OV_DISTRICT, -1
 sm_zones_beta   dd SI_ZONE+ZONE_R, SI_ZONE+ZONE_RH, SI_ZONE+ZONE_C, SI_ZONE+ZONE_CH
                 dd SI_ZONE+ZONE_I, SI_ZONE+ZONE_O, SI_DEZONE, SI_DIST, SI_UNDIST, -1
 sm_water_beta   dd SI_PIPE, BK_PUMP, BK_WTOWER, BK_SEWAGE, SI_LEVEE, SI_UNPIPE
@@ -641,7 +643,7 @@ submenu_list:
     mov r15, [submenu_lists+rax*8]
     cmp dword [beta_on], 0
     je .o
-    cmp eax, 10
+    cmp eax, 11
     jae .o
     cmp qword [sm_beta+rax*8], 0
     je .o

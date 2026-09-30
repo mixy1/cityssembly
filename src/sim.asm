@@ -3852,6 +3852,7 @@ FUNC month_end, 32
     call achv_month
     call hist_month
     call scen_month
+    call forecast_month
     mov eax, [hist_count]
     and eax, 63
     mov ecx, [population]

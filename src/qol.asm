@@ -836,3 +836,309 @@ FUNC transit_button
     mov dword [panel], PANEL_TRANSIT
 .out:
     RETURN
+
+; ---------------------------------------------------------------------
+;  the growth view (beta): each zoned lot coloured by what holds it
+;  back - power (red), a road (grey), water or sewage (blue), demand
+;  (yellow), the place itself (brown), services (orange); green grows
+; ---------------------------------------------------------------------
+OV_GROWTH   equ 25
+
+section .data
+gr_needs    db 22, 56, 88, 122, 156, 255   ; score for the next level
+ov_growth_n db "Growth", 0
+oh_growth   db 2, "growing  ", 3, "power  ", 6, "road  ", 7, "water  ", 4, "demand  ", 5, "place", 0
+
+section .text
+
+; (rdi tile, esi index) -> eax tint
+growth_tint:
+    movzx eax, byte [rdi+T_ZONE]
+    test eax, eax
+    jz .none
+    cmp byte [rdi+T_OBJ], OBJ_ROAD
+    je .none
+    movzx ecx, byte [zone_class+rax]
+    mov eax, TINT_GREY
+    test byte [rdi+T_FLAGS], F_ROADOK
+    jz .o
+    mov eax, TINT_RED
+    test byte [rdi+T_FLAGS], F_POWER
+    jz .o
+    movzx edx, byte [rdi+T_LEVEL]
+    cmp byte [rdi+T_OBJ], OBJ_ZONEBLD
+    je .b
+    xor edx, edx
+.b:
+    test edx, edx
+    jz .d
+    mov eax, TINT_BLUE
+    test byte [rdi+T_FLAGS], F_WATER
+    jz .o
+    test byte [rdi+T_FLAGS2], F2_SEWAGE
+    jz .o
+.d:
+    mov eax, TINT_YELLOW
+    cmp dword [demand+rcx*4], -30
+    jl .o
+    CLAMP edx, 0, 5
+    movzx ecx, byte [gr_needs+rdx]
+    mov eax, TINT_BROWN
+    cmp byte [rdi+T_SCORE], cl
+    jb .o
+    ; top level, or a level that needs more than the place
+    mov eax, TINT_GREEN
+    cmp edx, 3
+    jl .o
+    cmp edx, 5
+    jge .o
+    movzx ecx, byte [map_police+rsi]
+    movzx edx, byte [map_fire+rsi]
+    add ecx, edx
+    cmp ecx, 60
+    jge .o
+    mov eax, TINT_ORANGE
+.o: ret
+.none:
+    xor eax, eax
+    ret
+
+; ---------------------------------------------------------------------
+;  forecasts (beta): what will run out soon, at this pace - a line in
+;  the city issues
+; ---------------------------------------------------------------------
+ISSUE_FORECAST equ 14
+
+section .bss
+fc_prev_pow resd 1
+fc_prev_wat resd 1
+fc_prev_land resd 1
+fc_kind     resd 1              ; 0 none, 1 power, 2 water, 3 landfill, 4 money
+fc_months   resd 1
+
+section .data
+fc_texts    dq 0, fct1, fct2, fct3, fct4
+fct1        db "Power runs out in ~", 0
+fct2        db "Water runs out in ~", 0
+fct3        db "Landfill full in ~", 0
+fct4        db "Broke in ~", 0
+s_fc_months db " months", 0
+s_fc_month  db " month", 0
+s_fc_iss    db "Forecast", 0
+
+section .text
+
+; (edi what's left, esi used more each month) -> eax months, or 99
+fc_months_left:
+    mov eax, 99
+    test esi, esi
+    jle .o
+    test edi, edi
+    jl .z
+    mov eax, edi
+    xor edx, edx
+    div esi
+    ret
+.z: xor eax, eax
+.o: ret
+
+; the month's forecast (beta)
+FUNC forecast_month
+    cmp dword [beta_on], 0
+    je .out
+    mov dword [fc_kind], 0
+    mov dword [fc_months], 6        ; (no further than this)
+    ; power
+    mov edi, [power_supply]
+    sub edi, [power_demand]
+    mov esi, [power_demand]
+    sub esi, [fc_prev_pow]
+    mov eax, [power_demand]
+    mov [fc_prev_pow], eax
+    call fc_months_left
+    cmp eax, [fc_months]
+    jge .w
+    mov [fc_months], eax
+    mov dword [fc_kind], 1
+.w:
+    mov edi, [water_supply]
+    sub edi, [water_demand]
+    mov esi, [water_demand]
+    sub esi, [fc_prev_wat]
+    mov eax, [water_demand]
+    mov [fc_prev_wat], eax
+    call fc_months_left
+    cmp eax, [fc_months]
+    jge .l
+    mov [fc_months], eax
+    mov dword [fc_kind], 2
+.l:
+    mov edi, [landfill_cap]
+    sub edi, [landfill_used]
+    mov esi, [landfill_used]
+    sub esi, [fc_prev_land]
+    mov eax, [landfill_used]
+    mov [fc_prev_land], eax
+    cmp dword [landfill_cap], 0
+    je .m
+    cmp dword [svc_count+BK_INCIN*4], 0
+    jne .m
+    call fc_months_left
+    cmp eax, [fc_months]
+    jge .m
+    mov [fc_months], eax
+    mov dword [fc_kind], 3
+.m:
+    ; money: losing it at this rate
+    mov esi, [expense_last]
+    sub esi, [income_last]
+    jle .out
+    mov rdi, [money]
+    test rdi, rdi
+    jle .out
+    cmp rdi, 0x7FFFFFFF
+    jg .out
+    call fc_months_left
+    cmp eax, [fc_months]
+    jge .out
+    mov [fc_months], eax
+    mov dword [fc_kind], 4
+.out:
+    RETURN
+
+; the forecast line into the text builder -> eax 1 if there is one
+FUNC forecast_text
+    xor eax, eax
+    mov ecx, [fc_kind]
+    test ecx, ecx
+    jz .out
+    cmp ecx, 4
+    ja .out
+    call tb_reset
+    mov ecx, [fc_kind]
+    mov rdi, [fc_texts+rcx*8]
+    call tb_str
+    mov eax, [fc_months]
+    inc eax
+    push rax
+    push rax
+    movsxd rdi, eax
+    call tb_num
+    pop rax
+    pop rax
+    lea rdi, [s_fc_months]
+    cmp eax, 1
+    jne .pl
+    lea rdi, [s_fc_month]
+.pl:
+    call tb_str
+    mov eax, 1
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  impact at the cursor (beta): a building that pollutes or is loud -
+;  how many homes its smoke or noise would reach
+; ---------------------------------------------------------------------
+section .data
+s_im_smoke  db ", smoke on ", 0
+s_im_noise  db ", noise on ", 0
+s_im_homes  db " homes", 0
+section .text
+
+; homes within r (edi) of the building being placed -> eax
+FUNC homes_within, 16
+    mov r14d, edi
+    mov edi, [build_kind]
+    call bld_rec
+    movzx eax, byte [rax+BI_SIZE]
+    shr eax, 1
+    mov r12d, [tl_x]
+    add r12d, eax
+    mov r13d, [tl_y]
+    add r13d, eax
+    mov eax, r14d
+    imul eax, eax
+    mov [rbp-48], eax
+    xor r15d, r15d
+    mov ebx, r14d
+    neg ebx
+.y:
+    cmp ebx, r14d
+    jg .d
+    mov ecx, r14d
+    neg ecx
+.x:
+    cmp ecx, r14d
+    jg .yn
+    mov eax, ecx
+    imul eax, ecx
+    mov edx, ebx
+    imul edx, ebx
+    add eax, edx
+    cmp eax, [rbp-48]
+    jg .xn
+    lea edi, [r12+rcx]
+    lea esi, [r13+rbx]
+    cmp edi, MAP_W
+    jae .xn
+    cmp esi, MAP_W
+    jae .xn
+    shl esi, MAP_SHIFT
+    add esi, edi
+    mov eax, esi
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ZONEBLD
+    jne .xn
+    test byte [tiles+rax+T_FLAGS], F_ANCHOR
+    jz .xn
+    movzx edx, byte [tiles+rax+T_ZONE]
+    cmp byte [zone_class+rdx], ZC_RES
+    jne .xn
+    inc r15d
+.xn:
+    inc ecx
+    jmp .x
+.yn:
+    inc ebx
+    jmp .y
+.d:
+    mov eax, r15d
+    RETURN
+
+; the text builder gets " smoke on N homes" / " noise on N homes"
+FUNC impact_text
+    cmp dword [beta_on], 0
+    je .out
+    mov edi, [build_kind]
+    call bld_rec
+    mov rbx, rax
+    cmp byte [rbx+BI_POLL], 10
+    jb .n
+    mov edi, 9
+    call homes_within
+    test eax, eax
+    jz .n
+    mov r12d, eax
+    lea rdi, [s_im_smoke]
+    call tb_str
+    movsxd rdi, r12d
+    call tb_num
+    lea rdi, [s_im_homes]
+    call tb_str
+.n:
+    cmp byte [rbx+BI_NOISE], 30
+    jb .out
+    mov edi, 4
+    call homes_within
+    test eax, eax
+    jz .out
+    mov r12d, eax
+    lea rdi, [s_im_noise]
+    call tb_str
+    movsxd rdi, r12d
+    call tb_num
+    lea rdi, [s_im_homes]
+    call tb_str
+.out:
+    RETURN

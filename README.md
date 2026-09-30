@@ -262,6 +262,14 @@ Features still in testing, off unless you ask for them:
 - **Coverage at the cursor:** placing a police or fire station, clinic,
   school or park, the price says how many buildings or homes it would
   reach that aren't served well now ("$800 +9 homes").
+- **Impact at the cursor:** placing something that smokes or is loud
+  (a coal plant, an incinerator, an airport) says how many homes its
+  smoke and noise would reach.
+- **Growth view** (info views): each zoned lot coloured by what holds it
+  back - power, a road, water or sewage, demand, the place itself, or
+  the services a higher level needs; green grows.
+- **Forecasts** (city issues): power or water running out, the landfill
+  filling up, or the money running out within six months at this pace.
 - **Photo mode** (`F`): the interface goes, the city stays; `F` or Esc
   brings it back.
 - **Follow camera:** click a car or train (on its road or track), a ship

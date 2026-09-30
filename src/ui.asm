@@ -166,7 +166,7 @@ submenu_view dd 0, 0, OV_POWER, OV_WATER, OV_GARBAGE, OV_POLICE
 
 overlay_names:
     dq ov0, ov1, ov2, ov3, ov4, ov5, ov6, ov7, ov8, ov9, ov10, ov11, ov12, ov13, ov14, ov15
-    dq ov16, ov17, ov18, ov19, ov20, ov21, ov_metro_n, ov_rail_n, ov_dist_n
+    dq ov16, ov17, ov18, ov19, ov20, ov21, ov_metro_n, ov_rail_n, ov_dist_n, ov_growth_n
 ov21 db "Routes through this road", 0
 ov20 db "Land", 0
 ov0  db "No info view", 0
@@ -191,7 +191,7 @@ ov18 db "Industrial desirability", 0
 ov19 db "Office desirability", 0
 ; legend hints for the utility views
 ov_hint:
-    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21, oh_metro, oh_rail, oh_dist
+    dq 0, oh1, oh2, 0, 0, 0, 0, oh7, 0, 0, 0, 0, 0, 0, 0, oh15, 0, 0, 0, 0, oh20, oh21, oh_metro, oh_rail, oh_dist, oh_growth
 oh21 db 7, "where they come from  ", 2, "where they go  ", 4, "route  ", 3, "busy route", 0
 oh20 db 1, "yours  ", 5, "for sale  ", 4, "can't afford  ", 6, "later", 0
 oh1  db 5, "powered area  ", 3, "no power  ", 6, "wires", 0
@@ -285,7 +285,7 @@ s_people    db " people", 0
 s_tiles     db " tiles", 0
 s_stretch   db "Stretch: ", 0
 s_isstip    db "Click to visit each one", 0
-iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11, is12, s_dc_iss
+iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11, is12, s_dc_iss, s_fc_iss
 is12 db "Services overloaded", 0
 is1  db "without power", 0
 is2  db "without water", 0
@@ -298,8 +298,8 @@ is8  db "with no road", 0
 is9  db "with dirty water", 0
 is10 db "whose trips can't get through", 0
 is11 db "jammed road tiles - upgrade?", 0
-iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136, '!', '!' 
-iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD, UI_WARN, UI_WARN
+iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136, '!', '!', '?' 
+iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD, UI_WARN, UI_WARN, UI_WARN
 s_stjam1    db ", ", 3, 0
 s_stjam2    db " jammed", 0
 s_mmtip     db "Click or drag to move the view  (Tab hides)", 0
@@ -7319,6 +7319,7 @@ FUNC draw_cursor_cost
     cmp dword [tool], T_BUILD
     jne .d2
     call cov_gain_text
+    call impact_text
 .d2:
     lea rdi, [textbuf]
     call text_width

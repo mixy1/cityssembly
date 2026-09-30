@@ -3018,7 +3018,7 @@ FUNC budget_difficulty
 JAM_HOT     equ 8               ; jam spots remembered
 section .data
 ; the order issues are listed in (PR_* numbers, ISSUE_JAM = 11)
-iss_prio    db 7, 1, 2, 3, 9, 8, 10, 11, 12, 13, 4, 5, 6, 0
+iss_prio    db 7, 14, 1, 2, 3, 9, 8, 10, 11, 12, 13, 4, 5, 6, 0
 s_iss_jams  db "Traffic jams - click to see them", 0
 s_jam_none  db "No jams right now.", 0
 section .bss
@@ -3256,6 +3256,13 @@ FUNC draw_issues_beta, 32
     call tb_str
     jmp .row
 .ld:
+    cmp r14d, ISSUE_FORECAST
+    jne .ld1
+    call forecast_text
+    test eax, eax
+    jz .pick
+    jmp .row
+.ld1:
     cmp r14d, ISSUE_DEATH
     jne .ld2
     call death_issue
@@ -3341,6 +3348,8 @@ FUNC draw_issues_beta, 32
     jmp .nx
 .vld:
     cmp r14d, ISSUE_DEATH
+    je .nx
+    cmp r14d, ISSUE_FORECAST
     je .nx
     cmp r14d, ISSUE_LOAD
     jne .vis
