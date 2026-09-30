@@ -284,6 +284,8 @@ Features still in testing, off unless you ask for them:
   What a storm, a tornado, a meteor or a fire wrecks - services, roads,
   power lines with their wires - goes into the plan too, so the ghosts
   show what was lost; nothing is rebuilt until Build is pressed.
+- **Milestone pause:** the game pauses while a milestone's card is up and
+  goes on at the same speed when it's closed.
 - **Recent tools:** the last five things picked from the menus sit in a
   row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,

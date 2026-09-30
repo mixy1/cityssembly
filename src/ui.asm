@@ -111,6 +111,9 @@ last_tool_err   resd 1
 minimap_buf     resb 160*80
 minimap_age     resd 1
 saved_speed     resd 1
+ms_paused       resd 1          ; (beta: the milestone card paused the game)
+ms_speed        resd 1
+ms_nopause      resd 1          ; (scripted runs don't stop for it)
 budget_net      resd 1
 force_place     resd 1
 
@@ -8223,6 +8226,18 @@ FUNC draw_ms_card, 32
     cmp dword [panel], PANEL_NONE
     jne .out
     mov [rbp-48], eax
+    ; beta: the game waits while the card is up
+    cmp dword [beta_on], 0
+    je .np
+    cmp dword [ms_nopause], 0
+    jne .np
+    cmp dword [ms_paused], 0
+    jne .np
+    mov dword [ms_paused], 1
+    mov ecx, [sim_speed]
+    mov [ms_speed], ecx
+    mov dword [sim_speed], 0
+.np:
     mov edi, [milestone_pop+rax*4]
     mov [rbp-52], edi
     mov r12d, [ui_w]
@@ -8340,6 +8355,14 @@ FUNC draw_ms_card, 32
     test eax, eax
     jz .out
     mov dword [ms_card], 0
+    ; (and the game goes on, unless the player set the speed meanwhile)
+    cmp dword [ms_paused], 0
+    je .out
+    mov dword [ms_paused], 0
+    cmp dword [sim_speed], 0
+    jne .out
+    mov eax, [ms_speed]
+    mov [sim_speed], eax
 .out:
     RETURN
 .item:                              ; rdx name

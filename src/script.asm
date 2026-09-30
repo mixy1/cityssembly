@@ -36,6 +36,8 @@
 ;     poke X Y OFF VALUE  set byte OFF of a tile record (test setups)
 ;     weather N           beta: 1 snow, 2 flood, 3 heat, 4 storm,
 ;                         5 tornado, 6 epidemic, 7 riot
+;     card N              show milestone N's card (beta: it pauses the
+;                         game, as it would for a player)
 ;     apply X0 Y0 X1 Y1   use the current tool from tile to tile directly
 ;                         (no pointer: for building big test cities)
 ;     roadtype N          the road tool's type (0 street, 1 avenue, 2 hwy)
@@ -92,7 +94,7 @@ play_cmds   dq pc_new, pc_rich, pc_money, pc_center, pc_zoom, pc_key, pc_hold
             dq pc_rclick, pc_wait, pc_days, pc_shot, pc_tile, pc_state, pc_echo
             dq pc_quit, pc_select, pc_press, pc_down, pc_up, pc_poke
             dq pc_apply, pc_save, pc_load, pc_speed, pc_report, pc_roadtype
-            dq pc_mapdump, pc_weather, 0
+            dq pc_mapdump, pc_weather, pc_card, 0
 pc_new      db "new", 0
 pc_rich     db "rich", 0
 pc_money    db "money", 0
@@ -127,6 +129,7 @@ pc_report   db "report", 0
 pc_roadtype db "roadtype", 0
 pc_mapdump  db "mapdump", 0
 pc_weather  db "weather", 0
+pc_card     db "card", 0
 pf_mapline  db "MAP %s", 10, 0
 ; map characters by object (terrain for empty land)
 map_chars   db ". #=+HS*"
@@ -542,6 +545,8 @@ FUNC play_tick, 16
     je .mapdump
     cmp ebx, 33
     je .weather
+    cmp ebx, 34
+    je .card
     ; quit
     mov dword [running], 0
     jmp .done
@@ -1152,6 +1157,12 @@ FUNC play_tick, 16
     inc r12d
     cmp r12d, MAP_W
     jl .mr
+    jmp .done
+.card:
+    ; a milestone's card, pausing the game as it would for a player
+    mov eax, [play_arg+4]
+    mov [ms_card], eax
+    mov dword [ms_nopause], 0
     jmp .done
 .weather:
     ; 1 snow, 2 flood, 3 heat, 4 storm, 5 tornado, 6 epidemic, 7 riot

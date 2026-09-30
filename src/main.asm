@@ -163,6 +163,7 @@ FUNC main
     test eax, eax
     jnz .nottb
     mov dword [bot_on], 1
+    mov dword [ms_nopause], 1
     mov rdi, [r13+16]
     CALLC atoi
     mov [shot_frames], eax
@@ -182,6 +183,7 @@ FUNC main
     test eax, eax
     jnz .notplay
     mov dword [play_on], 1
+    mov dword [ms_nopause], 1
     mov rax, [r13+16]
     mov [play_file], rax
     mov dword [shot_frames], 100000000  ; one tick a frame, fixed seed
