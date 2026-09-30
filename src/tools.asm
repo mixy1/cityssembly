@@ -30,6 +30,7 @@ fit_jobs    resd 1                  ; and jobs
 fit_nanch   resd 1
 fit_anch    resd 16
 repl_open   resd 1                  ; the inspector's "replace with" list
+up_label    resb 96                 ; (the upgrade button's label)
 repl_scroll resd 1
 BOOKMARKS   equ 4
 bookmarks   resd BOOKMARKS*3        ; x, y, zoom (zoom 0: unset)
@@ -1066,15 +1067,15 @@ FUNC insp_actions, 32
     mov rdi, [r13+BI_NAME]
     call tb_str
     lea rsi, [textbuf]
-    lea rdi, [ms_tipbuf]
+    lea rdi, [up_label]
     mov ecx, 95
     rep movsb
-    mov byte [ms_tipbuf+95], 0
+    mov byte [up_label+95], 0
     mov edi, [row_x]
     add edi, 6
     mov esi, [row_y]
     mov edx, 168
-    lea rcx, [ms_tipbuf]
+    lea rcx, [up_label]
     mov r8d, r14d
     call price_button
     add dword [row_y], 16
@@ -1175,6 +1176,13 @@ FUNC draw_replace_list, 48
     mov edi, ebx
     call spot_over_sel
     mov [rbp-56], eax
+    ; (a wonder: one each, and what it needs first)
+    test eax, eax
+    jnz .wc
+    mov edi, ebx
+    call wonder_check
+    mov [rbp-56], eax
+.wc:
     mov eax, [r15+BI_COST]
     add eax, [fit_cost]
     mov [rbp-60], eax
@@ -1299,14 +1307,7 @@ extra_reset:
     call ferries_reset
     call scen_reset
     call dist_reset
-    push rdi
-    push rcx
-    lea rdi, [map_raw]
-    mov ecx, MAP_TILES/8
-    xor eax, eax
-    rep stosq
-    pop rcx
-    pop rdi
+    call beta_city_reset
     call region_reset
     mov dword [cam_prev+8], 0
     pop rdi
@@ -2087,10 +2088,10 @@ FUNC tool_mode_chips, 32
 .bl:
     xor ebx, ebx
 .bb:
-    imul edi, ebx, 62
+    movzx edi, byte [bz_x+rbx]
     add edi, 10
     mov esi, [rbp-48]
-    mov edx, 60
+    movzx edx, byte [bz_w+rbx]
     mov rcx, [s_bz_names+rbx*8]
     xor r8d, r8d
     mov eax, [bz_filter]
@@ -2377,7 +2378,9 @@ s_sandbox_2 db " everything is unlocked.", 0
 s_eye_none  db "Nothing to pick up here.", 0
 BUS_SPACING equ 5
 s_bz_names  dq bzn0, bzn1, bzn2, bzn3
-bzn0        db "Everything", 0
+bz_x        db 0, 32, 98, 142           ; (inside the hint panel)
+bz_w        db 30, 64, 42, 46
+bzn0        db "All", 0
 bzn1        db "Abandoned", 0
 bzn2        db "Trees", 0
 bzn3        db "Rubble", 0
@@ -2626,6 +2629,7 @@ FUNC build_eval_many
     mov edi, [build_kind]
     call bld_rec
     mov r15d, [rax+BI_COST]
+    mov dword [tl_cost], 0          ; (each spot adds its own below)
     xor ebx, ebx
 .l:
     cmp ebx, [tl_n]

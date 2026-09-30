@@ -17,6 +17,7 @@ PLAN_TILES  equ 16384
 section .bss
 plan_on     resd 1
 plan_run    resd 1              ; (building from the plan)
+plan_state:                     ; (saved: the PLAN chunk)
 plan_auto   resd 1              ; build the rest as money comes in
 plan_n      resd 1
 plan_used   resd 1
@@ -30,6 +31,7 @@ plan_cost   resd PLAN_MAX
 plan_start  resd PLAN_MAX
 plan_cnt    resd PLAN_MAX
 plan_xy     resw PLAN_TILES     ; x | y << 8
+plan_state_end:
 plan_save   resd 8              ; the player's own tool, kept while building
 rb_last     resd 1              ; the last action is a disaster's (its number)
 rb_told     resd 1              ; the day the player was last told
@@ -72,6 +74,8 @@ FUNC plan_record
     cmp dword [plan_run], 0
     jne .out
     cmp dword [force_place], 0
+    jne .out
+    cmp dword [moving], 0           ; (a move happens now, not later)
     jne .out
     ; not the tools that only look, or shape the land
     mov ecx, [tool]
@@ -231,6 +235,7 @@ FUNC plan_build
     mov [tl_x+rbx*4], ecx
     shr eax, 8
     mov [tl_y+rbx*4], eax
+    mov byte [tl_ok+rbx], 0         ; (evaluated afresh below)
     inc ebx
     jmp .t
 .td:
@@ -283,6 +288,8 @@ FUNC plan_build
 FUNC plan_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     cmp dword [plan_auto], 0
     je .out
     cmp dword [plan_n], 0
@@ -349,6 +356,8 @@ FUNC draw_plan_box, 16
 .show:
     cmp dword [photo_mode], 0
     jne .out
+    cmp dword [submenu], -1         ; (a menu from the dock covers it)
+    jne .out
     ; above the dock, and above a scenario's line
     mov r12d, 4
     mov r13d, [ui_h]
@@ -392,9 +401,8 @@ FUNC draw_plan_box, 16
     mov [rbp-48], eax
     call tb_reset
     movsxd rdi, dword [plan_n]
-    call tb_num
-    lea rdi, [s_pl_acts]
-    call tb_str
+    lea rsi, [s_pl_acts]
+    call tb_count
     movsxd rdi, dword [rbp-48]
     call tb_money
     lea edi, [r12+6]
@@ -444,6 +452,8 @@ FUNC draw_plan_box, 16
 FUNC rebuild_note, 32
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (the tour's meteors aren't the city's)
+    jne .out
     mov [rbp-48], edi
     mov [rbp-52], esi
     call tile_at

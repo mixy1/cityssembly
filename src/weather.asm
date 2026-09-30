@@ -86,6 +86,8 @@ season_now:
 FUNC weather_day
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     ; snow piles up while it falls and melts after
     cmp dword [wx_kind], WX_SNOW
     jne .melt
@@ -636,6 +638,8 @@ levee_lay_tile:
 FUNC disasters_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     cmp dword [disasters_on], 0
     je .out
     ; a tornado

@@ -309,8 +309,12 @@ bp_lay_tile:
     mov dword [r12+T_OCC], 0
     ret
 .nr:
-    cmp byte [r12+T_OBJ], OBJ_ROAD
-    je .o
+    ; zones only on bare land (a pipe goes under buildings, not a zone)
+    cmp byte [r12+T_OBJ], OBJ_NONE
+    je .z
+    cmp byte [r12+T_OBJ], OBJ_TREE
+    jne .o
+.z:
     movzx eax, byte [bp_zone+r8]
     test eax, eax
     jz .tr

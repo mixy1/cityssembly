@@ -131,6 +131,17 @@ FUNC photo_draw
     cmp dword [photo_hint_t], 0
     je .out
     dec dword [photo_hint_t]
+    ; (on a panel: readable over any city)
+    lea rdi, [s_photo]
+    call text_width
+    lea edx, [rax+16]
+    mov edi, [ui_w]
+    sub edi, edx
+    shr edi, 1
+    mov esi, [ui_h]
+    sub esi, 24
+    mov ecx, 14
+    call draw_panel
     mov edi, [ui_w]
     shr edi, 1
     mov esi, [ui_h]
@@ -346,6 +357,12 @@ FUNC follow_pick
     inc ebx
     cmp ebx, TR_MAX
     jl .tr
+    ; a car only right under the pointer (the road itself gets inspected
+    ; otherwise - busy roads are full of cars)
+    cmp dword [fw_best], 7*7
+    jle .c0
+    mov dword [fw_best], 7*7
+.c0:
     xor ebx, ebx
 .car:
     mov edi, FW_CAR
@@ -463,6 +480,8 @@ hist_reset:
 FUNC hist_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     mov ebx, [hist_count]
     and ebx, 63
     mov eax, [flow_pct]
@@ -703,13 +722,11 @@ FUNC draw_transit, 16
     xor ebx, ebx
     call tb_reset
     movsxd rdi, dword [svc_count+BK_BUSDEPOT*4]
-    call tb_num
-    lea rdi, [s_tp_depots]
-    call tb_str
+    lea rsi, [s_tp_depots]
+    call tb_count
     movsxd rdi, dword [n_stops]
-    call tb_num
-    lea rdi, [s_tp_stops]
-    call tb_str
+    lea rsi, [s_tp_stops]
+    call tb_count
     mov r14d, [bus_riders]
     mov r15d, [svc_count+BK_BUSDEPOT*4]
     imul r15d, r15d, BUS_CAP
@@ -719,13 +736,11 @@ FUNC draw_transit, 16
     inc ebx
     call tb_reset
     movsxd rdi, dword [tw_lines]
-    call tb_num
-    lea rdi, [s_tp_lines]
-    call tb_str
+    lea rsi, [s_tp_lines]
+    call tb_count
     movsxd rdi, dword [svc_count+BK_TRAMDEPOT*4]
-    call tb_num
-    lea rdi, [s_tp_depots2]
-    call tb_str
+    lea rsi, [s_tp_depots2]
+    call tb_count
     mov r14d, [tram_riders]
     mov r15d, [svc_count+BK_TRAMDEPOT*4]
     imul r15d, r15d, TRM_CAP
@@ -735,9 +750,8 @@ FUNC draw_transit, 16
     inc ebx
     call tb_reset
     movsxd rdi, dword [mt_n]
-    call tb_num
-    lea rdi, [s_tp_stns]
-    call tb_str
+    lea rsi, [s_tp_stns]
+    call tb_count
     mov r14d, [metro_riders]
     mov r15d, [mt_n]
     imul r15d, r15d, MT_CAP
@@ -747,9 +761,8 @@ FUNC draw_transit, 16
     inc ebx
     call tb_reset
     movsxd rdi, dword [rl_lines]
-    call tb_num
-    lea rdi, [s_tp_lines]
-    call tb_str
+    lea rsi, [s_tp_lines]
+    call tb_count
     xor eax, eax
     xor ecx, ecx
 .tr:
@@ -761,9 +774,8 @@ FUNC draw_transit, 16
     cmp ecx, TR_MAX
     jl .tr
     movsxd rdi, eax
-    call tb_num
-    lea rdi, [s_tp_trains]
-    call tb_str
+    lea rsi, [s_tp_trains]
+    call tb_count
     ; (passenger stations' room)
     xor r15d, r15d
     xor ecx, ecx
@@ -784,9 +796,8 @@ FUNC draw_transit, 16
     inc ebx
     call tb_reset
     movsxd rdi, dword [fe_n]
-    call tb_num
-    lea rdi, [s_tp_piers]
-    call tb_str
+    lea rsi, [s_tp_piers]
+    call tb_count
     mov r14d, [ferry_riders]
     mov r15d, [fe_n]
     imul r15d, r15d, FE_CAP
@@ -808,9 +819,8 @@ FUNC draw_transit, 16
     jmp .ap
 .apd:
     movsxd rdi, eax
-    call tb_num
-    lea rdi, [s_tp_air]
-    call tb_str
+    lea rsi, [s_tp_air]
+    call tb_count
     mov r14d, [air_pax]
     xor r15d, r15d
     call tp_row
@@ -946,6 +956,8 @@ fc_months_left:
 FUNC forecast_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     mov dword [fc_kind], 0
     mov dword [fc_months], 6        ; (no further than this)
     ; power
@@ -1184,103 +1196,6 @@ apply_cblind:
     ret
 
 ; ---------------------------------------------------------------------
-;  recent tools (beta): the last five things picked from the menus, in
-;  a row above the dock - a click picks one again
-; ---------------------------------------------------------------------
-RT_N        equ 5
-
-section .bss
-rt_list     resd RT_N
-rt_n        resd 1
-rt_busy     resd 1              ; (picking from the row itself)
-
-section .text
-
-; a menu item was picked (edi its code): to the front of the row
-recent_note:
-    cmp dword [beta_on], 0
-    je .o
-    cmp dword [rt_busy], 0
-    jne .o
-    cmp edi, SI_OVERLAY
-    jae .o
-    push rbx
-    ; where it is now (or the end)
-    xor ecx, ecx
-.f:
-    cmp ecx, [rt_n]
-    jge .nf
-    cmp [rt_list+rcx*4], edi
-    je .mv
-    inc ecx
-    jmp .f
-.nf:
-    mov ecx, [rt_n]
-    cmp ecx, RT_N
-    jl .grow
-    mov ecx, RT_N-1
-    jmp .mv
-.grow:
-    inc dword [rt_n]
-.mv:
-    ; the ones before it move back one
-    test ecx, ecx
-    jz .put
-    mov eax, [rt_list+rcx*4-4]
-    mov [rt_list+rcx*4], eax
-    dec ecx
-    jmp .mv
-.put:
-    mov [rt_list], edi
-    pop rbx
-.o: ret
-
-FUNC draw_recent, 16
-    cmp dword [beta_on], 0
-    je .out
-    cmp dword [rt_n], 0
-    je .out
-    cmp dword [panel], PANEL_NONE
-    jne .out
-    cmp dword [follow_kind], 0
-    jne .out
-    cmp dword [tool], T_DISTRICT
-    je .out
-    cmp dword [welcome], 0
-    jne .out
-    ; a row above the dock, in the middle
-    mov eax, [rt_n]
-    imul eax, eax, 106
-    mov r12d, [ui_w]
-    sub r12d, eax
-    shr r12d, 1
-    mov r13d, [ui_h]
-    sub r13d, DOCK_BTN+22
-    xor ebx, ebx
-.b:
-    mov edi, [rt_list+rbx*4]
-    call submenu_item_info
-    mov rcx, rax
-    imul edi, ebx, 106
-    add edi, r12d
-    mov esi, r13d
-    mov edx, 104
-    xor r8d, r8d
-    call text_button
-    test eax, eax
-    jz .bn
-    mov dword [rt_busy], 1
-    mov edi, [rt_list+rbx*4]
-    call submenu_select
-    mov dword [rt_busy], 0
-.bn:
-    inc ebx
-    cmp ebx, [rt_n]
-    jl .b
-.out:
-    RETURN
-
-; ---------------------------------------------------------------------
 ;  photo mode keys (beta): [ and ] turn the clock back and on, P saves
 ;  the picture (photo_001.bmp ...; on the web, a download)
 ; ---------------------------------------------------------------------
@@ -1400,6 +1315,8 @@ FUNC draw_mm_filters, 16
     jne .out
     cmp dword [panel], PANEL_NONE
     jne .out
+    cmp dword [tut_step], 0         ; (the tour's card may sit there)
+    jge .out
     call minimap_pos
     sub r13d, 15
     xor ebx, ebx
@@ -1859,3 +1776,116 @@ FUNC draw_msplan, 32
     mov dword [panel], PANEL_NONE
 .out:
     RETURN
+
+; a count and the noun after it (rdi n, rsi " things..."): "1 thing",
+; "2 things" - the noun's closing s goes when there's one
+FUNC tb_count, 16
+    mov r12, rsi
+    mov [rbp-48], rdi
+    call tb_num
+    cmp qword [rbp-48], 1
+    jne .pl
+    mov r13, r12
+    xor ebx, ebx                    ; (the s is gone)
+.c:
+    movzx eax, byte [r13]
+    test eax, eax
+    jz .out
+    inc r13
+    cmp eax, 's'
+    jne .put
+    test ebx, ebx
+    jnz .put
+    movzx ecx, byte [r13]
+    cmp ecx, ','
+    je .skip
+    cmp ecx, ' '
+    je .skip
+    test ecx, ecx
+    jnz .put
+.skip:
+    mov ebx, 1
+    jmp .c
+.put:
+    mov edi, eax
+    call tb_char
+    jmp .c
+.pl:
+    mov rdi, r12
+    call tb_str
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  a new or loaded city: what the last one left behind goes (from
+;  extra_reset, for every city)
+; ---------------------------------------------------------------------
+beta_city_reset:
+    push rdi
+    lea rdi, [map_commute]
+    mov ecx, MAP_TILES/8
+    xor eax, eax
+    rep stosq
+    lea rdi, [map_flood]
+    mov ecx, MAP_TILES/8
+    rep stosq
+    lea rdi, [map_plow]
+    mov ecx, MAP_TILES/8
+    rep stosq
+    ; factories start with materials in (they aren't saved)
+    lea rdi, [map_raw]
+    mov ecx, MAP_TILES/8
+    mov rax, 0x8080808080808080
+    rep stosq
+    xor eax, eax
+    mov [region_workers], eax
+    mov [metro_riders], eax
+    mov [metro_riders_month], eax
+    mov [walkers], eax
+    mov [walkers_month], eax
+    mov [train_riders], eax
+    mov [train_riders_month], eax
+    mov [tram_riders], eax
+    mov [tram_riders_month], eax
+    mov [ferry_riders], eax
+    mov [ferry_riders_month], eax
+    mov [w_com], eax
+    mov [w_off], eax
+    mov [air_com], eax
+    mov [air_off], eax
+    mov [tourists], eax
+    mov [guests], eax
+    mov [ghost_trips], eax
+    mov [declined_month], eax
+    mov [fc_kind], eax
+    mov [fc_months], eax
+    mov [jam_show], eax
+    mov [jam_hot_n], eax
+    mov [jam_hot_i], eax
+    mov [dc_short], eax
+    mov [ms_paused], eax
+    mov [raw_month], eax
+    mov [raw_last], eax
+    mov [wh_in], eax
+    mov [wh_out], eax
+    mov [wh_bulk], eax
+    mov [wh_in_last], eax
+    mov [wh_out_last], eax
+    mov [wh_bulk_last], eax
+    mov [wh_n], eax
+    lea rdi, [dist_bld]
+    mov ecx, (DS_N+1)*4
+    rep stosd                       ; (dist_bld, dist_pop, dist_cx, dist_cy)
+    mov eax, -1
+    lea rdi, [nb_tile]
+    mov ecx, NB_N
+    rep stosd
+    ; beta: the last city's news goes with it
+    cmp dword [beta_on], 0
+    je .o
+    xor eax, eax
+    lea rdi, [notif_time]
+    mov ecx, NOTIFS
+    rep stosd
+.o: pop rdi
+    ret

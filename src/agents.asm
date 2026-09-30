@@ -10,7 +10,7 @@
 
 MAX_CARS     equ 400
 MAX_PEEPS    equ 300
-MAX_PARTS    equ 1200
+MAX_PARTS    equ 2400
 MAX_FLOATS   equ 32
 
 ; car record (32 bytes)

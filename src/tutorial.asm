@@ -132,12 +132,17 @@ tut_way     resd 1
 tut_wbx     resd 1
 tut_wby     resd 1
 tut_nx      resd 1          ; the Next button (ui px)
+tut_ltick   resd 1          ; (beta: the game tick last counted)
+tut_hold    resd 1          ; (beta: done - moving on at this tick)
+tut_cam     resd 2          ; (beta: the view when the tour began)
 tut_ny      resd 1
 tut_nw      resd 1
 tut_mtop    resd 1          ; top of the open menu (ui px)
 alignb 16
 tut_tiles   resb MAP_TILES*TILE_BYTES       ; the set-aside world
 tut_sim     resb sim_state_end - money     ; and sim state
+TUT_BETA_MAX equ 196608
+tut_beta    resb TUT_BETA_MAX               ; (and the beta chunks' state)
 
 section .data
 align 8
@@ -292,6 +297,7 @@ si_rdrag     db "Hold the right button and move the mouse.", 0
 si_wheel     db "Scroll the wheel.", 0
 si_speed     db "Click the highlighted speed button.", 0
 si_demand    db "Point at the demand bars.", 0
+si_demand2   db "Read what they say, then Next.", 0
 si_wait      db "Hold on...", 0
 si_people    db " / 20 people", 0
 si_left      db " tiles of rubble left", 0
@@ -335,6 +341,16 @@ FUNC tut_begin
     lea rdi, [tut_sim]
     mov ecx, sim_state_end - money
     rep movsb
+    ; the beta state (region, plan, districts ...) aside too, and a clean
+    ; slate for the village
+    mov edi, 1
+    call tut_beta_swap
+    call undo_reset
+    call extra_reset
+    mov eax, [cam_x]
+    mov [tut_cam], eax
+    mov eax, [cam_y]
+    mov [tut_cam+4], eax
     mov dword [tut_bubble], 1
     mov qword [money], TUT_MONEY
     mov rax, [money]
@@ -347,6 +363,41 @@ FUNC tut_begin
     rep stosd
     call tut_plan_make
 .o:
+    RETURN
+
+; the beta chunks' state (SC_BETA0 on in save_chunks) into tut_beta
+; (edi 1) or back (edi 0)
+FUNC tut_beta_swap
+    mov r12d, edi
+    xor r13d, r13d                  ; offset in tut_beta
+    mov ebx, SC_BETA0
+.c:
+    cmp ebx, SAVE_CHUNKS
+    jge .out
+    mov eax, ebx
+    shl eax, 4
+    lea r14, [save_chunks+rax]
+    mov r15, [r14+4]                ; where it lives
+    mov ecx, [r14+12]               ; how long
+    lea eax, [r13+rcx]
+    cmp eax, TUT_BETA_MAX
+    ja .out
+    lea rdx, [tut_beta+r13]
+    mov r13d, eax
+    test r12d, r12d
+    jz .back
+    mov rsi, r15
+    mov rdi, rdx
+    rep movsb
+    jmp .n
+.back:
+    mov rsi, rdx
+    mov rdi, r15
+    rep movsb
+.n:
+    inc ebx
+    jmp .c
+.out:
     RETURN
 
 ; the tour is over (finished or skipped): the real game starts
@@ -365,6 +416,11 @@ FUNC tut_end
     lea rdi, [money]
     mov ecx, sim_state_end - money
     rep movsb
+    ; the village's beta state goes, the city's comes back
+    call extra_reset
+    xor edi, edi
+    call tut_beta_swap
+    call undo_reset
     mov rax, [money]
     mov [money_shown], rax
     call agents_init
@@ -386,6 +442,15 @@ FUNC tut_end
     mov dword [tool], T_INSPECT
     mov dword [sel_x], -1
     mov dword [drag_active], 0
+    ; beta: back to the view the city had before the practice
+    cmp dword [beta_on], 0
+    je .nc
+    mov eax, [tut_cam]
+    mov [cam_x], eax
+    mov eax, [tut_cam+4]
+    mov [cam_y], eax
+    call camera_clamp
+.nc:
     lea rdi, [s_tut_begin]
     mov esi, UI_GOOD
     mov edx, -1
@@ -404,6 +469,7 @@ tut_abort:
     ret
 
 FUNC tut_next
+    mov dword [tut_hold], 0
     cmp dword [tut_step], 0
     jne .n
     call tut_begin
@@ -1194,6 +1260,8 @@ FUNC tut_done
     cmp eax, SK_DEMAND
     jne .k4
     xor eax, eax
+    cmp dword [beta_on], 0          ; (beta: read them, then Next)
+    jne .gn
     cmp dword [tut_acc], 45
     setge al
     RETURN
@@ -1339,8 +1407,20 @@ FUNC tut_tool_ok
 ; ---------------------------------------------------------------------
 ;  per frame: progress on the camera steps, the phase of tool steps
 ; ---------------------------------------------------------------------
-FUNC tut_update
-    inc dword [tut_st]
+FUNC tut_update, 16
+    ; time on the step: frames, or (beta) 60 Hz game ticks, the same on
+    ; any screen
+    mov ecx, 1
+    cmp dword [beta_on], 0
+    je .st
+    mov ecx, [anim_tick]
+    sub ecx, [tut_ltick]
+    mov eax, [anim_tick]
+    mov [tut_ltick], eax
+    CLAMP ecx, 0, 10
+.st:
+    add [tut_st], ecx
+    mov [rbp-48], ecx
     call tut_cur
     mov rbx, rax
     mov eax, [rbx+16]
@@ -1401,7 +1481,8 @@ FUNC tut_update
     mov eax, [umy]
     cmp eax, 18
     jae .o
-    inc dword [tut_acc]
+    mov eax, [rbp-48]
+    add [tut_acc], eax
     RETURN
 .t:
     cmp eax, SK_TOOL
@@ -2122,12 +2203,31 @@ FUNC draw_tutorial, 64
     jne .nmet
     call tut_meteor_frame
 .nmet:
-    ; a step that's been done moves on by itself
+    ; a step that's been done moves on by itself (beta: after a moment
+    ; to see it done)
     cmp dword [tut_freeze], 0
     jne .show
+    cmp dword [tut_hold], 0         ; (done once is done: the moment runs out)
+    jne .dn
     call tut_done
     test eax, eax
-    jz .show
+    jnz .dn
+    mov dword [tut_hold], 0
+    jmp .show
+.dn:
+    cmp dword [beta_on], 0
+    je .adv
+    mov eax, [anim_tick]
+    cmp dword [tut_hold], 0
+    jne .hw
+    add eax, 45
+    mov [tut_hold], eax
+    jmp .show
+.hw:
+    cmp eax, [tut_hold]
+    jl .show
+.adv:
+    mov dword [tut_hold], 0
     mov edi, SFX_CHIME
     call sfx_play
     call tut_next
@@ -2543,6 +2643,12 @@ FUNC tut_instruction
     cmp eax, SK_DEMAND
     jne .m
     lea rdx, [si_demand]
+    cmp dword [beta_on], 0
+    je .dm1
+    cmp dword [tut_acc], 45
+    jl .dm1
+    lea rdx, [si_demand2]
+.dm1:
     RETURN
 .m:
     cmp eax, SK_METEOR
@@ -2930,12 +3036,21 @@ FUNC tut_bot
     dec dword [bot_wait]
     jmp .out
 .act:
+    ; (beta: a done step's moment - let go of everything, then wait,
+    ; as a player would)
+    cmp dword [tut_hold], 0
+    je .act2
+    cmp dword [bot_t], 0
+    je .out
+    jmp .rel
+.act2:
     ; the step moved on in the middle of an action: let go of everything
     mov eax, [tut_step]
     cmp dword [bot_t], 0
     je .fresh
     cmp eax, [bot_astep]
     je .go
+.rel:
     cmp dword [rmb_down], 0
     je .nr
     mov edi, 3
@@ -3008,6 +3123,11 @@ FUNC tut_bot
     jz .out
     jmp .done
 .hover:
+    cmp dword [beta_on], 0
+    je .hv
+    cmp dword [tut_acc], 45
+    jge .next
+.hv:
     call tut_ui_target
     mov edi, [tut_rx]
     add edi, 20

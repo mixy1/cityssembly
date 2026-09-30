@@ -31,6 +31,8 @@ tram_on     resb TRAM_MAX
 tram_line   resw TRAM_MAX
 tram_tile   resw TRAM_MAX
 tram_dir    resb TRAM_MAX
+tram_ndir   resb TRAM_MAX       ; the way on, chosen at the tile's middle
+tram_chose  resb TRAM_MAX
 tram_prog   resd TRAM_MAX
 spr_tramx   resd 16
 spr_tram    resd 4
@@ -402,6 +404,7 @@ FUNC trams_update, 16
     mov edi, 4
     call rand_range
     mov [tram_dir+rbx], al
+    mov byte [tram_chose+rbx], 0
     mov dword [tram_prog+rbx*4], 128
 .ln:
     inc r15d
@@ -420,10 +423,11 @@ FUNC trams_update, 16
     cmp byte [tw_depot+rax], 0
     je .kill
     add dword [tram_prog+rbx*4], TRAM_SPEED
-    cmp dword [tram_prog+rbx*4], 256
+    cmp dword [tram_prog+rbx*4], 128
     jl .mn
-    sub dword [tram_prog+rbx*4], 256
-    ; the next tile: straight on, else a turn, else back
+    cmp byte [tram_chose+rbx], 0
+    jne .ch
+    ; at the middle: the way on - straight, else a turn, else back
     movzx r13d, byte [tram_dir+rbx]
     mov edi, r12d
     mov esi, r13d
@@ -465,8 +469,20 @@ FUNC trams_update, 16
     mov esi, r13d
     call tram_step_ok
     test eax, eax
-    jz .mn
+    jnz .go
+    ; nowhere: wait in the middle
+    mov dword [tram_prog+rbx*4], 127
+    jmp .mn
 .go:
+    mov [tram_ndir+rbx], r13b
+    mov byte [tram_chose+rbx], 1
+.ch:
+    cmp dword [tram_prog+rbx*4], 256
+    jl .mn
+    ; over the edge: into the next tile, that way
+    sub dword [tram_prog+rbx*4], 256
+    mov byte [tram_chose+rbx], 0
+    movzx r13d, byte [tram_ndir+rbx]
     mov [tram_dir+rbx], r13b
     mov edi, r12d
     and edi, MAP_W-1
@@ -519,6 +535,11 @@ FUNC draw_trams, 16
     je .tn
     movzx eax, word [tram_tile+rbx*2]
     movzx ecx, byte [tram_dir+rbx]
+    ; (past the middle, along the way on)
+    cmp byte [tram_chose+rbx], 0
+    je .dd
+    movzx ecx, byte [tram_ndir+rbx]
+.dd:
     mov edi, eax
     and edi, MAP_W-1
     shl edi, 8
@@ -570,6 +591,9 @@ trams_reset:
     lea rdi, [tram_on]
     mov ecx, TRAM_MAX
     xor eax, eax
+    rep stosb
+    lea rdi, [tram_chose]
+    mov ecx, TRAM_MAX
     rep stosb
     mov dword [tw_lines], 0
     pop rcx

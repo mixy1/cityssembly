@@ -492,7 +492,10 @@ FUNC render_world, 32
     mov ecx, r14d
     mov r8, [rbp-56]
     call blit_sprite
-    ; beta: flood water or snow over it
+    ; beta: flood water or snow over it (a beta save opened in classic
+    ; keeps its weather, unseen)
+    cmp dword [beta_on], 0
+    je .objs
     cmp dword [wx_kind], WX_FLOOD
     je .wxo
     cmp dword [snow_level], 100

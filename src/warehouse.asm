@@ -64,6 +64,11 @@ FUNC wh_nearest
     jge .out
     mov eax, [wh_tile+rbx*4]
     shl eax, TILE_SHIFT
+    ; (still a warehouse: the list is the day's census)
+    cmp byte [tiles+rax+T_OBJ], OBJ_SERVICE
+    jne .n
+    cmp byte [tiles+rax+T_SUB], BK_WAREHOUSE
+    jne .n
     test byte [tiles+rax+T_FLAGS], F_POWER
     jz .n
     movzx ecx, word [tiles+rax+T_POP]
@@ -184,6 +189,10 @@ FUNC wh_day, 16
     mov r12d, [wh_tile+rbx*4]
     mov eax, r12d
     shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_SUB], BK_WAREHOUSE
+    jne .n
+    cmp byte [tiles+rax+T_OBJ], OBJ_SERVICE
+    jne .n
     test byte [tiles+rax+T_FLAGS], F_POWER
     jz .n
     movzx ecx, word [tiles+rax+T_POP]

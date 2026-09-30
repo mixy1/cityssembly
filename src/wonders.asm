@@ -69,6 +69,10 @@ FUNC wonder_check
     jb .out
     cmp edi, BK_EXPO
     ja .out
+    ; (moving the one there is: it's still one)
+    xor eax, eax
+    cmp dword [moving], 0
+    jne .out
     mov eax, TE_ONLYONE
     cmp dword [svc_count+rdi*4], 0
     jne .out

@@ -238,6 +238,8 @@ section .text
 FUNC achv_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     ; hazards seen through, deals kept (counted as they end)
     xor ebx, ebx
 .a:
@@ -253,14 +255,8 @@ FUNC achv_month
     call tb_str
     mov rdi, [ach_names+rbx*8]
     call tb_str
-    mov edi, ' '
+    mov edi, '!'                    ; (what it was for: in the panel)
     call tb_char
-    mov edi, '-'
-    call tb_char
-    mov edi, ' '
-    call tb_char
-    mov rdi, [ach_descs+rbx*8]
-    call tb_str
     lea rdi, [textbuf]
     mov esi, UI_GOLD
     mov edx, -1
@@ -369,9 +365,24 @@ FUNC draw_achievements, 16
     mov ecx, UI_GOLD
     call draw_text
     mov dword [font_scale], 1
+    ; what's earned: what's been announced, and what's already true
+    ; (a city loaded mid-game shows its own at once)
+    mov eax, [ach_bits]
+    mov [rbp-52], eax
+    xor ebx, ebx
+.e:
+    mov edi, ebx
+    call achv_test
+    test eax, eax
+    jz .en
+    bts dword [rbp-52], ebx
+.en:
+    inc ebx
+    cmp ebx, ACH_N
+    jl .e
     ; how many
     call tb_reset
-    mov eax, [ach_bits]
+    mov eax, [rbp-52]
     popcnt eax, eax
     movsxd rdi, eax
     call tb_num
@@ -396,7 +407,7 @@ FUNC draw_achievements, 16
     imul r15d, edx, 21
     add r15d, r13d
     mov ecx, UI_DIM
-    bt dword [ach_bits], ebx
+    bt dword [rbp-52], ebx
     jnc .c
     mov ecx, UI_GOLD
 .c:

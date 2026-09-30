@@ -883,6 +883,8 @@ FUNC vehicles_update, 32
     mov [rbp-48], eax
     add [flow_possible], eax
     ; beta: snow on the road
+    cmp dword [beta_on], 0
+    je .nsn
     cmp dword [snow_level], 0
     je .nsn
     call snow_slow
@@ -1132,7 +1134,10 @@ FUNC vehicle_arrive
     jmp .free
 .export:
     add dword [exports_month], 12
+    cmp dword [beta_on], 0          ; (beta's trade counts them; classic
+    je .exn                         ;  never resets it)
     add dword [goods_sold_month], 12
+.exn:
     mov rdi, r15
     call port_arrive
     mov rdi, r15
@@ -1513,7 +1518,13 @@ FUNC generate_trip
     xor edx, edx
     mov ecx, 100
     div ecx
-    mov ebx, edx
+    mov edi, edx
+    call trip_by_roll
+    RETURN
+
+; a trip of the kind a roll of edi (0..99) picks
+FUNC trip_by_roll
+    mov ebx, edi
     cmp ebx, 45
     jl .commute
     cmp ebx, 60

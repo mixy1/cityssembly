@@ -61,6 +61,7 @@ tr_prog     resd TR_MAX
 tr_dwell    resw TR_MAX
 tr_next     resw TR_MAX         ; the stop it's going to (slot)
 tr_wait     resw TR_MAX         ; steps stuck behind another train
+tr_keep     resb TR_MAX         ; (stuck: the same stop again, a new way)
 tr_path     resw TR_MAX*TR_PATH
 
 section .data
@@ -907,6 +908,7 @@ FUNC trains_manage, 32
     inc ebx
     cmp ebx, TR_MAX
     jl .r
+    mov [rbp-64], edx               ; (freight trains: the spawn call clobbers edx)
     cmp ecx, [rbp-56]
     jge .fr
     mov edi, r15d
@@ -914,6 +916,7 @@ FUNC trains_manage, 32
     mov edx, [rbp-48]
     call train_spawn
 .fr:
+    mov edx, [rbp-64]
     cmp edx, [rbp-60]
     jge .ln
     cmp dword [rbp-52], 0
@@ -940,15 +943,21 @@ FUNC trains_update, 16
     je .move
     dec word [tr_dwell+rbx*2]
     jnz .n
-    ; off to the next stop
+    ; off to the next stop (or, stuck, the same one another way)
     mov edi, ebx
     xor esi, esi
     call train_mark
     movzx eax, word [tr_next+rbx*2]
+    cmp byte [tr_keep+rbx], 0
+    je .nx
+    mov byte [tr_keep+rbx], 0
+    jmp .same
+.nx:
     mov ecx, ebx
     call train_next_stop
     cmp eax, -1
     je .idle
+.same:
     mov [tr_next+rbx*2], ax
     mov ecx, ebx
     call train_stop_tile
@@ -969,11 +978,9 @@ FUNC trains_update, 16
     call train_mark
     jmp .n
 .idle:
-    ; nowhere to go now: try again in a while
+    ; nowhere to go now: try again in a while (unmarked, so its level
+    ; crossings open meanwhile)
     mov word [tr_dwell+rbx*2], 120
-    mov edi, ebx
-    mov esi, 1
-    call train_mark
     jmp .n
 .move:
     mov eax, [tr_prog+rbx*4]
@@ -1013,8 +1020,7 @@ FUNC trains_update, 16
     jb .n
     mov word [tr_wait+rbx*2], 0
     mov word [tr_dwell+rbx*2], 1
-    ; (keep the same stop as the target)
-    movzx eax, word [tr_next+rbx*2]
+    mov byte [tr_keep+rbx], 1       ; (the same stop as the target)
     jmp .n
 .go:
     mov word [tr_wait+rbx*2], 0
@@ -1031,6 +1037,15 @@ FUNC trains_update, 16
     pop rax
     sub eax, 256
 .adv:
+    ; the last tile: it stops in the middle
+    movzx ecx, word [tr_pos+rbx*2]
+    inc ecx
+    movzx edx, word [tr_len+rbx*2]
+    cmp ecx, edx
+    jl .adv2
+    cmp eax, 128
+    jge .arrive
+.adv2:
     mov [tr_prog+rbx*4], eax
     jmp .n
 .arrive:
@@ -1123,6 +1138,18 @@ FUNC draw_trains, 32
     mov eax, 1
 .hd:
     mov [rbp-52], eax
+    ; the first half of a tile along the way in (so bends stay on the
+    ; track), the second along the way out
+    cmp dword [tr_prog+rbx*4], 128
+    jge .ho
+    mov eax, [rbp-48]
+    test eax, eax
+    jz .ho
+    movzx edi, word [r14+rax*2-2]
+    mov esi, r12d
+    call tile_heading
+    mov [rbp-52], eax
+.ho:
     ; where on the tile: the train's progress along the heading
     mov edi, r12d
     and edi, MAP_W-1
@@ -1288,6 +1315,9 @@ trains_reset:
     lea rdi, [tr_kind]
     mov ecx, TR_MAX
     xor eax, eax
+    rep stosb
+    lea rdi, [tr_keep]
+    mov ecx, TR_MAX
     rep stosb
     lea rdi, [rl_occ]
     mov ecx, MAP_TILES*2/8

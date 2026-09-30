@@ -282,6 +282,52 @@ s_help      db "CONTROLS", 10, 10
             db 7, "F5 / F9", 1, "      save / load  ", 7, "F11", 1, " fullscreen  ", 7, "N M", 1, " day, music", 10, 10
             db 6, "Icons above buildings show their biggest problem.", 10
             db 6, "Inspect a building to see what it needs to grow.", 0
+; (beta: every key, the new ones too)
+; (beta: every key, the new ones too - keys, then what they do)
+hp_rows     dq hpk0, hpd0, hpk1, hpd1, hpk2, hpd2, hpk3, hpd3
+            dq hpk4, hpd4, hpk5, hpd5, hpk6, hpd6, hpk7, hpd7
+            dq hpk8, hpd8, hpk9, hpd9, hpk10, hpd10, hpk11, hpd11
+            dq hpk12, hpd12, hpk13, hpd13, hpk14, hpd14, hpk15, hpd15
+            dq hpk16, hpd16
+            dq 0
+hpk0       db "Left drag", 0
+hpd0       db "build with the current tool", 0
+hpk1       db "Right drag", 0
+hpd1       db "pan (also WASD / arrows)", 0
+hpk2       db "Right click", 0
+hpd2       db "close / cancel, one step at a time", 0
+hpk3       db "Wheel", 0
+hpd3       db "zoom (also - and =)", 0
+hpk4       db "Q B R T P L", 0
+hpd4       db "inspect, bulldoze, road, trees, pipes, power", 0
+hpk5       db "1 - 6", 0
+hpd5       db "zones: homes, shops, industry, offices, dense", 0
+hpk6       db "U K E G", 0
+hpd6       db "upgrade roads, buy land, eyedropper, tool mode", 0
+hpk7       db "V H O", 0
+hpd7       db "info view, see-through, next info view", 0
+hpk8       db "Space  [ ]", 0
+hpd8       db "pause, game speed", 0
+hpk9       db "Ctrl+Z / Y", 0
+hpd9       db "undo, redo", 0
+hpk10       db "Ctrl+C / V", 0
+hpd10       db "copy a piece of the city, paste it (R turns)", 0
+hpk11       db "Shift+P", 0
+hpd11       db "plan mode: draw now, build later", 0
+hpk12       db "/", 0
+hpd12       db "find any tool or building by name", 0
+hpk13       db "F2 F3 F4 C", 0
+hpd13       db "budget, policies, statistics, neighbours", 0
+hpk14       db "F5 F9 F11", 0
+hpd14       db "save, load, fullscreen", 0
+hpk15       db "Tab F N M", 0
+hpd15       db "minimap, photo mode, hold the time, music", 0
+hpk16       db "Ctrl+1-4", 0
+hpd16       db "remember the view; Shift+1-4 goes back", 0
+s_help_bt   db "CONTROLS", 0
+s_help_bf   db 6, "Icons above buildings show their biggest problem.", 10
+            db 6, "Inspect a building to see what it needs to grow.", 10
+            db 6, "Keys can be changed: Menu > Keys.", 0
 s_goal      db "GOAL ", 0
 s_reward    db "  reward ", 0
 s_goaldone  db "Goal complete! +", 0
@@ -1531,6 +1577,9 @@ FUNC stat_row
 section .bss
 row_x resd 1
 row_y resd 1
+row_w resd 1                        ; (beta: the inspector wraps to it)
+wrap_buf resb 256
+hint_wrap resb 256
 section .text
 
 
@@ -2169,7 +2218,10 @@ save_quiet     resd 1
 cam_save       resd 3
 section .text
 
-FUNC draw_help
+draw_help:
+    cmp dword [beta_on], 0
+    jne draw_help_beta
+FUNC draw_help_classic
     mov r12d, [ui_w]
     sub r12d, 330
     shr r12d, 1
@@ -2205,6 +2257,74 @@ FUNC draw_help
     lea edi, [r12+10]
     lea esi, [r13+8]
     lea rdx, [s_help]
+    mov ecx, UI_TEXT
+    call draw_text
+    RETURN
+
+; (beta) the same, taller, the tour's button under the text
+HP_W equ 360
+HP_H equ 262
+FUNC draw_help_beta
+    mov r12d, [ui_w]
+    sub r12d, HP_W
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, HP_H+20
+    shr r13d, 1
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, HP_W
+    mov ecx, HP_H
+    call draw_panel
+    lea edi, [r12+HP_W-120]
+    lea esi, [r13+HP_H-22]
+    mov edx, 110
+    lea rcx, [s_tut_replay]
+    mov r8d, 1
+    call text_button
+    test eax, eax
+    jz .nt
+    mov dword [panel], PANEL_NONE
+    call tut_start
+    jmp .d
+.nt:
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, HP_W
+    mov ecx, HP_H
+    call ui_hit
+    test eax, eax
+    jz .d
+    mov dword [panel], PANEL_NONE
+.d:
+    lea edi, [r12+10]
+    lea esi, [r13+8]
+    lea rdx, [s_help_bt]
+    mov ecx, UI_TEXT
+    call draw_text
+    ; the keys and what they do, in two columns
+    lea r14d, [r13+28]
+    xor ebx, ebx
+.r:
+    mov rdx, [hp_rows+rbx*8]
+    test rdx, rdx
+    jz .rd
+    lea edi, [r12+10]
+    mov esi, r14d
+    mov ecx, UI_ACCENT
+    call draw_text
+    mov rdx, [hp_rows+rbx*8+8]
+    lea edi, [r12+84]
+    mov esi, r14d
+    mov ecx, UI_TEXT
+    call draw_text
+    add r14d, 10
+    add ebx, 2
+    jmp .r
+.rd:
+    lea edi, [r12+10]
+    lea esi, [r14+8]
+    lea rdx, [s_help_bf]
     mov ecx, UI_TEXT
     call draw_text
     RETURN
@@ -2325,8 +2445,12 @@ tile_to_minimap:
 FUNC draw_minimap, 16
     cmp dword [minimap_on], 0
     je .out
-    cmp dword [panel], PANEL_KEYS   ; (beta: it would cover the keys)
-    je .out
+    ; beta: not over an open panel
+    cmp dword [beta_on], 0
+    je .mmp
+    cmp dword [panel], PANEL_NONE
+    jne .out
+.mmp:
     ; rebuild the cached image twice a second
     dec dword [minimap_age]
     jns .draw
@@ -2727,6 +2851,7 @@ FUNC load_city_from, 32
     mov dword [welcome], 0
     mov dword [slots_start], 0
     call region_read                ; (beta: your other cities)
+    mov dword [goods_sold_month], 0 ; (a partial month: classic saves grew it)
     call tut_abort
     call agents_init
     call scenic_init
@@ -2745,6 +2870,7 @@ FUNC load_city_from, 32
     mov edx, -1
     mov ecx, -1
     call notify
+    mov eax, 1                      ; (loaded)
     jmp .out
 .fail:
     lea rdi, [s_loadfail]
@@ -2752,6 +2878,7 @@ FUNC load_city_from, 32
     mov edx, -1
     mov ecx, -1
     call notify
+    xor eax, eax
 .out:
     RETURN
 
@@ -2806,7 +2933,11 @@ save_chunks:
     db "DIST"
     dq dist_state
     dd dist_state_end - dist_state
+    db "PLAN"                       ; (beta: the plan and its queue)
+    dq plan_state
+    dd plan_state_end - plan_state
 SAVE_CHUNKS equ ($-save_chunks)/16
+SC_BETA0 equ 7                      ; (the chunks from here on the tour sets aside)
 SC_TILE equ 3
 SC_SIMS equ 4
 SC_SEED equ 5
@@ -2849,13 +2980,13 @@ FUNC compute_eff_overlay
     ; beta: the metro tools show the metro view, the railway ones theirs
     call metro_view_wanted
     test eax, eax
-    jnz .set2
+    jnz .forced
     call rail_view_wanted
     test eax, eax
-    jnz .set2
+    jnz .forced
     call dist_view_wanted
     test eax, eax
-    jnz .set2
+    jnz .forced
     mov ecx, [submenu]
     cmp ecx, -1
     je .tool
@@ -2956,7 +3087,16 @@ FUNC compute_eff_overlay
     cmp dword [overlay_mode], 0
     jne .set2
     mov eax, OV_ROUTES
+    jmp .set2
+.forced:
+    ; (a view the tool can't do without: nothing for V or "hide" to flip)
+    mov dword [auto_view], 0
 .set2:
+    ; beta: a photo shows the city as it is
+    cmp dword [photo_mode], 0
+    je .set3
+    xor eax, eax
+.set3:
     mov [eff_overlay], eax
     RETURN
 
@@ -3078,6 +3218,10 @@ FUNC settings_load
     jb .o
     call keys_from_cfg
 .o:
+    ; (a damaged file mustn't break the grid roads)
+    mov eax, [set_grid_step]
+    CLAMP eax, 3, 12
+    mov [set_grid_step], eax
     call apply_volumes
     mov eax, [set_light]
     xor eax, 1
@@ -5588,7 +5732,6 @@ FUNC submenu_item_info
 
 ; choose a submenu item (edi code)
 FUNC submenu_select
-    call recent_note                ; (beta: the recent tools' row)
     mov ebx, edi
     mov dword [drag_active], 0
     cmp ebx, SI_OVERLAY
@@ -5885,15 +6028,15 @@ FUNC draw_submenu, 48
     mov edi, r14d
     call submenu_item_info
     mov [rbp-64], rax
+    mov [rbp-68], edx
+    mov [rbp-72], ecx
+    mov [rbp-76], r8d
     lea edi, [r12+3]
     mov esi, [rbp-56]
     mov edx, 194
     mov ecx, 15
     mov r8, rax
     call ui_note_button
-    mov [rbp-68], edx
-    mov [rbp-72], ecx
-    mov [rbp-76], r8d
     lea edi, [r12+8]
     mov esi, [rbp-56]
     add esi, 4
@@ -5948,11 +6091,92 @@ FUNC draw_submenu, 48
 ; ---------------------------------------------------------------------
 ; one text line at row_y (rdx text, ecx colour)
 row_text:
+    ; beta: a row too long for the inspector goes onto more rows
+    cmp dword [beta_on], 0
+    je .plain
+    cmp dword [row_w], 0
+    je .plain
+    push rcx                        ; (one push: aligned for the call)
+    mov rdi, rdx
+    lea rsi, [wrap_buf]
+    mov edx, [row_w]
+    call wrap_text
+    pop rcx
+    imul eax, eax, 11
+    mov edi, [row_x]
+    add edi, 6
+    mov esi, [row_y]
+    add [row_y], eax
+    lea rdx, [wrap_buf]
+    jmp draw_text
+.plain:
     mov edi, [row_x]
     add edi, 6
     mov esi, [row_y]
     add dword [row_y], 11
     jmp draw_text
+
+; wrap_text(rdi text, rsi out, edx width): the text with line breaks at
+; spaces so no line is wider than edx (out holds 256) -> eax lines
+FUNC wrap_text, 16
+    mov r12, rdi
+    mov r13, rsi
+    mov r14d, edx
+    xor r15d, r15d                  ; this line's width
+    xor ebx, ebx                    ; out length
+    mov qword [rbp-56], -1          ; the line's last space (in out)
+    mov dword [rbp-48], 1           ; lines
+.c:
+    cmp ebx, 254
+    jge .end
+    movzx eax, byte [r12]
+    test eax, eax
+    jz .end
+    inc r12
+    mov [r13+rbx], al
+    cmp eax, 10
+    jne .nl
+    inc dword [rbp-48]
+    xor r15d, r15d
+    mov qword [rbp-56], -1
+    inc ebx
+    jmp .c
+.nl:
+    cmp eax, ' '
+    jne .ns
+    mov [rbp-56], rbx
+.ns:
+    mov edi, eax
+    call glyph_advance
+    add r15d, eax
+    inc ebx
+    cmp r15d, r14d
+    jle .c
+    ; too wide: break at the last space, and measure what follows it
+    mov rax, [rbp-56]
+    test rax, rax
+    js .c
+    mov byte [r13+rax], 10
+    inc dword [rbp-48]
+    mov qword [rbp-56], -1
+    xor r15d, r15d
+    lea rcx, [rax+1]
+.re:
+    cmp ecx, ebx
+    jge .c
+    movzx edi, byte [r13+rcx]
+    push rcx
+    push rcx
+    call glyph_advance
+    pop rcx
+    pop rcx
+    add r15d, eax
+    inc ecx
+    jmp .re
+.end:
+    mov byte [r13+rbx], 0
+    mov eax, [rbp-48]
+    RETURN
 
 FUNC draw_inspect, 32
     cmp dword [sel_x], 0
@@ -5970,6 +6194,7 @@ FUNC draw_inspect, 32
     mov r12d, 4
     mov r13d, 42
     mov [row_x], r12d
+    mov dword [row_w], 172
     mov edi, r12d
     mov esi, r13d
     sub esi, 4
@@ -6804,10 +7029,10 @@ FUNC draw_budget, 32
     call text_button
     test eax, eax
     jz .lnext
+    mov edi, ebx
+    call loan_taken                 ; (beta: priced before it counts)
     mov eax, [loan_months+rbx*4]
     mov [loan_left+rbx*4], eax
-    mov edi, ebx
-    call loan_taken
     movsxd rax, dword [loan_amount+rbx*4]
     add [money], rax
     call tb_reset
@@ -7011,8 +7236,13 @@ FUNC draw_stats, 16
     movsxd rdi, dword [rax]
     mov rax, [r14+16]
     cmp eax, 1
-    jne .k2
+    jne .k1
     call tb_pct
+    jmp .kd
+.k1:
+    cmp eax, 2                      ; (money)
+    jne .k2
+    call tb_money
     jmp .kd
 .k2:
     cmp eax, 3
@@ -7063,6 +7293,14 @@ FUNC draw_stats, 16
 ;  info view legend
 ; ---------------------------------------------------------------------
 FUNC draw_overlay_legend, 16
+    ; beta: not over an open panel
+    cmp dword [beta_on], 0
+    je .lg
+    cmp dword [panel], PANEL_NONE
+    jne .out
+    cmp dword [repl_open], 0        ; (nor over the "replace with" list)
+    jne .out
+.lg:
     mov eax, [eff_overlay]
     test eax, eax
     jnz .on
@@ -7294,6 +7532,19 @@ FUNC draw_tool_hint, 16
     call bld_rec
     mov r12, [rax+BI_NAME]
     mov r13, [rax+BI_DESC]
+    ; beta: wrapped to the panel
+    cmp dword [beta_on], 0
+    je .dw
+    push rax
+    push rcx
+    mov rdi, r13
+    lea rsi, [hint_wrap]
+    mov edx, 184
+    call wrap_text
+    pop rcx
+    pop rax
+    lea r13, [hint_wrap]
+.dw:
     mov ecx, [build_kind]
     mov r14, [hint_bk+rcx*8]
     test r14, r14
@@ -7449,8 +7700,9 @@ FUNC draw_cursor_cost
     lea rdi, [textbuf]
     call text_width
     lea r12d, [rax+6]
-    mov r13d, [umx]
-    add r13d, 28
+    mov edi, r12d
+    call tag_x
+    mov r13d, eax
     mov r14d, [umy]
     add r14d, 16
     mov edi, r13d
@@ -7485,6 +7737,22 @@ FUNC draw_cursor_cost
 .out:
     RETURN
 
+; where a tag edi wide goes by the cursor -> eax x (beta: near the
+; right edge the tags go to the cursor's left - all of them, so they
+; stay together)
+tag_x:
+    mov eax, [umx]
+    add eax, 28
+    cmp dword [beta_on], 0
+    je .o
+    lea ecx, [rax+200]
+    cmp ecx, [ui_w]
+    jle .o
+    mov eax, [umx]
+    sub eax, 8
+    sub eax, edi
+.o: ret
+
 ; a note in a box by the cursor (rdi text, esi colour, edx line 0/1)
 FUNC cursor_note
     mov r15, rdi
@@ -7493,8 +7761,9 @@ FUNC cursor_note
     mov rdi, r15
     call text_width
     lea r14d, [rax+6]
-    mov r13d, [umx]
-    add r13d, 28
+    mov edi, r14d
+    call tag_x
+    mov r13d, eax
     add r12d, [umy]
     add r12d, 16
     mov edi, r13d
@@ -8264,6 +8533,10 @@ FUNC draw_ms_card, 32
     jne .np
     mov dword [ms_paused], 1
     mov ecx, [sim_speed]
+    test ecx, ecx                   ; (a card that was up when saved: go on
+    jnz .ms1                        ;  at normal speed after it)
+    mov ecx, 1
+.ms1:
     mov [ms_speed], ecx
     mov dword [sim_speed], 0
 .np:
@@ -8445,8 +8718,6 @@ FUNC render_ui
     call scen_draw
     call dist_labels
     call draw_dist_bar
-    call draw_palette_cmd
-    call draw_recent
     call draw_plan_box
     call draw_mm_filters
     cmp dword [welcome], 0
@@ -8549,7 +8820,10 @@ FUNC render_ui
     call draw_goal
     call draw_issues
 .nogoal:
+    cmp dword [beta_on], 0          ; (beta: over everything, later)
+    jne .nn1
     call draw_notifications
+.nn1:
     call draw_submenu
     call draw_dock
     cmp dword [tool], T_INSPECT
@@ -8564,8 +8838,17 @@ FUNC render_ui
     call draw_minimap
     call draw_ms_card
     call draw_overlay_legend
+    ; beta: the notifications over the legend, but not over a panel (they
+    ; wait for it to close)
+    cmp dword [beta_on], 0
+    je .nn2
+    cmp dword [panel], PANEL_NONE
+    jne .nn2
+    call draw_notifications
+.nn2:
     call draw_cursor_cost
     call draw_tutorial
+    call draw_palette_cmd           ; (beta: over it all)
 .tip:
     mov rdx, [tooltip]
     test rdx, rdx
@@ -8646,6 +8929,7 @@ FUNC render_ui
     RETURN
 section .data
 tool_icon db ICON_INSPECT, ICON_BULLDOZE, ICON_ROAD, ICON_POWERLINE, ICON_ZONE_R, ICON_WATER, ICON_BUS, ICON_DEZONE, ICON_POWER, ICON_TREE, ICON_LAND, ICON_ROAD, ICON_BUS, ICON_ROAD
+          db ICON_ROAD, ICON_WATER, ICON_BUS, ICON_OVERLAY, ICON_CURSOR, ICON_CURSOR   ; (beta: runway .. paste)
 section .text
 
 ; =====================================================================

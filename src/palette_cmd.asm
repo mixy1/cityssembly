@@ -33,6 +33,13 @@ FUNC palette_key
     jne .open
     cmp ebx, SC_SLASH_K
     jne .out
+    ; (only in the game itself: not on a card or the save / load list)
+    cmp dword [welcome], 0
+    jne .out
+    cmp dword [panel], PANEL_SAVE
+    je .out
+    cmp dword [panel], PANEL_LOAD
+    je .out
     mov dword [pal_open], 1
     mov dword [pal_len], 0
     mov byte [pal_text], 0

@@ -277,6 +277,12 @@ FUNC main
     call threads_init
     call audio_init
     call ui_init
+%ifdef WEB
+    ; ?beta first: the settings (colour-blind views) and the first city
+    ; depend on it
+    call web_beta
+    mov [beta_on], eax
+%endif
     call settings_load
     call check_saves
     ; a city is saved: start in the load picker (not in test modes)
@@ -317,6 +323,7 @@ FUNC main
     xor eax, eax
 .sbx:
     mov [sandbox], eax
+    call extra_reset                ; (the per-city state, as for a new city)
     call world_generate
     call sim_init
     call agents_init
@@ -330,8 +337,6 @@ FUNC main
     mov esi, [hwy_row]
     call camera_center_tile
 %ifdef WEB
-    call web_beta
-    mov [beta_on], eax
     call web_bench
     mov [perf_on], eax
     ; a city opened by link (?load=...): straight into it

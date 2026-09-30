@@ -144,6 +144,8 @@ FUNC scen_met
 FUNC scen_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     mov eax, [scen_id]
     test eax, eax
     jz .out
@@ -256,7 +258,7 @@ FUNC scen_draw
     RETURN
 
 ; the Scenarios panel
-SCP_W       equ 440
+SCP_W       equ 480
 SCP_H       equ 190
 
 FUNC draw_scenarios, 16
@@ -340,6 +342,8 @@ FUNC welcome_maps
     je .n
     ; the same seed, other land
     mov [map_type], ebx
+    mov edi, 1                      ; (a city founded from another keeps
+    call region_hold                ;  its place in the region)
     mov eax, [difficulty]
     push rax
     push rax
@@ -348,6 +352,8 @@ FUNC welcome_maps
     pop rax
     pop rax
     mov [difficulty], eax
+    xor edi, edi
+    call region_hold
 .n:
     imul edi, ebx, 54
     add edi, r12d

@@ -90,8 +90,11 @@ loan_taken:
 
 ; the month's payment of loan ecx -> edx added (keeps rcx)
 loan_due:
+    xor eax, eax
+    cmp dword [beta_on], 0
+    je .c
     mov eax, [loan_pay_cur+rcx*4]
-    test eax, eax
+.c: test eax, eax
     jnz .a
     mov eax, [loan_payment+rcx*4]
 .a: add edx, eax
@@ -101,6 +104,8 @@ loan_due:
 FUNC econ_month
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     ; the last year in the red
     xor eax, eax
     cmp qword [money], 0

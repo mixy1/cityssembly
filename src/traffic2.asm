@@ -241,7 +241,23 @@ FUNC generate_trip_beta
     test eax, eax
     jnz .out
 .cl:
-    call generate_trip
+    ; the kind by the table's shares, then as the classic trips go
+    ; (goods, exports, imports, visitors: rolls 60, 76, 84, 91 there)
+    mov edi, 91
+    movzx eax, byte [r15+5]
+    cmp ebx, eax
+    jae .ck
+    mov edi, 84
+    movzx eax, byte [r15+4]
+    cmp ebx, eax
+    jae .ck
+    mov edi, 76
+    movzx eax, byte [r15+3]
+    cmp ebx, eax
+    jae .ck
+    mov edi, 60
+.ck:
+    call trip_by_roll
     RETURN
 .commute:
     lea rdi, [list_res]
@@ -418,13 +434,13 @@ commute_penalty:
 .o: ret
 
 ; is this home's commute too long for level 4? (edi tile) -> eax 1
-commute_too_long:
+commute_too_long:                   ; (keeps rcx: callers hold a level in it)
     xor eax, eax
     cmp dword [beta_on], 0
     je .o
-    movzx ecx, byte [map_commute+rdi]
-    shl ecx, 3
-    cmp ecx, COMMUTE_L4
+    movzx edx, byte [map_commute+rdi]
+    shl edx, 3
+    cmp edx, COMMUTE_L4
     seta al
 .o: ret
 

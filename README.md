@@ -296,10 +296,9 @@ Features still in testing, off unless you ask for them:
   of goods, overloaded services and jammed roads.
 - **Keys** (Menu > Keys...): click an action, then press its new key.
   Keys swap - the old key takes over what the new one did - so nothing
-  is ever lost; W A S D and the arrows stay with the camera. Saved with
+  is ever lost; W A S D, the arrows and the Ctrl / Alt shortcuts stay as
+  they are. Saved with
   the settings; Reset puts every key back.
-- **Recent tools:** the last five things picked from the menus sit in a
-  row above the dock; a click picks one again.
 - **Bulldozer filters** (chips under the hint, or `G`): everything,
   abandoned buildings only, trees only, rubble only.
 - **Command palette** (`/`): type any part of a tool's, building's or

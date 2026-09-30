@@ -130,6 +130,11 @@ FUNC death_month
     ; then graves, while there are any
     mov eax, [svc_count+BK_CEMETERY*4]
     imul eax, eax, DC_GRAVES
+    ; (a cemetery that's gone takes its graves: never more than there's room)
+    cmp [graves_used], eax
+    jle .gc
+    mov [graves_used], eax
+.gc:
     mov ecx, eax
     sub ecx, [graves_used]
     jle .full

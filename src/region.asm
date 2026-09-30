@@ -55,6 +55,7 @@ trade_last  resd 1              ; and last month, at market prices
 rg_link     resd NB_N           ; the edge leads to your city in slot n-1
 rg_id       resd 1              ; the region the city belongs to
 region_state_end:
+rg_keep     resb region_state_end - region_state   ; (region_hold)
 ; this city, for the others of its region (saved: "SUMM", read by them)
 SUMM_BYTES  equ 64
 region_summ resb SUMM_BYTES     ; pop, jobs, unemployed, spare power,
@@ -152,6 +153,7 @@ s_rg_city   db "City ", 0
 s_rg_found  db "Found a city", 0
 s_rg_visit  db "Visit", 0
 s_rg_noslot db "No free save slot for a new city - free one in Load city.", 0
+s_rg_tour   db "Finish or skip the tour first.", 0
 s_rg_founded db "A new city, next to your other one. Welcome, Mayor!", 0
 s_rg_ftip   db "Start a new city beyond this edge, in a free save slot. Your cities share workers.", 0
 s_rg_vtip   db "Save this city and go to that one", 0
@@ -346,6 +348,8 @@ FUNC rg_notify
 FUNC region_month, 16
     cmp dword [beta_on], 0
     je .out
+    cmp dword [tut_bubble], 0       ; (not in the tour's village)
+    jne .out
     call region_ensure
     call region_read
     call region_links
@@ -1301,6 +1305,11 @@ FUNC region_free_slot
 ; in a free slot and saved too
 FUNC region_found, 16
     mov r12d, edi
+    call region_not_now
+    test eax, eax
+    jz .ok0
+    RETURN
+.ok0:
     call region_free_slot
     cmp eax, -1
     jne .ok
@@ -1360,16 +1369,60 @@ FUNC region_visit
     mov r12d, [rg_link+rdi*4]
     test r12d, r12d
     jz .out
+    call region_not_now
+    test eax, eax
+    jnz .out
     dec r12d
     mov dword [save_quiet], 1
     call save_current
+    ; (the slot changes only when the other city comes in)
+    mov r13d, [current_slot]
     mov [current_slot], r12d
     mov rdi, [slot_files+r12*8]
     call load_city_from
+    test eax, eax
+    jnz .in
+    mov [current_slot], r13d
+    jmp .out
+.in:
     call region_read
     mov dword [panel], PANEL_NONE
 .out:
     RETURN
+
+; not during the tour (its village can't be saved) -> eax 1, and says so
+region_not_now:
+    xor eax, eax
+    cmp dword [tut_bubble], 0
+    je .o
+    lea rdi, [s_rg_tour]
+    mov esi, UI_WARN
+    mov edx, -1
+    mov ecx, -1
+    sub rsp, 8
+    call notify
+    add rsp, 8
+    mov eax, 1
+.o: ret
+
+; the region's state kept aside while the welcome card makes other land
+; for the same city (edi 1 aside, 0 back)
+region_hold:
+    push rsi
+    push rdi
+    test edi, edi
+    jz .back
+    lea rsi, [region_state]
+    lea rdi, [rg_keep]
+    jmp .c
+.back:
+    lea rsi, [rg_keep]
+    lea rdi, [region_state]
+.c: mov ecx, region_state_end - region_state
+    rep movsb
+    pop rdi
+    pop rsi
+    ret
 
 ; a new city from a seed (edi) - as the menu's, but that land
 FUNC new_city_seed

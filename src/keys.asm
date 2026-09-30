@@ -3,7 +3,8 @@
 ;
 ;  Menu > Keys: click an action, then press its new key.  Keys swap -
 ;  the key it had does what the new one did - so nothing is ever lost.
-;  The camera's keys (W A S D and the arrows) stay as they are.  The map
+;  The camera's keys (W A S D and the arrows) and the Ctrl and Alt
+;  shortcuts stay as they are.  The map
 ;  (key pressed -> the key it acts as) is saved with the settings.
 ; =====================================================================
 KB_N        equ 25
@@ -110,9 +111,15 @@ FUNC keys_key
     cmp dword [beta_on], 0
     je .out
     cmp dword [kb_wait], 0
-    jne .bind
+    je .map
+    cmp dword [panel], PANEL_KEYS   ; (the panel went: so did the question)
+    je .bind
+    mov dword [kb_wait], 0
+.map:
     cmp dword [pal_open], 0         ; (the palette wants the letters)
     jne .out
+    test dword [key_mod], 0x3C0     ; (Ctrl and Alt keys stay as they are)
+    jnz .out
     cmp eax, 128
     jae .out
     movzx eax, byte [key_map+rax]
