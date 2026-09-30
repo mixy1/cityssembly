@@ -155,6 +155,9 @@ Features still in testing, off unless you ask for them:
   asks for what the city needs now - fewer jams, shorter commutes,
   happier people, water for every home, cleaner air, more bus riders, or
   growth - with a deadline and a reward of about three months' profit.
+- **City issues** keep a steady order. Jams show as "Traffic jams" (no
+  jumpy count); clicking opens the traffic view, marks the jammed roads
+  and goes to the worst spot, then the next on each click.
 - **Route viewer:** inspect a road to see how many cars are on it, where
   they come from (cyan) and where they go (green), with their routes
   marked yellow to red by how many share them.

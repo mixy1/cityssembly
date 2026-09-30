@@ -2952,3 +2952,323 @@ FUNC budget_difficulty
     mov [tooltip], rax
 .out:
     RETURN
+
+; =====================================================================
+;  the city issues list (beta): a steady order (by how serious), and
+;  "Traffic jams" without a jumpy count - clicking it opens the traffic
+;  view, marks the jammed roads and goes to the worst spot, then the
+;  next one on each click
+; =====================================================================
+JAM_HOT     equ 8               ; jam spots remembered
+section .data
+; the order issues are listed in (PR_* numbers, ISSUE_JAM = 11)
+iss_prio    db 7, 1, 2, 3, 9, 8, 10, 11, 4, 5, 6, 0
+s_iss_jams  db "Traffic jams - click to see them", 0
+s_jam_none  db "No jams right now.", 0
+section .bss
+jam_show    resd 1              ; the jams line is up (with some slack)
+jam_hot     resd JAM_HOT        ; jam spots, worst first
+jam_hot_n   resd 1
+jam_hot_i   resd 1
+jam_flash   resd 1              ; frames the jammed roads stay marked
+section .text
+
+; is road tile (rax = tile offset) jammed, as the traffic view shows it
+; (congestion and traffic mixed, so it doesn't blink) -> eax 1
+JAM_RED equ 180
+jam_red:
+    push rcx
+    movzx ecx, byte [tiles+rax+T_JAM]
+    shl ecx, 1
+    push rdx
+    movzx edx, byte [tiles+rax+T_TRAFFIC]
+    shr edx, 2
+    add ecx, edx
+    pop rdx
+    xor eax, eax
+    cmp ecx, JAM_RED
+    setae al
+    pop rcx
+    ret
+
+; the jam spots: repeatedly the jammed road tile with the most jammed
+; tiles around it, away from the spots already taken
+FUNC jam_spots, 16
+    mov dword [jam_hot_n], 0
+.spot:
+    cmp dword [jam_hot_n], JAM_HOT
+    jge .out
+    mov dword [rbp-48], -1          ; best tile
+    mov dword [rbp-52], 0           ; its score
+    xor ebx, ebx
+.t:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .tn
+    call jam_red
+    test eax, eax
+    jz .tn
+    ; not near a spot already taken
+    xor ecx, ecx
+.near:
+    cmp ecx, [jam_hot_n]
+    jge .far
+    mov edi, ebx
+    mov esi, [jam_hot+rcx*4]
+    push rcx
+    push rcx
+    call tile_dist
+    pop rcx
+    pop rcx
+    cmp eax, 14
+    jl .tn
+    inc ecx
+    jmp .near
+.far:
+    ; jammed road tiles within 4
+    mov r12d, ebx
+    and r12d, MAP_W-1
+    mov r13d, ebx
+    shr r13d, MAP_SHIFT
+    xor r15d, r15d
+    mov r14d, -4
+.dy:
+    mov ecx, -4
+.dx:
+    lea edi, [r12+rcx]
+    lea esi, [r13+r14]
+    cmp edi, MAP_W
+    jae .dn
+    cmp esi, MAP_W
+    jae .dn
+    shl esi, MAP_SHIFT
+    add esi, edi
+    shl esi, TILE_SHIFT
+    cmp byte [tiles+rsi+T_OBJ], OBJ_ROAD
+    jne .dn
+    mov eax, esi
+    call jam_red
+    add r15d, eax
+.dn:
+    inc ecx
+    cmp ecx, 4
+    jle .dx
+    inc r14d
+    cmp r14d, 4
+    jle .dy
+    cmp r15d, [rbp-52]
+    jle .tn
+    mov [rbp-52], r15d
+    mov [rbp-48], ebx
+.tn:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .t
+    mov eax, [rbp-48]
+    test eax, eax
+    js .out
+    mov ecx, [jam_hot_n]
+    mov [jam_hot+rcx*4], eax
+    inc dword [jam_hot_n]
+    jmp .spot
+.out:
+    RETURN
+
+; the jams line was clicked: the traffic view, the jammed roads marked,
+; the next jam spot
+FUNC jam_visit
+    mov dword [overlay_mode], OV_TRAFFIC
+    mov dword [jam_flash], 300
+    mov dword [sel_x], -1
+    ; a fresh list of spots when starting over
+    mov eax, [jam_hot_i]
+    cmp eax, [jam_hot_n]
+    jl .have
+    call jam_spots
+    mov dword [jam_hot_i], 0
+    cmp dword [jam_hot_n], 0
+    jne .have
+    lea rdi, [s_jam_none]
+    mov esi, UI_DIM
+    mov edx, -1
+    mov ecx, -1
+    call notify
+    jmp .out
+.have:
+    mov eax, [jam_hot_i]
+    mov eax, [jam_hot+rax*4]
+    inc dword [jam_hot_i]
+    mov ebx, eax
+    call cam_remember
+    ; close enough to see the queues
+    cmp dword [zoom], 2
+    jge .z
+    mov edi, 2
+    call video_set_zoom
+.z:
+    mov edi, ebx
+    and edi, MAP_W-1
+    mov esi, ebx
+    shr esi, MAP_SHIFT
+    call camera_center_tile
+    mov edi, SFX_CLICK
+    call sfx_play
+.out:
+    RETURN
+
+; the jammed roads marked for a while after the click (world layer)
+FUNC jam_marks
+    cmp dword [jam_flash], 0
+    je .out
+    dec dword [jam_flash]
+    ; blink
+    mov eax, [anim_tick]
+    and eax, 16
+    jz .out
+    xor ebx, ebx
+.l:
+    mov eax, ebx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .n
+    call jam_red
+    test eax, eax
+    jz .n
+    mov edi, ebx
+    and edi, MAP_W-1
+    mov esi, ebx
+    shr esi, MAP_SHIFT
+    mov edx, 1
+    mov ecx, RAMP(R_RED, 7)
+    call draw_diamond
+.n:
+    inc ebx
+    cmp ebx, MAP_TILES
+    jl .l
+.out:
+    RETURN
+
+; the issues list (beta)
+FUNC draw_issues_beta, 32
+    dec dword [iss_age]
+    jns .d
+    mov dword [iss_age], 20
+    call issues_count
+    ; the jams line stays up 10 s after the last time 12+ road tiles
+    ; were jammed
+    xor ecx, ecx
+    xor edx, edx
+.jc:
+    mov eax, ecx
+    shl eax, TILE_SHIFT
+    cmp byte [tiles+rax+T_OBJ], OBJ_ROAD
+    jne .jn
+    call jam_red
+    add edx, eax
+.jn:
+    inc ecx
+    cmp ecx, MAP_TILES
+    jl .jc
+    cmp edx, 12
+    jl .jd
+    mov dword [jam_show], 600
+    jmp .d
+.jd:
+    sub dword [jam_show], 20
+    jg .d
+    mov dword [jam_show], 0
+    mov dword [jam_hot_i], JAM_HOT      ; the spots start over next time
+.d:
+    mov r13d, 64                    ; y
+    mov dword [rbp-48], 0           ; rows
+    mov dword [rbp-56], 0           ; place in the order
+.pick:
+    cmp dword [rbp-48], 6
+    jge .out
+    mov eax, [rbp-56]
+    movzx r14d, byte [iss_prio+rax]
+    test r14d, r14d
+    jz .out
+    inc dword [rbp-56]
+    cmp r14d, ISSUE_JAM
+    jne .cnt
+    cmp dword [jam_show], 0
+    jle .pick
+    call tb_reset
+    lea rdi, [s_iss_jams]
+    call tb_str
+    jmp .row
+.cnt:
+    mov r12d, [iss_count+r14*4]
+    test r12d, r12d
+    jz .pick
+    call tb_reset
+    movsxd rdi, r12d
+    call tb_num
+    mov edi, ' '
+    call tb_char
+    mov rdi, [iss_names+r14*8]
+    call tb_str
+.row:
+    lea rdi, [textbuf]
+    call text_width
+    lea r15d, [rax+22]
+    mov edi, 4
+    mov esi, r13d
+    mov edx, r15d
+    mov ecx, 13
+    call ui_over
+    mov [rbp-52], eax
+    mov r8d, UI_BG2
+    test eax, eax
+    jz .bg
+    mov r8d, UI_BTN_HI
+    cmp r14d, ISSUE_JAM
+    je .bg
+    lea rax, [s_isstip]
+    mov [tooltip], rax
+.bg:
+    mov edi, 4
+    mov esi, r13d
+    mov edx, r15d
+    mov ecx, 13
+    call draw_box
+    movzx edx, byte [iss_glyph+r14]
+    movzx ecx, byte [iss_col+r14]
+    mov edi, 8
+    lea esi, [r13+3]
+    call draw_glyph
+    mov edi, 18
+    lea esi, [r13+3]
+    lea rdx, [textbuf]
+    mov ecx, UI_TEXT
+    call draw_text
+    mov edi, 4
+    mov esi, r13d
+    mov edx, r15d
+    mov ecx, 13
+    lea r8, [s_iss_jams]
+    cmp r14d, ISSUE_JAM
+    je .lbl
+    mov r8, [iss_names+r14*8]
+.lbl:
+    call ui_note_button
+    cmp dword [rbp-52], 0
+    je .nx
+    cmp dword [click_pending], 0
+    je .nx
+    mov dword [click_pending], 0
+    cmp r14d, ISSUE_JAM
+    jne .vis
+    call jam_visit
+    jmp .nx
+.vis:
+    mov edi, r14d
+    call issue_visit
+.nx:
+    add r13d, 15
+    inc dword [rbp-48]
+    jmp .pick
+.out:
+    RETURN

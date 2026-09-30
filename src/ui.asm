@@ -3380,6 +3380,12 @@ FUNC draw_issues, 16
     jne .out
     cmp dword [panel], PANEL_NONE
     jne .out
+    ; beta: a steady list, and jams shown on the map
+    cmp dword [beta_on], 0
+    je .classic
+    call draw_issues_beta
+    RETURN
+.classic:
     dec dword [iss_age]
     jns .d
     mov dword [iss_age], 20
@@ -4211,6 +4217,7 @@ FUNC draw_tool_preview, 16
     call set_target_world
     call freehand_track
     call route_keep
+    call jam_marks
     ; a move ends when the build tool is put down
     cmp dword [tool], T_BUILD
     je .mvk
