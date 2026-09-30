@@ -271,6 +271,12 @@ Features still in testing, off unless you ask for them:
 - **The City Herald:** a headline when the month has news - jams, an
   empty treasury, unhappiness, a recession or a boom, snow, floods,
   heat, free-flowing traffic, tourists, growth.
+- **Trams** (Public transport, from City): drag Tram rails along avenues
+  ($80 a tile; cars still use the road). Rails joined up make a line; a
+  Tram Depot touching it runs it, with 5,000 riders a month per depot.
+  People within 4 tiles of a line whose trip ends near the same line may
+  ride: quicker than the bus, slower than the metro, held up by jams like
+  the cars. The trams run on the rails, going straight on where they can.
 - **Bus capacity:** each Bus Depot's buses carry 3,000 riders a month;
   when they're full, people drive. A growing city needs more depots.
 - **Water Treatment** (Water, from City; 2x2, touching water, powered):

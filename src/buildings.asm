@@ -39,7 +39,8 @@ BK_EXPO      equ 32         ; .. beta
 BK_TREAT     equ 33         ; beta
 BK_CEMETERY  equ 34         ; beta
 BK_CREM      equ 35         ; beta
-BK_COUNT     equ 36
+BK_TRAMDEPOT equ 36         ; beta
+BK_COUNT     equ 37
 BK_MAX       equ 40         ; room for more kinds (svc_count, tables)
 
 ; coverage kinds
@@ -131,6 +132,7 @@ bld_info:
     BINFO  2, CV_NONE, 0, 0, 6000, 300, 0, 3000, 2500, nm_treat, 0, 15, 1, CAT_WATER, 0, ds_treat
     BINFO  3, CV_NONE, 30, 0, 4000, 150, 0, 0, 1200, nm_cemetery, 0, 0, 0, CAT_HEALTH, 0, ds_cemetery
     BINFO  2, CV_NONE, 30, 15, 6000, 250, 0, 0, 5000, nm_crem, 0, 10, 0, CAT_HEALTH, 0, ds_crem
+    BINFO  2, CV_NONE, 0, 0, 2500, 150, 0, 0, 2500, nm_tramdepot, 0, 20, 0, CAT_TRANSIT, 0, ds_tramdepot
 
 nm_coal      db "Coal Power Plant", 0
 nm_wind      db "Wind Turbine", 0

@@ -18,6 +18,7 @@ T_METRO     equ 12              ; beta: metro tunnels
 T_RAIL      equ 13              ; beta: railway track
 T_RUNWAY    equ 14              ; beta: airport runway
 T_LEVEE     equ 15              ; beta: levees
+T_TRAM      equ 16              ; beta: tram rails
 
 PANEL_NONE     equ 0
 PANEL_BUDGET   equ 1
@@ -54,6 +55,7 @@ SI_UNMETRO  equ 125             ; beta
 SI_RAIL     equ 126             ; beta
 SI_RUNWAY   equ 127             ; beta
 SI_LEVEE    equ 128             ; beta
+SI_TRAM     equ 129             ; beta
 SI_OVERLAY  equ 1000       ; + overlay
 
 %include "icons_data.asm"
@@ -525,7 +527,8 @@ ST_ROWS equ 18
     dq s_st_frt, rail_freight, 0
     dq s_st_air, air_pax, 0
     dq s_st_port, port_trade, 2
-ST_ROWS_BETA equ 24
+    dq s_st_tram, tram_riders, 0
+ST_ROWS_BETA equ 25
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -632,7 +635,7 @@ hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port, hb_plow
         dq hb_gcentral, hb_exchange, hb_opera, hb_space, hb_expo, hb_treat
-        dq hb_cemetery, hb_crem
+        dq hb_cemetery, hb_crem, hb_tramdepot
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -1127,6 +1130,8 @@ FUNC tool_collect, 16
     cmp eax, T_RUNWAY
     je .lineS
     cmp eax, T_LEVEE
+    je .line
+    cmp eax, T_TRAM
     je .line
     cmp eax, T_INSPECT
     je .single
@@ -3815,6 +3820,14 @@ FUNC tool_evaluate, 32
     mov r13d, 60
     jmp .set
 .t8:
+    cmp eax, T_TRAM
+    jne .t8m
+    call tram_tile_cost
+    cmp eax, -1
+    je .n
+    mov r13d, eax
+    jmp .set
+.t8m:
     cmp eax, T_LEVEE
     jne .t8v
     call levee_tile_cost
@@ -4100,6 +4113,7 @@ FUNC tool_apply
     mov dword [r12+T_OCC], 0
     jmp .upd
 .bz1:
+    and byte [r12+T_MISC], ~MISC_TRAM & 0xFF
     mov byte [r12+T_OBJ], OBJ_NONE
     and byte [r12+T_FLAGS], 0
     and byte [r12+T_FLAGS2], F2_PIPE
@@ -4139,8 +4153,14 @@ FUNC tool_apply
     jmp .upd
 .a6v:
     cmp eax, T_LEVEE
-    jne .a7
+    jne .a6t
     call levee_lay_tile
+    jmp .upd
+.a6t:
+    cmp eax, T_TRAM
+    jne .a7
+    call tram_lay_tile
+    mov dword [net_dirty], 1
     jmp .upd
 .a7:
     cmp eax, T_BUSSTOP
@@ -4152,6 +4172,9 @@ FUNC tool_apply
     jne .upd
     mov eax, [up_type]
     mov [r12+T_ROADTYPE], al
+    cmp eax, RT_AVENUE
+    je .upd
+    and byte [r12+T_MISC], ~MISC_TRAM & 0xFF
 .upd:
     mov edi, r13d
     mov esi, r14d
@@ -5337,6 +5360,13 @@ FUNC submenu_item_info
 .zz:
     RETURN
 .u:
+    cmp ebx, SI_TRAM
+    jne .ut
+    mov edx, TRM_COST
+    lea rax, [ti_tram]
+    mov ecx, 2500
+    RETURN
+.ut:
     cmp ebx, SI_LEVEE
     jne .uv
     mov edx, LV_COST
@@ -5452,6 +5482,9 @@ FUNC submenu_select
     jmp .close
 .u:
     mov dword [bz_filter], 0
+    mov dword [tool], T_TRAM
+    cmp ebx, SI_TRAM
+    je .close
     mov dword [tool], T_LEVEE
     cmp ebx, SI_LEVEE
     je .close
@@ -5539,6 +5572,12 @@ FUNC submenu_is_active
     sete al
     RETURN
 .u:
+    cmp ebx, SI_TRAM
+    jne .utr
+    cmp dword [tool], T_TRAM
+    sete al
+    RETURN
+.utr:
     cmp ebx, SI_LEVEE
     jne .ulv
     cmp dword [tool], T_LEVEE
@@ -6115,6 +6154,7 @@ FUNC draw_inspect, 32
     call port_inspect
     call service_inspect
     call death_inspect
+    call tram_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6730,7 +6770,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 84
+    add ecx, 95
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx
@@ -6961,6 +7001,12 @@ FUNC draw_tool_hint, 16
     lea r13, [hx_unpower]
     jmp .draw
 .nbz:
+    cmp eax, T_TRAM
+    jne .nbzt
+    lea r12, [ti_tram]
+    lea r13, [hx_tram]
+    jmp .draw
+.nbzt:
     cmp eax, T_LEVEE
     jne .nbzv
     lea r12, [ti_levee]

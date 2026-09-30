@@ -534,6 +534,18 @@ FUNC render_world, 32
     mov edi, eax
     jmp .blitobj
 .sig2:
+    ; beta: tram rails (then the lights, if any)
+    mov rdi, rbx
+    call tramx_sprite
+    test eax, eax
+    jz .sig3
+    mov edi, eax
+    mov r8, [rbp-56]
+    mov esi, [draw_sx]
+    mov edx, [draw_sy]
+    mov ecx, r14d
+    call blit_sprite
+.sig3:
     ; beta: traffic lights at avenue junctions
     mov rdi, rbx
     call signal_sprite

@@ -52,7 +52,8 @@ sm_health_beta  dd BK_CLINIC, BK_HOSPITAL, BK_CEMETERY, BK_CREM, -1
 sm_leisure_beta dd BK_PARK, BK_PLAZA, BK_STADIUM, BK_CITYHALL, BK_LANDMARK
                 dd BK_GCENTRAL, BK_EXCHANGE, BK_OPERA, BK_SPACE, BK_EXPO, -1
 sm_transit_beta dd BK_BUSDEPOT, SI_BUSSTOP, BK_METRO, SI_METRO, SI_UNMETRO
-                dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, BK_PORT, -1
+                dd SI_RAIL, BK_RAILSTN, BK_FREIGHT, BK_AIRPORT, SI_RUNWAY, BK_PORT
+                dd SI_TRAM, BK_TRAMDEPOT, -1
 ti_metro    db "Metro tunnel", 0
 ti_unmetro  db "Remove tunnels", 0
 hx_metro    db "Drag to dig: tunnels go under", 10
@@ -411,7 +412,32 @@ FUNC travel_mode, 32
     mov [rbp-48], eax
     mov dword [rbp-52], TM_TRAIN
 .pk0:
+    ; the tram: both ends near one line with a depot
+    call tram_trip_cost
+    cmp eax, -1
+    je .pkt
+    push rax
+    push rax
+    call rand
+    mov ecx, eax
+    pop rax
+    pop rax
+    and ecx, 31
+    add eax, ecx
+    cmp eax, [rbp-48]
+    jge .pkt
+    mov [rbp-48], eax
+    mov dword [rbp-52], TM_TRAM
+.pkt:
     mov eax, [rbp-52]
+    cmp eax, TM_TRAM
+    jne .pkt2
+    inc dword [tram_riders_month]
+    test dword [policies], P_FREEBUS
+    jnz .pk1
+    inc dword [fares_month]
+    jmp .pk1
+.pkt2:
     cmp eax, TM_TRAIN
     jne .pk1
     inc dword [train_riders_month]
