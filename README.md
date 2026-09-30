@@ -173,6 +173,19 @@ Features still in testing, off unless you ask for them:
   of all under the flight path past their ends (see the noise view).
   Planes come in over the end, land, roll to a stop and taxi off; others
   line up, take off and climb out.
+- **Neighbours** (`C`, or the button in the budget): every map edge leads
+  to a neighbouring city with a name, a character (industrial town,
+  farming county, resort, capital) and a population that grows. A
+  highway, a railway to the edge or an airport links you to it, and its
+  name stands where your link leaves the map.
+  - **The market:** what your exports fetch rises and falls (55-150% of
+    normal), with recessions and booms now and then. Industry wants to
+    grow when prices are up and more neighbours are linked.
+  - **Deals:** now and then a linked neighbour offers to buy half your
+    spare power or water, or to pay you to take its garbage, for a year.
+    Keep your side (the spare capacity, room in the landfill or an
+    incinerator) and it pays every month; three missed months and it's
+    called off.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

@@ -1250,6 +1250,7 @@ FUNC rail_export
     cmp word [rl_edge+rcx*2], 0
     je .out
     add dword [exports_month], 16
+    add dword [goods_sold_month], 16
     mov eax, 1
 .out:
     RETURN

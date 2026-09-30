@@ -3613,6 +3613,7 @@ FUNC apply_staffing
 ; =====================================================================
 FUNC month_end, 32
     call airport_month              ; (beta)
+    call region_month
     mov eax, [population]
     imul eax, [tax_rate+ZC_RES*4]
     xor edx, edx

@@ -1122,6 +1122,7 @@ FUNC vehicle_arrive
     jmp .free
 .export:
     add dword [exports_month], 12
+    add dword [goods_sold_month], 12
     inc dword [trips_ok]
     jmp .free
 .fire:

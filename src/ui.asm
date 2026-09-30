@@ -27,6 +27,7 @@ PANEL_STATS    equ 5
 PANEL_SETTINGS equ 6
 PANEL_SAVE     equ 7
 PANEL_LOAD     equ 8
+PANEL_REGION   equ 9            ; beta: the neighbours
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -2711,6 +2712,9 @@ save_chunks:
     db "BKMK"
     dq bookmarks
     dd BOOKMARKS*12
+    db "RGON"
+    dq region_state
+    dd region_state_end - region_state
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_TILE equ 2
 SC_SIMS equ 3
@@ -6316,10 +6320,13 @@ FUNC draw_budget, 32
     mov ecx, UI_GOLD
     call draw_text
     mov dword [font_scale], 1
-    ; beta: the city's difficulty
+    ; beta: the city's difficulty, the neighbours
     lea edi, [r12+230]
     lea esi, [r13+6]
     call budget_difficulty
+    lea edi, [r12+128]
+    lea esi, [r13+6]
+    call region_button
     add r13d, 28
     lea edi, [r12+10]
     mov esi, r13d
@@ -8013,6 +8020,7 @@ FUNC render_ui
 .ui:
     call draw_problem_icons
     call draw_floats
+    call region_labels
     cmp dword [welcome], 0
     je .game
     call draw_welcome
@@ -8053,8 +8061,13 @@ FUNC render_ui
     jmp .hud
 .p6:
     cmp eax, PANEL_SETTINGS
-    jne .p7
+    jne .p6r
     call draw_settings
+    jmp .hud
+.p6r:
+    cmp eax, PANEL_REGION
+    jne .p7
+    call draw_region
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE
@@ -8421,6 +8434,12 @@ FUNC ui_key
     je .tp
     mov ecx, PANEL_STATS
     cmp eax, SC_F1+3
+    je .tp
+    ; beta: the neighbours
+    cmp dword [beta_on], 0
+    je .k13
+    mov ecx, PANEL_REGION
+    cmp eax, SC_C
     jne .k13
 .tp:
     xor eax, eax

@@ -134,6 +134,8 @@ pf_report5  db "PLAY spend roads %d services %d policies %d loans %d | income re
 pf_report6  db "PLAY travel bus %d metro %d walk %d (this month) stations %d weighed %d near %d same %d lost %d", 10, 0
 pf_report7  db "PLAY rail riders %d visitors %d freight %d (this month) lines %d stations %d trains %d", 10, 0
 pf_report8  db "PLAY air airports %d flying %d runway %d passengers %d trips %d (this month)", 10, 0
+pf_report9  db "PLAY region price %d event %d deal %d offer %d trade %d ext %d", 0
+pf_report10 db " links %x tiles N %d W %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -942,6 +944,25 @@ FUNC play_tick, 16
     movzx ecx, byte [ap_rwlen]
     mov r8d, [air_pax]
     mov r9d, [air_trips]
+    xor eax, eax
+    CALLC printf
+    lea rdi, [pf_report9]
+    mov esi, [mk_price]
+    mov edx, [mk_event]
+    mov ecx, [ct_kind]
+    mov r8d, [of_kind]
+    mov r9d, [trade_last]
+    mov eax, [ext_demand]
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
+    lea rdi, [pf_report10]
+    mov esi, [nb_links]
+    mov edx, [nb_tile]
+    mov ecx, [nb_tile+12]
     xor eax, eax
     CALLC printf
     jmp .done

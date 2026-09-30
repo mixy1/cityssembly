@@ -1270,6 +1270,7 @@ extra_reset:
     rep stosd
     call trains_reset
     call planes_reset
+    call region_reset
     mov dword [cam_prev+8], 0
     pop rdi
     ret
