@@ -275,6 +275,10 @@ Features still in testing, off unless you ask for them:
   the zones grow them again. The copy then follows the cursor: click to
   stamp it (paying for what it lays), R to turn it; Ctrl+V picks it up
   again later. Undo takes a stamp back.
+- **Recent tools:** the last five things picked from the menus sit in a
+  row above the dock; a click picks one again.
+- **Bulldozer filters** (chips under the hint, or `G`): everything,
+  abandoned buildings only, trees only, rubble only.
 - **Command palette** (`/`): type any part of a tool's, building's or
   info view's name ("hosp"), Up/Down to choose, Enter to take it.
 - **Colour-blind views** (Settings): the info views' scale runs from

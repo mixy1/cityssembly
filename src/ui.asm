@@ -2865,6 +2865,11 @@ FUNC compute_eff_overlay
     mov eax, [bz_filter]
     test eax, eax
     jz .have
+    cmp eax, 4                      ; (beta: abandoned, trees, rubble)
+    jb .t3v
+    xor eax, eax
+    jmp .have
+.t3v:
     mov eax, OV_WATER
     cmp dword [bz_filter], 1
     je .have
@@ -3819,6 +3824,26 @@ FUNC tool_evaluate, 32
     mov r13d, 5
     jmp .set
 .bzall:
+    ; beta: only abandoned buildings, trees or rubble
+    cmp eax, 4
+    jb .bza
+    cmp eax, 4
+    jne .bzt
+    cmp ecx, OBJ_ZONEBLD
+    jne .n
+    test byte [r12+T_FLAGS], F_ABANDON
+    jz .n
+    jmp .bza
+.bzt:
+    cmp eax, 5
+    jne .bzr
+    cmp ecx, OBJ_TREE
+    jne .n
+    jmp .bza
+.bzr:
+    cmp ecx, OBJ_RUBBLE
+    jne .n
+.bza:
     test byte [r12+T_FLAGS], F_HIGHWAY
     jnz .n
     cmp ecx, OBJ_NONE
@@ -5534,6 +5559,7 @@ FUNC submenu_item_info
 
 ; choose a submenu item (edi code)
 FUNC submenu_select
+    call recent_note                ; (beta: the recent tools' row)
     mov ebx, edi
     mov dword [drag_active], 0
     cmp ebx, SI_OVERLAY
@@ -7143,6 +7169,8 @@ FUNC draw_tool_hint, 16
     jne .nbz
     cmp dword [bz_filter], 0
     je .nbz
+    cmp dword [bz_filter], 4
+    jae .nbz
     lea r12, [ti_unmetro]
     lea r13, [hx_unmetro]
     cmp dword [bz_filter], 3
@@ -8357,6 +8385,7 @@ FUNC render_ui
     call dist_labels
     call draw_dist_bar
     call draw_palette_cmd
+    call draw_recent
     cmp dword [welcome], 0
     je .game
     call draw_welcome

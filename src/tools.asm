@@ -2073,6 +2073,49 @@ FUNC tool_mode_chips, 32
     je .road
     cmp dword [tool], T_ZONETOOL
     je .zone
+    cmp dword [tool], T_BULLDOZE
+    je .bull
+    xor eax, eax
+    jmp .out
+.bull:
+    ; (not with the pipe, wire and tunnel removers)
+    mov eax, [bz_filter]
+    test eax, eax
+    jz .bl
+    cmp eax, 4
+    jb .none
+.bl:
+    xor ebx, ebx
+.bb:
+    imul edi, ebx, 62
+    add edi, 10
+    mov esi, [rbp-48]
+    mov edx, 60
+    mov rcx, [s_bz_names+rbx*8]
+    xor r8d, r8d
+    mov eax, [bz_filter]
+    test eax, eax
+    jz .b0
+    sub eax, 3
+.b0:
+    cmp ebx, eax
+    sete r8b
+    call text_button
+    test eax, eax
+    jz .bbn
+    xor eax, eax
+    test ebx, ebx
+    jz .b1
+    lea eax, [rbx+3]
+.b1:
+    mov [bz_filter], eax
+.bbn:
+    inc ebx
+    cmp ebx, 4
+    jl .bb
+    mov eax, 1
+    jmp .out
+.none:
     xor eax, eax
     jmp .out
 .road:
@@ -2197,6 +2240,26 @@ FUNC tool_next_mode
     mov [set_road_mode], eax
     jmp .saved
 .z:
+    cmp dword [tool], T_BULLDOZE
+    jne .zz
+    ; everything -> abandoned -> trees -> rubble -> everything
+    mov eax, [bz_filter]
+    test eax, eax
+    jz .bz0
+    cmp eax, 4
+    jb .out
+    inc eax
+    cmp eax, 7
+    jl .bz1
+    xor eax, eax
+    jmp .bz1
+.bz0:
+    mov eax, 4
+.bz1:
+    mov [bz_filter], eax
+    mov eax, 1
+    jmp .out
+.zz:
     cmp dword [tool], T_ZONETOOL
     jne .out
     mov eax, [set_zone_mode]
@@ -2226,7 +2289,17 @@ tool_mode_rows:
     mov eax, 2
     ret
 .z: cmp dword [tool], T_ZONETOOL
+    jne .b
+    mov eax, 1
+    ret
+.b: cmp dword [tool], T_BULLDOZE
     jne .o
+    mov ecx, [bz_filter]
+    test ecx, ecx
+    jz .b1
+    cmp ecx, 4
+    jb .o
+.b1:
     mov eax, 1
 .o: ret
 
@@ -2303,6 +2376,11 @@ s_sandbox_n db "Sandbox: money never runs out, all land is yours and", 0
 s_sandbox_2 db " everything is unlocked.", 0
 s_eye_none  db "Nothing to pick up here.", 0
 BUS_SPACING equ 5
+s_bz_names  dq bzn0, bzn1, bzn2, bzn3
+bzn0        db "Everything", 0
+bzn1        db "Abandoned", 0
+bzn2        db "Trees", 0
+bzn3        db "Rubble", 0
 
 section .text
 

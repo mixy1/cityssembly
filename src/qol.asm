@@ -1182,3 +1182,100 @@ apply_cblind:
     pop rdi
     pop rsi
     ret
+
+; ---------------------------------------------------------------------
+;  recent tools (beta): the last five things picked from the menus, in
+;  a row above the dock - a click picks one again
+; ---------------------------------------------------------------------
+RT_N        equ 5
+
+section .bss
+rt_list     resd RT_N
+rt_n        resd 1
+rt_busy     resd 1              ; (picking from the row itself)
+
+section .text
+
+; a menu item was picked (edi its code): to the front of the row
+recent_note:
+    cmp dword [beta_on], 0
+    je .o
+    cmp dword [rt_busy], 0
+    jne .o
+    cmp edi, SI_OVERLAY
+    jae .o
+    push rbx
+    ; where it is now (or the end)
+    xor ecx, ecx
+.f:
+    cmp ecx, [rt_n]
+    jge .nf
+    cmp [rt_list+rcx*4], edi
+    je .mv
+    inc ecx
+    jmp .f
+.nf:
+    mov ecx, [rt_n]
+    cmp ecx, RT_N
+    jl .grow
+    mov ecx, RT_N-1
+    jmp .mv
+.grow:
+    inc dword [rt_n]
+.mv:
+    ; the ones before it move back one
+    test ecx, ecx
+    jz .put
+    mov eax, [rt_list+rcx*4-4]
+    mov [rt_list+rcx*4], eax
+    dec ecx
+    jmp .mv
+.put:
+    mov [rt_list], edi
+    pop rbx
+.o: ret
+
+FUNC draw_recent, 16
+    cmp dword [beta_on], 0
+    je .out
+    cmp dword [rt_n], 0
+    je .out
+    cmp dword [panel], PANEL_NONE
+    jne .out
+    cmp dword [follow_kind], 0
+    jne .out
+    cmp dword [tool], T_DISTRICT
+    je .out
+    cmp dword [welcome], 0
+    jne .out
+    ; a row above the dock, in the middle
+    mov eax, [rt_n]
+    imul eax, eax, 84
+    mov r12d, [ui_w]
+    sub r12d, eax
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, DOCK_BTN+22
+    xor ebx, ebx
+.b:
+    mov edi, [rt_list+rbx*4]
+    call submenu_item_info
+    mov rcx, rax
+    imul edi, ebx, 84
+    add edi, r12d
+    mov esi, r13d
+    mov edx, 82
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .bn
+    mov dword [rt_busy], 1
+    mov edi, [rt_list+rbx*4]
+    call submenu_select
+    mov dword [rt_busy], 0
+.bn:
+    inc ebx
+    cmp ebx, [rt_n]
+    jl .b
+.out:
+    RETURN
