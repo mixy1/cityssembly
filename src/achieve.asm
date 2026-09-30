@@ -419,7 +419,7 @@ FUNC draw_achievements, 16
 FUNC achv_button
     cmp dword [beta_on], 0
     je .out
-    mov edx, 100
+    mov edx, 92
     lea rcx, [s_ach_btn]
     xor r8d, r8d
     call text_button

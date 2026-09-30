@@ -35,6 +35,7 @@ PANEL_SERVICES equ 10           ; beta: services' funding
 PANEL_ACHV     equ 11           ; beta: achievements
 PANEL_HIST     equ 12           ; beta: history graphs
 PANEL_SCEN     equ 13           ; beta: scenarios
+PANEL_TRANSIT  equ 14           ; beta: transit lines
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -6839,27 +6840,30 @@ FUNC draw_policies, 16
 ;  statistics panel
 ; ---------------------------------------------------------------------
 FUNC draw_stats, 16
-    mov r12d, [ui_w]
-    sub r12d, 260
-    shr r12d, 1
-    mov r13d, [ui_h]
-    sub r13d, 250
-    shr r13d, 1
+    ; (beta: two columns - the classic rows, then the new ones)
+    mov r15d, 260
     mov ecx, 236
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 128
+    mov r15d, 520
+    add ecx, 18
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx
+    mov r12d, [ui_w]
+    sub r12d, r15d
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, 250
+    shr r13d, 1
     mov edi, r12d
     mov esi, r13d
-    mov edx, 260
+    mov edx, r15d
     call draw_panel
     mov edi, r12d
     mov esi, r13d
-    mov edx, 260
+    mov edx, r15d
     mov ecx, [rbp-52]
     call ui_over
     mov dword [font_scale], 2
@@ -6870,12 +6874,24 @@ FUNC draw_stats, 16
     call draw_text
     mov dword [font_scale], 1
     add r13d, 30
+    mov [rbp-56], r13d              ; the rows' top
     xor ebx, ebx
 .r:
+    ; the row's place: the second column for the beta rows
+    mov r15d, r12d
+    mov eax, ebx
+    cmp ebx, ST_ROWS
+    jl .col
+    add r15d, 260
+    sub eax, ST_ROWS
+.col:
+    imul eax, eax, 11
+    add eax, [rbp-56]
+    mov r13d, eax
     imul eax, ebx, 24
     lea r14, [st_rows+rax]
     mov rdx, [r14]
-    lea edi, [r12+12]
+    lea edi, [r15+12]
     mov esi, r13d
     mov ecx, UI_DIM
     call draw_text
@@ -6910,22 +6926,26 @@ FUNC draw_stats, 16
 .k4:
     call tb_num
 .kd:
-    lea edi, [r12+248]
+    lea edi, [r15+248]
     mov esi, r13d
     lea rdx, [textbuf]
     mov ecx, UI_TEXT
     call draw_text_right
-    add r13d, 11
     inc ebx
     cmp ebx, [rbp-48]
     jl .r
-    ; beta: the achievements, the history
+    ; beta: the achievements, the history (under the first column)
+    mov r13d, [rbp-56]
+    add r13d, ST_ROWS*11
     lea edi, [r12+10]
     lea esi, [r13+3]
     call achv_button
-    lea edi, [r12+120]
+    lea edi, [r12+104]
     lea esi, [r13+3]
     call hist_button
+    lea edi, [r12+178]
+    lea esi, [r13+3]
+    call transit_button
     RETURN
 
 ; ---------------------------------------------------------------------
@@ -8333,8 +8353,13 @@ FUNC render_ui
     jmp .hud
 .p6c:
     cmp eax, PANEL_SCEN
-    jne .p7
+    jne .p6t
     call draw_scenarios
+    jmp .hud
+.p6t:
+    cmp eax, PANEL_TRANSIT
+    jne .p7
+    call draw_transit
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE

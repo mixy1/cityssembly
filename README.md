@@ -267,6 +267,11 @@ Features still in testing, off unless you ask for them:
 - **Follow camera:** click a car or train (on its road or track), a ship
   or a plane with the inspector and the view follows it; moving the view
   or Esc lets go.
+- **Transit** (statistics panel, F4): every kind of public transport -
+  buses, trams, metro, trains, ferries, planes, and trips on foot - with
+  its depots, lines, stations and vehicles, and last month's riders
+  against its room (a bar turns red when it's nearly full). In beta the
+  statistics panel shows the new rows in a second column.
 - **History** (statistics panel, F4): monthly graphs of traffic flow,
   commute, happiness, transit riders, trade and jammed roads, over the
   same 64 months as the budget's population and money.

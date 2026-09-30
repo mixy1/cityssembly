@@ -575,12 +575,264 @@ FUNC draw_history, 16
 FUNC hist_button
     cmp dword [beta_on], 0
     je .out
-    mov edx, 80
+    mov edx, 70
     lea rcx, [s_hs_btn]
     xor r8d, r8d
     call text_button
     test eax, eax
     jz .out
     mov dword [panel], PANEL_HIST
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  the Transit panel (beta): every kind of public transport, its lines
+;  and stops, and how full it ran last month
+; ---------------------------------------------------------------------
+TP_W        equ 400
+TP_H        equ 180
+
+section .data
+tp_names    dq tpn0, tpn1, tpn2, tpn3, tpn4, tpn5, tpn6
+tpn0        db "Buses", 0
+tpn1        db "Trams", 0
+tpn2        db "Metro", 0
+tpn3        db "Trains", 0
+tpn4        db "Ferries", 0
+tpn5        db "Planes", 0
+tpn6        db "On foot", 0
+s_tp_title  db "Transit", 0
+s_tp_btn    db "Transit", 0
+s_tp_depots db " depots, ", 0
+s_tp_depots2 db " depots", 0
+s_tp_stops  db " stops", 0
+s_tp_lines  db " lines, ", 0
+s_tp_stns   db " stations", 0
+s_tp_trains db " trains", 0
+s_tp_piers  db " piers", 0
+s_tp_air    db " airports flying", 0
+s_tp_of     db " of ", 0
+s_tp_none   db "-", 0
+
+section .text
+
+; one row: the name, what there is (text builder), riders of room
+; (ebx the row, r12d x, r13d y, r14d riders, r15d room: 0 no limit)
+FUNC tp_row
+    mov rdx, [tp_names+rbx*8]
+    lea edi, [r12+10]
+    mov esi, r13d
+    mov ecx, UI_TEXT
+    call draw_text
+    lea edi, [r12+70]
+    mov esi, r13d
+    lea rdx, [textbuf]
+    mov ecx, UI_DIM
+    call draw_text
+    ; riders (of room)
+    call tb_reset
+    movsxd rdi, r14d
+    call tb_num
+    test r15d, r15d
+    jz .nr
+    lea rdi, [s_tp_of]
+    call tb_str
+    movsxd rdi, r15d
+    call tb_num
+.nr:
+    lea edi, [r12+TP_W-80]
+    mov esi, r13d
+    lea rdx, [textbuf]
+    mov ecx, UI_GOLD
+    call draw_text_right
+    ; how full
+    test r15d, r15d
+    jz .out
+    lea edi, [r12+TP_W-74]
+    lea esi, [r13+2]
+    mov edx, 64
+    mov ecx, 6
+    mov r8d, UI_BG2
+    call draw_box
+    mov eax, r14d
+    imul eax, eax, 64
+    xor edx, edx
+    div r15d
+    CLAMP eax, 0, 64
+    test eax, eax
+    jz .out
+    mov edx, eax
+    lea edi, [r12+TP_W-74]
+    lea esi, [r13+2]
+    mov ecx, 6
+    mov r8d, UI_GOOD
+    cmp eax, 58
+    jl .f
+    mov r8d, UI_BAD
+.f:
+    call fill_rect
+.out:
+    RETURN
+
+FUNC draw_transit, 16
+    mov r12d, [ui_w]
+    sub r12d, TP_W
+    shr r12d, 1
+    mov r13d, [ui_h]
+    sub r13d, TP_H
+    shr r13d, 1
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, TP_W
+    mov ecx, TP_H
+    call draw_panel
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, TP_W
+    mov ecx, TP_H
+    call ui_over
+    mov dword [font_scale], 2
+    lea edi, [r12+10]
+    lea esi, [r13+6]
+    lea rdx, [s_tp_title]
+    mov ecx, UI_GOLD
+    call draw_text
+    mov dword [font_scale], 1
+    add r13d, 30
+    ; buses
+    xor ebx, ebx
+    call tb_reset
+    movsxd rdi, dword [svc_count+BK_BUSDEPOT*4]
+    call tb_num
+    lea rdi, [s_tp_depots]
+    call tb_str
+    movsxd rdi, dword [n_stops]
+    call tb_num
+    lea rdi, [s_tp_stops]
+    call tb_str
+    mov r14d, [bus_riders]
+    mov r15d, [svc_count+BK_BUSDEPOT*4]
+    imul r15d, r15d, BUS_CAP
+    call tp_row
+    add r13d, 18
+    ; trams
+    inc ebx
+    call tb_reset
+    movsxd rdi, dword [tw_lines]
+    call tb_num
+    lea rdi, [s_tp_lines]
+    call tb_str
+    movsxd rdi, dword [svc_count+BK_TRAMDEPOT*4]
+    call tb_num
+    lea rdi, [s_tp_depots2]
+    call tb_str
+    mov r14d, [tram_riders]
+    mov r15d, [svc_count+BK_TRAMDEPOT*4]
+    imul r15d, r15d, TRM_CAP
+    call tp_row
+    add r13d, 18
+    ; metro
+    inc ebx
+    call tb_reset
+    movsxd rdi, dword [mt_n]
+    call tb_num
+    lea rdi, [s_tp_stns]
+    call tb_str
+    mov r14d, [metro_riders]
+    mov r15d, [mt_n]
+    imul r15d, r15d, MT_CAP
+    call tp_row
+    add r13d, 18
+    ; trains
+    inc ebx
+    call tb_reset
+    movsxd rdi, dword [rl_lines]
+    call tb_num
+    lea rdi, [s_tp_lines]
+    call tb_str
+    xor eax, eax
+    xor ecx, ecx
+.tr:
+    cmp byte [tr_kind+rcx], 0
+    je .trn
+    inc eax
+.trn:
+    inc ecx
+    cmp ecx, TR_MAX
+    jl .tr
+    movsxd rdi, eax
+    call tb_num
+    lea rdi, [s_tp_trains]
+    call tb_str
+    ; (passenger stations' room)
+    xor r15d, r15d
+    xor ecx, ecx
+.st:
+    cmp ecx, [rl_n]
+    jge .std
+    cmp byte [rl_sfrt+rcx], 0
+    jne .stn
+    add r15d, RL_CAP
+.stn:
+    inc ecx
+    jmp .st
+.std:
+    mov r14d, [train_riders]
+    call tp_row
+    add r13d, 18
+    ; ferries
+    inc ebx
+    call tb_reset
+    movsxd rdi, dword [fe_n]
+    call tb_num
+    lea rdi, [s_tp_piers]
+    call tb_str
+    mov r14d, [ferry_riders]
+    mov r15d, [fe_n]
+    imul r15d, r15d, FE_CAP
+    call tp_row
+    add r13d, 18
+    ; planes
+    inc ebx
+    call tb_reset
+    xor eax, eax
+    xor ecx, ecx
+.ap:
+    cmp ecx, [ap_n]
+    jge .apd
+    cmp byte [ap_live+rcx], 0
+    je .apn
+    inc eax
+.apn:
+    inc ecx
+    jmp .ap
+.apd:
+    movsxd rdi, eax
+    call tb_num
+    lea rdi, [s_tp_air]
+    call tb_str
+    mov r14d, [air_pax]
+    xor r15d, r15d
+    call tp_row
+    add r13d, 18
+    ; on foot
+    inc ebx
+    call tb_reset
+    mov r14d, [walkers]
+    xor r15d, r15d
+    call tp_row
+    RETURN
+
+; the statistics panel's button to it (beta; edi x, esi y)
+FUNC transit_button
+    cmp dword [beta_on], 0
+    je .out
+    mov edx, 70
+    lea rcx, [s_tp_btn]
+    xor r8d, r8d
+    call text_button
+    test eax, eax
+    jz .out
+    mov dword [panel], PANEL_TRANSIT
 .out:
     RETURN
