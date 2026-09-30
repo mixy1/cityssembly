@@ -4,8 +4,8 @@
 ;  - Coverage gain: placing a police station, school, clinic, park ...
 ;    the price at the cursor says how many homes (or buildings) it
 ;    would reach that aren't served well now.
-;  - Photo mode (F): the interface goes, the city stays; F or Esc
-;    brings it back.
+;  - Photo mode (F): the interface goes, the city stays; [ and ] turn
+;    the clock, P saves a picture; F or Esc brings it back.
 ;  - Follow camera: click a car, train, plane or ship with the
 ;    inspector and the view follows it.
 ; =====================================================================
@@ -16,7 +16,7 @@ photo_hint_t resd 1
 section .data
 s_cg_homes  db " homes", 0
 s_cg_blds   db " buildings", 0
-s_photo     db "Photo mode - F or Esc to come back", 0
+s_photo     db "Photo mode - [ ] time of day, P save a picture, F or Esc to come back", 0
 
 section .text
 
@@ -1277,5 +1277,95 @@ FUNC draw_recent, 16
     inc ebx
     cmp ebx, [rt_n]
     jl .b
+.out:
+    RETURN
+
+; ---------------------------------------------------------------------
+;  photo mode keys (beta): [ and ] turn the clock back and on, P saves
+;  the picture (photo_001.bmp ...; on the web, a download)
+; ---------------------------------------------------------------------
+section .bss
+photo_shot  resd 1
+photo_n     resd 1
+photo_name  resb 32
+section .data
+s_photo_pre db "photo_", 0
+s_photo_ext db ".bmp", 0
+section .text
+
+; a key in photo mode (edi scancode) -> eax 1 if taken
+photo_key:
+    xor eax, eax
+    cmp dword [photo_mode], 0
+    je .o
+    cmp edi, 47                     ; [
+    jne .k1
+    sub dword [tod], 4096
+    and dword [tod], 0xFFFF
+    mov eax, 1
+    ret
+.k1:
+    cmp edi, 48                     ; ]
+    jne .k2
+    add dword [tod], 4096
+    and dword [tod], 0xFFFF
+    mov eax, 1
+    ret
+.k2:
+    cmp edi, SC_P
+    jne .o
+    mov dword [photo_shot], 1
+    mov dword [photo_hint_t], 0
+    mov eax, 1
+.o: ret
+
+; after the frame is shown: the picture asked for
+FUNC photo_after
+    cmp dword [photo_shot], 0
+    je .out
+    mov dword [photo_shot], 0
+    inc dword [photo_n]
+    ; photo_NNN.bmp
+    lea rdi, [photo_name]
+    lea rsi, [s_photo_pre]
+.c:
+    mov al, [rsi]
+    test al, al
+    jz .num
+    mov [rdi], al
+    inc rsi
+    inc rdi
+    jmp .c
+.num:
+    mov eax, [photo_n]
+    xor edx, edx
+    mov ecx, 100
+    div ecx
+    add al, '0'
+    mov [rdi], al
+    mov eax, edx
+    xor edx, edx
+    mov ecx, 10
+    div ecx
+    add al, '0'
+    mov [rdi+1], al
+    add dl, '0'
+    mov [rdi+2], dl
+    add rdi, 3
+    lea rsi, [s_photo_ext]
+.e:
+    mov al, [rsi]
+    mov [rdi], al
+    inc rsi
+    inc rdi
+    test al, al
+    jnz .e
+    lea rdi, [photo_name]
+    call video_screenshot
+%ifdef WEB
+    lea rdi, [photo_name]
+    lea rsi, [photo_name]
+    call web_export
+%endif
 .out:
     RETURN

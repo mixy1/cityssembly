@@ -546,6 +546,7 @@ FUNC main
 %ifndef WEB
     call tut_bot_after
     call play_after
+    call photo_after
 %endif
     PERF_MARK 6
     call audio_update

@@ -283,8 +283,9 @@ Features still in testing, off unless you ask for them:
   info view's name ("hosp"), Up/Down to choose, Enter to take it.
 - **Colour-blind views** (Settings): the info views' scale runs from
   blue to orange instead of green to red.
-- **Photo mode** (`F`): the interface goes, the city stays; `F` or Esc
-  brings it back.
+- **Photo mode** (`F`): the interface goes, the city stays; `[` and `]`
+  turn the clock, `P` saves the picture (photo_001.bmp ...; on the web it
+  downloads); `F` or Esc brings the interface back.
 - **Follow camera:** click a car or train (on its road or track), a ship
   or a plane with the inspector and the view follows it; moving the view
   or Esc lets go.

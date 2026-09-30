@@ -8634,9 +8634,18 @@ FUNC ui_key
     call bp_turn_key
     jmp .out
 .nbp:
-    ; beta: photo mode (F; Esc also leaves it)
+    ; beta: photo mode (F; Esc also leaves it; [ ] the clock, P a picture)
     cmp dword [beta_on], 0
     je .nph
+    push rax
+    push rax
+    mov edi, eax
+    call photo_key
+    mov ecx, eax
+    pop rax
+    pop rax
+    test ecx, ecx
+    jnz .out
     cmp eax, SC_F
     jne .nph1
     test dword [key_mod], 0xC0
