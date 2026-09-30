@@ -1123,6 +1123,8 @@ FUNC vehicle_arrive
 .export:
     add dword [exports_month], 12
     add dword [goods_sold_month], 12
+    mov rdi, r15
+    call port_arrive
     inc dword [trips_ok]
     jmp .free
 .fire:
@@ -1606,6 +1608,11 @@ FUNC generate_trip
     call rail_export
     test eax, eax
     jnz .out
+    ; (beta: by ship, from a port)
+    mov edi, r12d
+    call port_export
+    test eax, eax
+    jnz .out
     mov edi, r12d
     mov esi, -1
     mov edx, VT_TRUCK
@@ -1623,6 +1630,11 @@ FUNC generate_trip
     shl eax, TILE_SHIFT
     cmp byte [tiles+rax+T_GOODS], 100
     jae .out
+    ; (beta: through a port)
+    mov edi, r12d
+    call port_import
+    test eax, eax
+    jnz .out
     mov edi, -1
     mov esi, r12d
     mov edx, VT_TRUCK

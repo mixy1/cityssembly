@@ -186,6 +186,14 @@ Features still in testing, off unless you ask for them:
     Keep your side (the spare capacity, room in the landfill or an
     incinerator) and it pays every month; three missed months and it's
     called off.
+- **Cargo Port** (Public transport, from Capital; 3x3 on the shore,
+  powered): when ships can reach it (water all the way to the map edge),
+  three in five export trucks go to the port instead of the highway, and
+  paying a third more, and shops get imports through it - a lot of
+  trucks to and from one place. A freight yard within 8 tiles of the
+  port takes them off the roads: its railway line counts as reaching the
+  region, and the line's exports pay the port's price. Ships sail in from
+  the edge, tie up at the quay and sail away.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

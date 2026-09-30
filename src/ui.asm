@@ -518,7 +518,8 @@ ST_ROWS equ 18
     dq s_st_train, train_riders, 0
     dq s_st_frt, rail_freight, 0
     dq s_st_air, air_pax, 0
-ST_ROWS_BETA equ 23
+    dq s_st_port, port_trade, 2
+ST_ROWS_BETA equ 24
 strow0  db "Population", 0
 strow1  db "Workers", 0
 strow2  db "Unemployed", 0
@@ -623,7 +624,7 @@ hx_tree db "Trees raise land value and", 10
 ; extra hints by building kind
 hint_bk dq hb_plant, hb_plant, hb_plant, hb_plant, hb_pump, hb_tower, hb_sewage
         dq 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-        dq hb_metro, hb_railstn, hb_freight, hb_airport
+        dq hb_metro, hb_railstn, hb_freight, hb_airport, hb_port
         times BK_MAX-BK_COUNT dq 0
 hb_plant   db "No road needed. Put it away from", 10
            db "homes, then drag a power line", 10
@@ -6052,6 +6053,7 @@ FUNC draw_inspect, 32
     call metro_inspect
     call rail_inspect
     call airport_inspect
+    call port_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6648,7 +6650,7 @@ FUNC draw_stats, 16
     mov dword [rbp-48], ST_ROWS
     cmp dword [beta_on], 0
     je .sh
-    add ecx, 55
+    add ecx, 66
     mov dword [rbp-48], ST_ROWS_BETA
 .sh:
     mov [rbp-52], ecx

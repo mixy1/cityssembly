@@ -1034,6 +1034,7 @@ FUNC airport_inspect
 ; ---------------------------------------------------------------------
 section .bss
 air_axis    resd 1
+pbox_g      resd 1              ; the grid plane_box turns in
 section .text
 
 ; a box along the runway (f along it, l across it; x or y by air_axis)
@@ -1114,7 +1115,7 @@ FUNC gen_runway
     call finish_model
     RETURN
 
-; plane_box: car_box on a 32 grid (f forward, l across)
+; plane_box: car_box on a grid of pbox_g (f forward, l across)
 plane_box:
     mov eax, [car_dir]
     cmp eax, 1
@@ -1123,36 +1124,36 @@ plane_box:
     je .nx
     cmp eax, 2
     je .py
-    ; 0: forward = -y : x = l, y = 32 - f
-    mov eax, 32
+    ; 0: forward = -y : x = l, y = g - f
+    mov eax, [pbox_g]
     sub eax, ecx
-    mov r10d, 32
+    mov r10d, [pbox_g]
     sub r10d, edi
     mov edi, esi
     mov esi, eax
     mov ecx, r8d
     mov r8d, r10d
     jmp vbox
-.px:            ; forward = +x : x = f, y = 32 - l
-    mov eax, 32
+.px:            ; forward = +x : x = f, y = g - l
+    mov eax, [pbox_g]
     sub eax, r8d
-    mov r10d, 32
+    mov r10d, [pbox_g]
     sub r10d, esi
     mov esi, eax
     mov r8d, r10d
     jmp vbox
-.nx:            ; forward = -x : x = 32 - f, y = l
-    mov eax, 32
+.nx:            ; forward = -x : x = g - f, y = l
+    mov eax, [pbox_g]
     sub eax, ecx
-    mov r10d, 32
+    mov r10d, [pbox_g]
     sub r10d, edi
     mov edi, eax
     mov ecx, r10d
     jmp vbox
-.py:            ; forward = +y : x = 32 - l, y = f
-    mov eax, 32
+.py:            ; forward = +y : x = g - l, y = f
+    mov eax, [pbox_g]
     sub eax, r8d
-    mov r10d, 32
+    mov r10d, [pbox_g]
     sub r10d, esi
     mov r11d, edi
     mov edi, eax
@@ -1180,6 +1181,7 @@ FUNC gen_plane
     lea eax, [r12*8+rsi+8300]
     lea eax, [rax+r13*4]
     BEGIN 32, 14, eax
+    mov dword [pbox_g], 32
     test r13d, r13d
     jnz .shadow
     test r12d, r12d

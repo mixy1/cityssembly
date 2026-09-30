@@ -625,6 +625,7 @@ FUNC draw_agents, 16
     call draw_vehicles
     call draw_trains
     call draw_planes
+    call draw_ships
 .peeps:
     xor ebx, ebx
 .p:

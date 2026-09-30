@@ -477,6 +477,7 @@ FUNC rail_update, 32
     inc ebx
     jmp .r
 .out:
+    call port_rail
     RETURN
 
 ; a track tile touching the n x n footprint at (edi, esi), edx = n
@@ -664,7 +665,12 @@ FUNC train_next_stop
     cmp byte [rl_sfrt+rbx], 0
     je .fn
     cmp [rl_snet+rbx*2], r14w
-    je .yes
+    jne .fn
+    ; (not the yard at a port, when that's where the line leaves)
+    movzx eax, word [rl_stop+rbx*2]
+    inc eax
+    cmp ax, [rl_edge+r14*2]
+    jne .yes
 .fn:
     inc ebx
     jmp .fy
@@ -1251,6 +1257,8 @@ FUNC rail_export
     je .out
     add dword [exports_month], 16
     add dword [goods_sold_month], 16
+    mov eax, ecx
+    call port_rail_export
     mov eax, 1
 .out:
     RETURN
