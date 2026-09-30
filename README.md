@@ -194,6 +194,16 @@ Features still in testing, off unless you ask for them:
   port takes them off the roads: its railway line counts as reaching the
   region, and the line's exports pay the port's price. Ships sail in from
   the edge, tie up at the quay and sail away.
+- **Services have room for so many:** a police or fire station takes
+  4,000 people, a clinic 1,500, a hospital 6,000, a school 2,500, a high
+  school 4,000, a university 10,000 (students: half the people). When the
+  city outgrows what its buildings of a kind can take, that service
+  reaches everyone less well (down to about a third), and the city
+  issues say so ("High schools overloaded" - click for the Services
+  panel). The inspector shows the city-wide places and people.
+- **Service funding** (Services panel, from the budget): 50% to 150% for
+  police, fire, health, schools, high schools and universities. It sets
+  their places, how far they reach, and their upkeep.
 - **How people travel:** every trip weighs walking (short hops), the car
   (slower as jams grow), the bus (both ends near stops), the metro and the
   train, and takes the quickest, give or take. Trips not made by car take

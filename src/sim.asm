@@ -199,6 +199,7 @@ req_due         resd 1                  ; the month it's due (year*12+month)
 req_reward      resd 1
 req_last        resd 1                  ; the kind asked last
 req_cool        resd 1                  ; months until the next request
+svc_fund        resd CV_COUNT           ; beta: funding, in 10% steps from 100%
 sim_state_end:
 exp_cat         resd 8          ; upkeep per service category (not saved)
 svc_count       resd BK_MAX     ; buildings of each kind (rebuilt daily)
@@ -2955,6 +2956,13 @@ FUNC cov_rows, 48
     jz .pd
     add r8d, 60
 .pd:
+    ; beta: overloaded or funded less (more): reaches less (more)
+    cmp dword [beta_on], 0
+    je .psc
+    mov ecx, [rbp-52]
+    imul r8d, [cov_scale+rcx*4]
+    sar r8d, 8
+.psc:
     CLAMP r8d, 0, 255
     mov esi, r12d
     add esi, [rbp-48]
@@ -3046,6 +3054,7 @@ FUNC cov_rows, 48
 
 
 FUNC coverage_update, 48
+    call svc_load                   ; (beta: room and funding)
     ; the stamps: every core takes a band of map rows (each cell still
     ; gets its stamps in the same order, so the result is the same)
     lea rdi, [cov_rows]
@@ -3689,6 +3698,7 @@ FUNC month_end, 32
     call bld_rec
     mov ecx, [rax+BI_UPKEEP]
     imul ecx, [svc_count+rbx*4]
+    call sv_upkeep                  ; (beta: funding)
     add r12d, ecx
     movzx eax, byte [rax+BI_CATEGORY]
     add [exp_cat+rax*4], ecx

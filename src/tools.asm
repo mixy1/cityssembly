@@ -2981,7 +2981,7 @@ FUNC budget_difficulty
 JAM_HOT     equ 8               ; jam spots remembered
 section .data
 ; the order issues are listed in (PR_* numbers, ISSUE_JAM = 11)
-iss_prio    db 7, 1, 2, 3, 9, 8, 10, 11, 4, 5, 6, 0
+iss_prio    db 7, 1, 2, 3, 9, 8, 10, 11, 12, 4, 5, 6, 0
 s_iss_jams  db "Traffic jams - click to see them", 0
 s_jam_none  db "No jams right now.", 0
 section .bss
@@ -3211,11 +3211,21 @@ FUNC draw_issues_beta, 32
     jz .out
     inc dword [rbp-56]
     cmp r14d, ISSUE_JAM
-    jne .cnt
+    jne .ld
     cmp dword [jam_show], 0
     jle .pick
     call tb_reset
     lea rdi, [s_iss_jams]
+    call tb_str
+    jmp .row
+.ld:
+    cmp r14d, ISSUE_LOAD
+    jne .cnt
+    cmp dword [sv_worst], 0
+    je .pick
+    call tb_reset
+    mov eax, [sv_worst]
+    mov rdi, [sv_over+rax*8]
     call tb_str
     jmp .row
 .cnt:
@@ -3279,8 +3289,13 @@ FUNC draw_issues_beta, 32
     je .nx
     mov dword [click_pending], 0
     cmp r14d, ISSUE_JAM
-    jne .vis
+    jne .vld
     call jam_visit
+    jmp .nx
+.vld:
+    cmp r14d, ISSUE_LOAD
+    jne .vis
+    mov dword [panel], PANEL_SERVICES
     jmp .nx
 .vis:
     mov edi, r14d

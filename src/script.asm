@@ -137,6 +137,7 @@ pf_report8  db "PLAY air airports %d flying %d runway %d passengers %d trips %d 
 pf_report9  db "PLAY region price %d event %d deal %d offer %d trade %d ext %d", 0
 pf_report10 db " links %x tiles N %d W %d", 10, 0
 pf_report11 db "PLAY port ports %d live %d way %d ship %d trade %d (this month)", 10, 0
+pf_report12 db "PLAY services worst %d reach police %d fire %d health %d schools %d high %d", 10, 0
 pf_nobtn    db "PLAY no button: %s", 10, 0
 
 ; key names -> scancodes
@@ -974,6 +975,19 @@ FUNC play_tick, 16
     mov r9d, [port_trade_month]
     xor eax, eax
     CALLC printf
+    lea rdi, [pf_report12]
+    mov esi, [sv_worst]
+    mov edx, [cov_scale+CV_POLICE*4]
+    mov ecx, [cov_scale+CV_FIRE*4]
+    mov r8d, [cov_scale+CV_HEALTH*4]
+    mov r9d, [cov_scale+CV_ELEM*4]
+    mov eax, [cov_scale+CV_HIGH*4]
+    push rax
+    push rax
+    xor eax, eax
+    CALLC printf
+    pop rax
+    pop rax
     jmp .done
 .mapdump:
     xor r12d, r12d                  ; row

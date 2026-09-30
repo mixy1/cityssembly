@@ -28,6 +28,7 @@ PANEL_SETTINGS equ 6
 PANEL_SAVE     equ 7
 PANEL_LOAD     equ 8
 PANEL_REGION   equ 9            ; beta: the neighbours
+PANEL_SERVICES equ 10           ; beta: services' funding
 
 MAX_TL      equ 4096
 NOTIFS      equ 5
@@ -273,7 +274,8 @@ s_people    db " people", 0
 s_tiles     db " tiles", 0
 s_stretch   db "Stretch: ", 0
 s_isstip    db "Click to visit each one", 0
-iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11
+iss_names   dq 0, is1, is2, is3, is4, is5, is6, is7, is8, is9, is10, is11, is12
+is12 db "Services overloaded", 0
 is1  db "without power", 0
 is2  db "without water", 0
 is3  db "without sewage", 0
@@ -285,8 +287,8 @@ is8  db "with no road", 0
 is9  db "with dirty water", 0
 is10 db "whose trips can't get through", 0
 is11 db "jammed road tiles - upgrade?", 0
-iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136
-iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD
+iss_glyph   db 0, 128, 129, 129, 137, 138, 132, '!', '?', 129, '?', 136, '!' 
+iss_col     db 0, UI_WARN, UI_ACCENT, RAMP(R_WOOD,5), RAMP(R_ZONER,6), RAMP(R_ORANGE,6), UI_TEXT, UI_BAD, UI_BAD, RAMP(R_WOOD,4), UI_WARN, UI_BAD, UI_WARN
 s_stjam1    db ", ", 3, 0
 s_stjam2    db " jammed", 0
 s_mmtip     db "Click or drag to move the view  (Tab hides)", 0
@@ -6054,6 +6056,7 @@ FUNC draw_inspect, 32
     call rail_inspect
     call airport_inspect
     call port_inspect
+    call service_inspect
     movzx eax, byte [r14+BI_VEHICLES]
     test eax, eax
     jz .maps
@@ -6308,12 +6311,12 @@ FUNC draw_budget, 32
     mov edi, r12d
     mov esi, r13d
     mov edx, 350
-    mov ecx, 256
+    call budget_h
     call draw_panel
     mov edi, r12d
     mov esi, r13d
     mov edx, 350
-    mov ecx, 256
+    call budget_h
     call ui_over
     mov dword [font_scale], 2
     lea edi, [r12+10]
@@ -6532,7 +6535,21 @@ FUNC draw_budget, 32
     inc ebx
     cmp ebx, 3
     jl .lo
+    ; beta: services' funding
+    mov r13d, [rbp-48]
+    add r13d, 244
+    lea edi, [r12+10]
+    mov esi, r13d
+    call services_button
     RETURN
+
+; the budget panel's height -> ecx (taller in beta)
+budget_h:
+    mov ecx, 256
+    cmp dword [beta_on], 0
+    je .o
+    mov ecx, 264
+.o: ret
 
 ; ---------------------------------------------------------------------
 ;  policies panel
@@ -8068,8 +8085,13 @@ FUNC render_ui
     jmp .hud
 .p6r:
     cmp eax, PANEL_REGION
-    jne .p7
+    jne .p6s
     call draw_region
+    jmp .hud
+.p6s:
+    cmp eax, PANEL_SERVICES
+    jne .p7
+    call draw_services
     jmp .hud
 .p7:
     cmp eax, PANEL_SAVE
