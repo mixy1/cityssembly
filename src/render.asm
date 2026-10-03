@@ -355,6 +355,18 @@ FUNC ground_sprite
     mov eax, [spr_sand+rax*4]
     RETURN
 .grass:
+    cmp dword [beta_on], 0
+    je .classic
+    ; beta: no grid line, and the odd worn patch, clover, flowers...
+    mov edi, r12d
+    mov esi, r13d
+    mov edx, 3
+    call hash3
+    and eax, 15
+    movzx eax, byte [turf_pick+rax]
+    mov eax, [spr_turf+rax*4]
+    RETURN
+.classic:
     movzx eax, byte [rbx+T_VARIANT]
     and eax, 7
     movzx eax, byte [grass_pick+rax]
@@ -496,6 +508,8 @@ FUNC render_world, 32
     ; keeps its weather, unseen)
     cmp dword [beta_on], 0
     je .objs
+    mov rdi, [rbp-56]
+    call soul_ground                ; wear, foundations, leaves
     cmp dword [wx_kind], WX_FLOOD
     je .wxo
     cmp dword [snow_level], 100
@@ -603,6 +617,12 @@ FUNC render_world, 32
     movzx r8d, byte [rbx+T_SUB]     ; industry kind / home style
     call zone_sprite
     mov edi, eax
+    mov rsi, rbx
+    mov edx, r13d
+    shl edx, MAP_SHIFT
+    add edx, r12d
+    call soul_sprite                ; (beta: worn buildings look it)
+    mov edi, eax
     mov [rbp-48], eax
     mov esi, r12d
     mov edx, r13d
@@ -618,6 +638,10 @@ FUNC render_world, 32
     mov dword [blit_dither], 0
     mov edi, [rbp-48]
     call note_problem
+    cmp dword [beta_on], 0
+    je .fires
+    mov rdi, [rbp-56]
+    call soul_building              ; yards, litter, weeds
     jmp .fires
 .svc:
     test byte [rbx+T_FLAGS], F_ANCHOR

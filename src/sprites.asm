@@ -1969,7 +1969,7 @@ FUNC gen_flame
 ;  sprites_init - build everything
 ; =====================================================================
 FUNC sprites_init
-    mov dword [loading_total], 580
+    mov dword [loading_total], 612
     call remaps_init
     ; ground
     xor ebx, ebx
@@ -2174,6 +2174,7 @@ FUNC sprites_init
     mov edi, 1
     call gen_flame
     mov [spr_flame+4], eax
+    call soul_sprites_init          ; (beta: wear, yards, foundations)
     RETURN
 
 ; zone_sprite(edi zone 1..6, esi level 1..5, edx variant, ecx size,

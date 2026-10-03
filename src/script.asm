@@ -907,6 +907,10 @@ FUNC play_tick, 16
     pop rax
     pop rax
     mov dword [sig_reds], 0
+    cmp dword [beta_on], 0
+    je .nosoul
+    call soul_report                ; how the buildings look
+.nosoul:
     lea rdi, [pf_report5]
     mov esi, [exp_roads]
     mov edx, [exp_services]

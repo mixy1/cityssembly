@@ -2936,6 +2936,9 @@ save_chunks:
     db "PLAN"                       ; (beta: the plan and its queue)
     dq plan_state
     dd plan_state_end - plan_state
+    db "TRCE"                       ; (beta: foundations of what came down)
+    dq map_trace
+    dd MAP_TILES
 SAVE_CHUNKS equ ($-save_chunks)/16
 SC_BETA0 equ 7                      ; (the chunks from here on the tour sets aside)
 SC_TILE equ 3
@@ -6468,6 +6471,7 @@ FUNC draw_inspect, 32
     mov esi, eax
     mov edx, UI_GOOD
     call stat_row
+    call soul_inspect_row           ; (beta: "Condition: worn - ...")
     lea rdi, [s_garb]
     movzx esi, byte [rbx+T_GARBAGE]
     mov edx, RAMP(R_ZONER,6)

@@ -225,6 +225,18 @@ Features still in testing, off unless you ask for them:
 - **Service funding** (Services panel, from the budget): 50% to 150% for
   police, fire, health, schools, high schools and universities. It sets
   their places, how far they reach, and their upkeep.
+- **The city shows its wear:** the grass loses its grid and gets worn
+  patches, clover, stones and flowers; homes get a yard (laundry, a
+  shed, bins, a paddling pool, a vegetable patch, a woodpile), small
+  industry barrels and pallets. A building with garbage piling up,
+  crime at the door, unhappy people, or old age on cheap land is drawn
+  worn - darker, streaked walls, half the windows dark, weeds and
+  litter around it - and the inspector says why ("Condition: worn -
+  garbage piling up"); an abandoned one is derelict. Busy streets get
+  patched asphalt and potholes, a demolished building leaves its
+  foundation for a couple of years until the weeds take it back, and
+  autumn leaves gather on the grass under the trees. You shouldn't
+  have to open a panel to see where the problems are.
 - **Decline:** a building a level above what its surroundings support
   loses that level after months of it (classic only let buildings two
   levels too high fall). A month with many is reported.

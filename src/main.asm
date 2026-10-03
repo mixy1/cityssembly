@@ -1466,6 +1466,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
 %include "sprites2.asm"
 %include "sprites3.asm"
 %include "sprites4.asm"
+%include "soul.asm"
 %include "render.asm"
 %include "light.asm"
 %include "threads.asm"

@@ -739,6 +739,7 @@ FUNC destroy_to_rubble
     RETURN
 
 make_rubble:
+    call soul_demolish              ; (beta draws the foundation for a while)
     mov byte [rdi+T_OBJ], OBJ_RUBBLE
     mov byte [rdi+T_FLAGS], 0
     and byte [rdi+T_FLAGS2], F2_PIPE
@@ -3878,6 +3879,7 @@ FUNC month_end, 32
     inc dword [ext_demand]
 .ed:
     call age_buildings
+    call soul_month
     call assists_month
     call metro_month
     call rail_month

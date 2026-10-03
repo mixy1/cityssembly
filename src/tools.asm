@@ -1307,6 +1307,7 @@ extra_reset:
     call ferries_reset
     call scen_reset
     call dist_reset
+    call soul_reset
     call beta_city_reset
     call region_reset
     mov dword [cam_prev+8], 0

@@ -52,6 +52,7 @@ vox_gz          resd 1
 vox_seed        resd 1
 vox_mat         resd 1
 vox_winlit      resd 1          ; lit-window probability 0..255
+vox_noline      resd 1          ; 1: no silhouette outline (flat ground, decals)
 
 section .data
 ; material table: ramp, shade top, shade left, shade right, pattern, p1, p2, pad
@@ -1041,7 +1042,10 @@ FUNC vox_render, 64
     mov [spr_table+rax+6], cx
     mov edi, [rbp-56]
     call sprite_trim
+    cmp dword [vox_noline], 0
+    jne .nol
     call sprite_outline
+.nol:
     mov edi, [rbp-56]
     call sprite_heightmap
     mov eax, [rbp-56]
