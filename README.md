@@ -61,8 +61,8 @@ URL options:
 - `?load=URL` opens a city file, so you can share a city by link.
 - `?debug` shows the log and frame timings.
 - `?bench` prints a per-stage frame profile.
-- `?beta` switches on the features still in testing (see *Beta* below).
-  Native builds take `--beta` (or `CS_BETA=1`).
+- `?classic` switches off everything listed under *Beta* below and plays
+  the game as it was. Native builds take `--classic` (or `CS_CLASSIC=1`).
 
 ```sh
 make web        # -> site/  (needs nasm, emcc, pip install capstone pyelftools)
@@ -100,9 +100,10 @@ one press of `O` or a pick from the info views menu away.
 
 Then chase the advisor goals shown in the top-left.
 
-### Beta (`?beta`)
+### Beta (on by default; `?classic` turns it off)
 
-Features still in testing, off unless you ask for them:
+These features went in behind `?beta` and are now the game. `?classic`
+(`--classic` natively) plays without all of them:
 
 - **Build over the city:** special buildings go down over zoned
   buildings, which come down first. The price tag says how many and who
@@ -720,7 +721,7 @@ cityssembly --wav SECONDS out.wav [STYLE [INST]]  # render the soundtrack (STYLE
 cityssembly --trailer out.raw plan.bin W H         # film a scripted plan (trailer_work/plan.py)
 cityssembly --tourbot FRAMES out.bmp [seed]        # play the tour with real input, following its
                                                    # highlights; prints each step (CI runs it)
-cityssembly --play script.txt [--beta]             # a scripted player: keys, clicks and drags on
+cityssembly --play script.txt [--classic]          # a scripted player: keys, clicks and drags on
                                                    # tiles, button presses by label, screenshots
                                                    # (commands in src/script.asm)
 python3 tools/bench/gen.py                         # test-city scripts (mid ~10k, big ~55k) for

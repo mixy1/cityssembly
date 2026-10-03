@@ -23,7 +23,7 @@ shot_frames     resd 1
 shot_file       resq 1
 demo_mode       resd 1
 sandbox         resd 1
-beta_on         resd 1          ; ?beta / --beta: features still in testing
+beta_on         resd 1          ; the features that were in testing: on unless ?classic / --classic
 key_mod         resd 1          ; modifiers of the last key press
 mouse_inside    resd 1          ; demo / trailer: whole map is yours
 demo_view       resd 1
@@ -43,8 +43,8 @@ section .data
 str_shot_flag   db "--shot", 0
 str_demo_flag   db "--demo", 0
 str_wav_flag    db "--wav", 0
-str_beta_flag   db "--beta", 0
-str_beta_env    db "CS_BETA", 0
+str_classic_flag db "--classic", 0
+str_classic_env db "CS_CLASSIC", 0
 str_bench_env   db "CS_BENCH", 0
 wav_header:
     db "RIFF"
@@ -99,26 +99,29 @@ FUNC main
     mov r12d, edi                   ; argc
     mov r13, rsi                    ; argv
 %ifndef WEB
-    ; --beta anywhere on the line (or CS_BETA=1): the features in testing
+    ; the beta features are the game now; --classic anywhere on the line
+    ; (or CS_CLASSIC=1) plays the old one (--beta is accepted and does
+    ; nothing)
+    mov dword [beta_on], 1
     mov ebx, 1
 .beta:
     cmp ebx, r12d
     jge .betae
     mov rdi, [r13+rbx*8]
-    lea rsi, [str_beta_flag]
+    lea rsi, [str_classic_flag]
     CALLC strcmp
     test eax, eax
     jnz .betan
-    mov dword [beta_on], 1
+    mov dword [beta_on], 0
 .betan:
     inc ebx
     jmp .beta
 .betae:
-    lea rdi, [str_beta_env]
+    lea rdi, [str_classic_env]
     CALLC getenv
     test rax, rax
     jz .nbenv
-    mov dword [beta_on], 1
+    mov dword [beta_on], 0
 .nbenv:
     lea rdi, [str_bench_env]
     CALLC getenv
@@ -278,8 +281,8 @@ FUNC main
     call audio_init
     call ui_init
 %ifdef WEB
-    ; ?beta first: the settings (colour-blind views) and the first city
-    ; depend on it
+    ; ?classic first: the settings (colour-blind views) and the first
+    ; city depend on it
     call web_beta
     mov [beta_on], eax
 %endif

@@ -450,7 +450,7 @@ s_loaded    db "City loaded.", 0
 s_loadfail  db "No saved city found.", 0
 s_savefile  db "city.sav", 0
 s_paused    db "PAUSED", 0
-s_beta      db "BETA", 0
+s_beta      db "CLASSIC", 0
 s_sandbox   db "Sandbox", 0
 s_speeds    dq sp0, sp1, sp2, sp3
 sp0 db "||", 0
@@ -5243,9 +5243,9 @@ FUNC draw_topbar, 16
     inc ebx
     cmp ebx, 4
     jl .sp
-    ; features in testing are on: say so in the corner
+    ; the old game (?classic / --classic): say so in the corner
     cmp dword [beta_on], 0
-    je .nbeta
+    jne .nbeta
     mov edi, 4
     mov esi, [ui_h]
     sub esi, 12

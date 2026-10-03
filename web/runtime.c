@@ -329,12 +329,12 @@ void ext_web_bench(void) {
 #endif
 }
 
-// ?beta: features still in testing are switched on
+// the beta features are the game now; ?classic plays the old one
 void ext_web_beta(void) {
 #ifdef __EMSCRIPTEN__
-    RET((uint32_t)EM_ASM_INT({ return /[?&]beta/.test(location.search) ? 1 : 0; }));
+    RET((uint32_t)EM_ASM_INT({ return /[?&]classic(&|$)/.test(location.search) ? 0 : 1; }));
 #else
-    RET(getenv("CS_BETA") ? 1 : 0);
+    RET(getenv("CS_CLASSIC") ? 0 : 1);
 #endif
 }
 

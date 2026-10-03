@@ -1,7 +1,7 @@
 ; =====================================================================
 ;  SCRIPT - a scripted player for tests (native builds only)
 ;
-;     cityssembly --play script.txt [--beta]
+;     cityssembly --play script.txt [--classic]
 ;
 ;  Each line of the script is one command.  Mouse and keyboard go
 ;  through SDL's event queue like the tour bot's, so the game sees what
